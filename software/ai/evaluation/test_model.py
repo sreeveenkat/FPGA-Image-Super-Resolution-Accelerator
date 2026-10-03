@@ -11,6 +11,49 @@ sys.path.insert(0, str(ROOT / "software" / "ai"))
 from models.srnet import HALO, SRNet, count_params, macs_per_input_pixel, predict_full  # noqa: E402
 
 
+class Skip(Exception):
+    pass
+
+
+def need(path):
+    if not Path(path).exists():
+        raise Skip(f"missing {Path(path).relative_to(ROOT)} (download the datasets, see data/README.md)")
+
+
+class _Probe(torch.nn.Module):
+    """Stand-in model: remembers its input and returns a constant image of the right (2x) size."""
+
+    def __init__(self, value):
+        super().__init__()
+        self.value, self.seen = value, None
+
+    def forward(self, x):
+        self.seen = x
+        return torch.full((1, 3, 2 * (x.shape[2] - 2 * HALO), 2 * (x.shape[3] - 2 * HALO)), self.value)
+
+
+def test_predict_full_rounds_to_nearest_not_floor():
+    out = predict_full(_Probe(100.6 / 255), np.zeros((4, 5, 3), np.uint8))
+    assert out.shape == (8, 10, 3) and (out == 101).all()
+    assert (predict_full(_Probe(100.4 / 255), np.zeros((4, 5, 3), np.uint8)) == 100).all()
+    assert (predict_full(_Probe(1.7), np.zeros((4, 5, 3), np.uint8)) == 255).all()   # clamp high
+    assert (predict_full(_Probe(-0.3), np.zeros((4, 5, 3), np.uint8)) == 0).all()    # clamp low
+
+
+def test_predict_full_pads_with_replicated_edges():
+    lr = np.random.default_rng(0).integers(1, 255, (6, 7, 3), dtype=np.uint8)  # no zeros, so zero-padding would differ
+    probe = _Probe(0.5)
+    predict_full(probe, lr)
+    x = probe.seen[0] * 255
+    assert x.shape == (3, 6 + 2 * HALO, 7 + 2 * HALO)
+    inner = torch.from_numpy(lr).permute(2, 0, 1).float()
+    assert torch.allclose(x[:, HALO:-HALO, HALO:-HALO], inner, atol=1e-4)
+    assert torch.allclose(x[:, 0, HALO:-HALO], inner[:, 0, :], atol=1e-4)            # top rows copy the first row
+    assert torch.allclose(x[:, -1, HALO:-HALO], inner[:, -1, :], atol=1e-4)
+    assert torch.allclose(x[:, HALO:-HALO, 0], inner[:, :, 0], atol=1e-4)            # left cols copy the first col
+    assert torch.allclose(x[:, 0, 0], inner[:, 0, 0], atol=1e-4)                     # corner
+
+
 def test_counts_match_docs():
     assert count_params(SRNet()) == 2620 and macs_per_input_pixel() == 2560
 
@@ -76,6 +119,7 @@ def test_edge_aug_sampling_alignment():
 
 
 def test_checkpoint_beats_bicubic_on_real_images():
+    need(ROOT / "data" / "test" / "HR" / "Set5" / "butterfly.png")
     from dataset.pairs import load_rgb, make_pair, upscale_pil
     from evaluation.metrics import psnr_y
     ck = torch.load(ROOT / "software/ai/checkpoints/srnet_fp32.pt", map_location="cpu")
@@ -89,5 +133,8 @@ def test_checkpoint_beats_bicubic_on_real_images():
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):
-            f()
-            print("PASS", n)
+            try:
+                f()
+                print("PASS", n)
+            except Skip as e:
+                print("SKIP", n, "-", e)
