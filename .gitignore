@@ -1,7 +1,8 @@
 # Large/generated files
 data/train/
 data/test/
-data/golden/*.npy
+data/golden/*
+!data/golden/README.md
 # (checkpoints are ~14 KB each and ARE tracked as the backup of trained weights)
 results/images/
 
