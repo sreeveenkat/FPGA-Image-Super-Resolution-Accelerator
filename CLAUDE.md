@@ -1,5 +1,7 @@
 # CLAUDE.md — Project memory for Claude Code
 
+> **New session? Read `HANDOFF.md` first** (state, GitHub/commit rules, environment, exact next steps for M3).
+
 > **Rule: update this file after EVERY change to the project** (new file, finished step, decision, measured number).
 > Add one line to the Update Log (Section 8) and refresh the Status table (Section 5).
 
@@ -19,7 +21,9 @@ Input is plain **RGB** (no depth/normals; a ray-tracer front end is an optional 
 
 ```
 sem_project_all/
+├── HANDOFF.md                 ← start here in a new session (state, GitHub, env, next steps)
 ├── CLAUDE.md                  ← this file (project memory + update log)
+├── README.md                  ← public overview (GitHub front page)
 ├── .gitignore
 ├── docs/                      ← all documentation, no code
 │   ├── PROJECT_PLAN.md        ← overall plan and feasibility
@@ -62,7 +66,7 @@ Rules:
 | M0 Zynq basics | yes | not started (waiting for board) |
 | M1 Software baseline | no | **DONE** (hardened 2026-10-03: 3 test sets, official-LR validated, 9 tests, all images reviewed) |
 | M2 Train FP32 CNN | no | **DONE** 2026-10-03 (hardened: 180-image model, ablations, repro + border checks, full visual review) |
-| M3 INT8 + integer model | no | **next — not started** |
+| M3 INT8 + integer model | no | **next — not started** (spec in HANDOFF.md section 8; M3 guide sketch corrected to VALID convs) |
 | M4 Conv engine RTL | simulation only | not started |
 | M5 Full network RTL | simulation only | not started |
 | M6 AXI/DMA/ARM driver | yes | not started |
@@ -81,7 +85,8 @@ Rules:
 | Time per frame / FPS | — |
 
 ## 6b. Environment and data notes
-- Python env: `.venv/` in project root (created with `--system-site-packages`; numpy, opencv, matplotlib come from the system, scikit-image installed in the venv). Run scripts with `.venv/bin/python` from the project root. PyTorch 2.12 (CPU) comes from system site-packages. **GPU: RTX 3050 6GB laptop exists but NVIDIA kernel module is not built for kernel 7.0.0-34 (no dkms, `nvidia-smi` fails); fixing needs the user's sudo. Not needed for this project (CPU trains M2 in 11 min).**
+- FPGA tools: Vivado/Vitis/Vitis HLS 2024.1 in `~/Desktop/vivado_install/`; Icarus Verilog 12 installed; cocotb/Verilator not; ZedBoard board files not installed; an older `~/Desktop/VITIS_WORKSPACE` exists (unverified). GitHub repo renamed: origin = `git@github.com:sreeveenkat/FPGA-Image-Super-Resolution-Accelerator.git` (details in HANDOFF.md section 6).
+- Python env: `.venv/` in project root (created with `--system-site-packages`; numpy, opencv, matplotlib come from the system, scikit-image installed in the venv). Run scripts with `.venv/bin/python` from the project root. PyTorch 2.12 (+cu130) comes from system site-packages and now sees the GPU (see section 6c).
 - Training data: General-100's original link is dead, so 60 DIV2K *training* images (img0193–img0252, 1092–2040 px) were downloaded from the HF mirror `ScooterTaylor/DIV2K_captioned_subset` into `data/train/HR/` with `software/ai/scripts/fetch_div2k_subset.sh [COUNT]` (resumable; up to 192 available, ~1 MB/s). Add more in M2 if needed. Test sets stay Set5/Set14 only; `check_dataset.py` verifies no train/test overlap.
 - pip downloads are slow/flaky on this machine: install in the background (`nohup ... &`) and poll.
 - Test data (original names): Set5 (5), Set14 (14), BSD100 (100) from HF `eugenesiow/*` into `data/test/HR/<set>/`; official x2 LR in `data/test/LR_official/`. See `data/README.md` (also has the old img_NNN -> name map).
@@ -101,7 +106,7 @@ Rules:
 - Visual review done on all 19 Set5/Set14 zoom crops + 4 BSD100 (worst/median/best) + 1 full frame: sharper edges/text/stripes, no checkerboard or colour shift; fine random texture (gravel, fur, Barbara cloth) not recovered.
 - Seed spread (seed 0 vs 1): 0.03-0.09 dB on test sets; quote gains as ~+1.0 to +1.5 dB (+/-0.1). Target-res check (`evaluation/check_target_res.py`): 960x540->1080p works (~0.1 s CPU), 135 tiles == whole image to 6.6e-7 float. Training images visually reviewed, no near-duplicates with test sets. Eval rerun byte-identical.
 - 1 training "epoch" = 500 steps x 32 patches = 16k patches (~0.14 pass over data); 100 epochs = ~14 passes.
-- GPU: RTX 3050 6GB present but NVIDIA module not built for kernel 7.0.0-34 (no dkms); needs user's sudo. Not needed.
+- GPU: RTX 3050 6GB laptop, **working since 2026-10-03** (installed prebuilt `linux-modules-nvidia-595-server-open-7.0.0-34-generic` + driver 595.91.07; `torch.cuda.is_available()` = True, CUDA 13.0). Step is ~2.3x faster than CPU but training is dominated by NumPy patch sampling, so the end-to-end gain is smaller; `train.py` has no `--device` flag yet (CPU). GPU conv uses TF32, so CPU/GPU forward differs ~1e-4 (irrelevant for the integer model).
 
 ## 7. Conventions
 - Python 3, type hints where useful, fixed random seeds, scripts runnable from the project root.
@@ -124,3 +129,6 @@ Rules:
 | 2026-10-03 | **M2 hardened.** Reproducibility rerun (0.02 dB, not bit-exact); downloaded 192 DIV2K images; added `--ssim/--edge-aug/--images/--val/--threads` to train.py; ablations A-D (no meaningful differences); final model retrained on 180 images; `border_effect.py`; loss curves; all outputs reviewed; tests 7 (model) + 9 (baseline) pass; `m2_training_summary.md`. Numbers above REPLACE the first v1 numbers. |
 | 2026-10-03 | **Verification pass on M1+M2.** Target-res + tiled-vs-whole check (script), training-image review + near-duplicate check, seed-1 run (spread 0.03-0.09 dB), doc numbers cross-checked against CSVs (fixed +1.54/+1.19 -> +1.53/+1.18), eval rerun byte-identical, stale text fixed in M2/M5 guides (padding decision = replicate), `git init` in project folder, `.gitignore` updated. |
 | 2026-10-03 | **Recheck pass.** Fixed 3 bugs (`--val 0` slice, curl `-f` + PNG check, torch pin). Mutation-tested the code (18 deliberate breakages): first run exposed 6 test gaps, added 6 tests + clean SKIP; now 18/18 caught. Fresh GitHub clone: compile/pyflakes OK, 22 tests pass, regenerated baseline + model results byte-identical to committed. Repo pushed to GitHub (still has old long name; rename pending on user's side). |
+| 2026-10-03 | GitHub repo renamed by user to `FPGA-Image-Super-Resolution-Accelerator`; local `origin` updated. GPU fixed (prebuilt NVIDIA module for kernel 7.0.0-34 + driver upgrade to 595.91.07); PyTorch CUDA verified. |
+| 2026-10-03 | Wrote `HANDOFF.md` (full state, GitHub rules, environment, M3 spec, verification commands). Fact-checked environment: Vivado/Vitis 2024.1 + iverilog present, cocotb/Verilator/board files missing; Pillow is a system package. Corrected the M3 guide's code sketch (valid convs, last-layer clamp 0-255) and executed it. |
+| 2026-10-04 | **Doc consistency pass.** Fixed wrong file names in M2 guide (`srnet.py`, `eval_model.py`) and M7 script path; ticked M1/M2 exit checklists after re-verifying (22 tests pass, dataset check OK, eval rerun leaves `results/quality` unchanged, checkpoint sha256 `f1ae81f706ad3707`). Nothing committed. |
