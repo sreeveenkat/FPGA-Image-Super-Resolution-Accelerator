@@ -61,7 +61,7 @@ raw speed; the FPGA's selling points are determinism, power and integration.
 
 ## 3. Step-by-step
 
-1. Make a script `eval/run_all.py` that, for each test image, builds the table in section A.
+1. Make a script `software/ai/evaluation/run_all.py` that, for each test image, builds the table in section A.
 2. Run the board on the same test images; save the outputs and compare with the integer model.
 3. Add timing code in the driver; run 20 frames; report mean and spread.
 4. Generate Vivado reports; copy into `results/`.
