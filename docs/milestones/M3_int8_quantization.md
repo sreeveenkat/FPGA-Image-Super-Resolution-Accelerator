@@ -87,26 +87,27 @@ Pure NumPy, integer dtypes only. Skeleton:
 ```python
 import numpy as np
 
-def conv3x3_int(x, w, bias, M, SHIFT, relu=True):
-    # x: (C_in, H, W) uint8 or int8; w: (C_out, C_in, 3, 3) int8; zero padding
+def conv3x3_int(x, w, bias, M, SHIFT, lo=0, hi=255):
+    """VALID 3x3 convolution (no padding): (C_in,H,W) -> (C_out,H-2,W-2). Same convention as the trained PyTorch model.
+    x: uint8/int32 activations; w: (C_out,C_in,3,3) int8; bias: int32 per output channel."""
     C_out, C_in = w.shape[:2]
-    H, W = x.shape[1:]
-    xp = np.pad(x.astype(np.int32), ((0,0),(1,1),(1,1)))
+    H, W = x.shape[1] - 2, x.shape[2] - 2
+    x = x.astype(np.int32)
     out = np.zeros((C_out, H, W), dtype=np.int32)
     for co in range(C_out):
-        acc = np.zeros((H, W), dtype=np.int32) + bias[co]
+        acc = np.zeros((H, W), dtype=np.int64) + int(bias[co])
         for ci in range(C_in):
             for ky in range(3):
                 for kx in range(3):
-                    acc += xp[ci, ky:ky+H, kx:kx+W] * int(w[co, ci, ky, kx])
-        y = (acc.astype(np.int64) * M + (1 << (SHIFT - 1))) >> SHIFT   # round to nearest
-        lo = 0 if relu else -128
-        hi = 255 if relu else 127
-        out[co] = np.clip(y, lo, hi)
+                    acc += x[ci, ky:ky+H, kx:kx+W].astype(np.int64) * int(w[co, ci, ky, kx])
+        y = (acc * M + (1 << (SHIFT - 1))) >> SHIFT        # round half up; >> on int64 is an arithmetic shift
+        out[co] = np.clip(y, lo, hi)                        # ReLU layers: lo=0.  Last layer: lo=0, hi=255 (it outputs pixels)
     return out
+
+# whole network:  x = replicate-pad(img_uint8, 3)  ->  conv1 -> dw -> pw -> conv4 -> pixel_shuffle  ->  uint8 image 2H x 2W
 ```
 Write the same style for depthwise and pointwise, then `pixel_shuffle`, then chain them into `run_network(img_uint8)`.
-Be explicit about: rounding rule, arithmetic shift of negatives, clamp limits.
+Be explicit about: rounding rule, arithmetic shift of negatives, clamp limits. **Padding convention (decided in M2): replicate-pad the whole input by 3 pixels, then use VALID convolutions.** The last layer's output *is* the pixel value, so its output scale is 1/255 and its clamp is [0, 255] (no ReLU needed, the clamp does it).
 
 ### Step 5 — Unit tests for the integer model
 Test by hand-calculated cases:
