@@ -139,18 +139,18 @@ Notes: SSIM loss, a 24-channel model and edge-window sampling were all tried and
 
 ## 5. Output of this milestone
 
-1. `software/ai/training/train.py`, `software/ai/models/models.py`, `software/ai/evaluation/eval.py`.
+1. `software/ai/training/train.py`, `software/ai/models/srnet.py`, `software/ai/evaluation/eval_model.py`.
 2. A trained checkpoint.
 3. A PSNR/SSIM table showing **FP32 CNN vs bicubic**.
 4. Output images for a visual check.
 
 ## 6. Exit checklist
 
-- [ ] Bicubic and FP32 numbers recorded side by side.
-- [ ] FP32 beats bicubic on held-out test images by a clear margin (not just 0.05 dB).
-- [ ] No obvious artifacts.
-- [ ] Training is reproducible (fixed seed, saved command, saved checkpoint).
-- [ ] Parameter count and MACs/pixel recorded.
+- [x] Bicubic and FP32 numbers recorded side by side (`results/quality/model_fp32_x2.md`).
+- [x] FP32 beats bicubic on held-out test images by a clear margin (+1.04 to +1.53 dB PSNR-Y; 119/119 images).
+- [x] No obvious artifacts (visual review of 19 Set5/Set14 zoom crops, 4 BSD100 and 1 full frame recorded in `CLAUDE.md` section 6c; fine random texture is not recovered, which is expected).
+- [x] Training is repeatable (fixed seed, saved command, saved checkpoint). Caveat: statistically reproducible only (rerun differs ~0.02 dB), not bit-exact, so the checkpoint is the frozen artifact.
+- [x] Parameter count and MACs/pixel recorded (2,620 / 2,560; asserted in `test_model.py`).
 
 ## 7. Common problems
 

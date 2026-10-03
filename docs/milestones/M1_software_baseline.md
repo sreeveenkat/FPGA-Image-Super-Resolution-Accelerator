@@ -115,9 +115,9 @@ Always use the same downscaling method and the same crops every time.
 ## 5. Exit checklist
 
 - [x] LR/HR pairs generated; train and test images are different files (checked by `software/ai/dataset/check_dataset.py`).
-- [ ] Nearest and bicubic PSNR/SSIM recorded for each test set.
-- [ ] Side-by-side images look sensible (bicubic is smooth, not shifted or colour-swapped).
-- [ ] The script re-runs and gives identical numbers.
+- [x] Nearest and bicubic PSNR/SSIM recorded for each test set (`results/quality/baseline_x2.md`).
+- [x] Side-by-side images look sensible (bicubic is smooth, not shifted or colour-swapped); alignment and colour order are also covered by unit tests.
+- [x] The script re-runs and gives identical numbers (rerun leaves `results/quality` unchanged).
 
 ## 6. Common problems
 
