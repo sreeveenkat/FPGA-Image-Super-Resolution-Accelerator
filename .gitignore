@@ -1,0 +1,23 @@
+# Large/generated files
+data/train/
+data/test/
+data/golden/*.npy
+# (checkpoints are ~14 KB each and ARE tracked as the backup of trained weights)
+results/images/
+
+# Vivado/Vitis build output
+hardware/vivado/build/
+*.jou
+*.log
+.Xil/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Keep folder placeholders
+!.gitkeep
+
+# Third-party PDFs carry an institutional IEEE licence footer - do not publish
+docs/resources/papers/

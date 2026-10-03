@@ -1,0 +1,6 @@
+# Versions used for the recorded results (Python 3.12). PyTorch will be added in M2.
+numpy==2.4.6
+opencv-python-headless==4.13.0.92
+pillow==10.2.0
+scikit-image==0.26.0
+matplotlib==3.10.9
