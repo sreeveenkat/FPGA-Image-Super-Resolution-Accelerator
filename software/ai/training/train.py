@@ -107,7 +107,9 @@ def main():
     torch.manual_seed(args.seed)
     rng = np.random.default_rng(args.seed)
     paths = list_images(ROOT / "data" / "train" / "HR")[: args.images]
-    train_pairs, val_pairs = load_pairs(paths[: -args.val]), load_pairs(paths[-args.val:])
+    assert 0 < args.val < len(paths), "--val must leave at least one training image and one validation image"
+    n_train = len(paths) - args.val  # NB: paths[:-0] would be empty, so never slice with a negative val
+    train_pairs, val_pairs = load_pairs(paths[:n_train]), load_pairs(paths[n_train:])
     win = gaussian_window()
     print(f"train {len(train_pairs)} imgs, val {len(val_pairs)} imgs; params={count_params(SRNet(ch=args.ch))} "
           f"MACs/px={macs_per_input_pixel(args.ch)}", flush=True)
