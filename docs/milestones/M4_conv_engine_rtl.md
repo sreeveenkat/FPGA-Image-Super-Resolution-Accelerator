@@ -140,8 +140,9 @@ Start with the **smallest case**: a 3→16 layer on a 8×8 tile. Parameterize: `
 ### Step 4 — Verify against Python with cocotb
 ```python
 # pseudo-test
-inp  = load("golden/L1_in.npy")
-exp  = load("golden/L1_out.npy")            # from integer_reference.py
+z    = np.load("data/golden/small12.npz")   # made by software/ai/quantization/export_rtl.py (keys: tile, L1..L4, out)
+inp  = z["tile"]                            # uint8 (h+6, w+6, 3), halo included; same data as small12_in.hex
+exp  = z["L1"]                              # (16, h+4, w+4) from integer_reference.py; small12_L1.hex is the same, [y][x][c]
 dut_out = await run_dut(inp)
 assert (dut_out == exp).all()               # bit-exact
 ```

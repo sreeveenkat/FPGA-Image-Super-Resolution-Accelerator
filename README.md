@@ -15,7 +15,7 @@ moves image tiles with AXI DMA.
 | M0 | Zynq basics: UART, AXI GPIO, own AXI-Lite IP, DMA loopback | yes | not started (waiting for board) |
 | **M1** | Bicubic baseline + metrics + datasets | no | **done** |
 | **M2** | FP32 CNN training and evaluation | no | **done** |
-| M3 | INT8 quantization + bit-accurate integer Python model | no | next |
+| **M3** | INT8 quantization + bit-accurate integer Python model | no | **done** |
 | M4 | One convolution layer in Verilog (cocotb, bit-exact) | simulation | planned |
 | M5 | Full network RTL, pixel shuffle, tiling with halo | simulation | planned |
 | M6 | AXI wrapper, DMA, ARM driver | yes | planned |
@@ -51,10 +51,29 @@ even-sized images). PSNR is on the Y channel with a 2-pixel border shaved; SSIM 
 * Verified at the target size: 960×540 → 1920×1080 runs in ~0.1 s on a CPU, and 135 tiles (64×64 core + 3 px halo) reproduce the
   whole-image output to 6.6e-7.
 * Limits: fine random texture (gravel, fur, fabric weave) is not recovered; that is expected for a 2.6 K-parameter network.
-* Quantization (M3) and all hardware numbers (resources, timing, fps) are **not measured yet**.
+* All hardware numbers (resources, timing, fps) are **not measured yet**.
 
 Details, ablations (SSIM loss, 24 channels, edge windows: all within noise) and the reproducibility notes:
 [`results/quality/m2_training_summary.md`](results/quality/m2_training_summary.md).
+
+## INT8 integer model (M3, measured)
+
+Post-training quantization (no retraining): uint8 activations, int8 symmetric per-layer weights, int32 accumulators, per-layer
+requantization `(acc·M + 2^(SHIFT-1)) >> SHIFT` with a 16-bit `M`. The NumPy integer model (`software/ai/quantization/integer_reference.py`)
+is pure integer arithmetic and is the bit-exact reference for the RTL. Quantization settings (99.99th-percentile activation range,
+per-layer weight scale) were chosen on 12 *validation* images, never on the test sets.
+
+| Test set | FP32 PSNR-Y | INT8 PSNR-Y | Drop | INT8 SSIM-Y |
+|---|---|---|---|---|
+| Set5 (5) | 35.21 dB | 35.02 dB | 0.18 | 0.9420 |
+| Set14 (14) | 31.51 dB | 31.40 dB | 0.11 | 0.8948 |
+| BSD100 (100) | 30.60 dB | 30.53 dB | 0.08 | 0.8756 |
+
+* Mean drop per set as shown; the worst single image loses 0.41 dB. INT8 still beats bicubic on 119 of 119 images.
+* Tiled (64×64 core + 3 px halo) output equals whole-image output **exactly** (integer maths, no float rounding).
+* Weights, biases, multipliers and golden tiles for the RTL are exported to `hardware/rtl/weights/` (format: its `README.md`).
+* The sweep over quantization settings is in [`results/quality/m3_ptq_sweep.md`](results/quality/m3_ptq_sweep.md), full tables in
+  [`results/quality/model_int8_x2.md`](results/quality/model_int8_x2.md).
 
 ## Repository layout
 
@@ -62,7 +81,7 @@ Details, ablations (SSIM loss, 24 channels, edge windows: all within noise) and 
 docs/          plan, milestone guides, original notes
 software/ai/   dataset, models, training, quantization, evaluation (Python)
 software/arm_driver/, software/host_tools/   ARM C driver and PC helpers (later milestones)
-hardware/      rtl/ (Verilog), verification/ (cocotb), vivado/ (scripts, constraints)
+hardware/      rtl/ (Verilog; rtl/weights = exported network parameters), verification/ (cocotb), vivado/ (scripts, constraints)
 data/          datasets and golden vectors (git-ignored, see data/README.md)
 results/       measured quality tables and plots
 CLAUDE.md      running project log: decisions, status, measured numbers
@@ -84,6 +103,14 @@ software/ai/scripts/fetch_div2k_subset.sh 192          # training images (DIV2K 
 .venv/bin/python software/ai/evaluation/check_target_res.py     # 960×540 → 1080p and tiled == whole image
 .venv/bin/python -W error software/ai/evaluation/test_baseline.py
 .venv/bin/python -W error software/ai/evaluation/test_model.py
+
+# M3: INT8 (needs the checkpoint above; qparams.npz and hardware/rtl/weights/ are committed)
+.venv/bin/python software/ai/evaluation/eval_int8.py --sweep    # choose settings on validation images (~4 min)
+.venv/bin/python software/ai/quantization/quantize.py           # -> software/ai/quantization/qparams.npz
+.venv/bin/python software/ai/quantization/export_rtl.py         # -> hardware/rtl/weights/*.mem + data/golden/*
+.venv/bin/python software/ai/evaluation/eval_int8.py            # INT8 vs FP32 vs bicubic on the test sets
+.venv/bin/python -W error software/ai/quantization/test_integer.py
+.venv/bin/python -W error software/ai/quantization/test_export.py
 ```
 
 Training is statistically but not bit-for-bit reproducible (thread count changes floating-point summation order); the trained

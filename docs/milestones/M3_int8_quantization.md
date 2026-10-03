@@ -138,27 +138,67 @@ Fix a **weight layout** (e.g. `[out_ch][in_ch][ky][kx]`) and write it down — l
 
 ---
 
-## 4. Output of this milestone
+## 4. Results achieved (2026-10-04)
 
-1. `software/ai/quantization/quantize.py` and `software/ai/quantization/integer_reference.py` (+ tests).
-2. Exported weight/bias/requant files.
-3. Golden input/output test vectors.
-4. Table: FP32 vs INT8 PSNR/SSIM.
+What was built, in `software/ai/quantization/`:
 
-## 5. Exit checklist
+| File | Purpose |
+|---|---|
+| `quantize.py` | Calibrates on the first 100 of the 180 *training* images (one random 256x256 LR crop each), quantizes weights/biases, picks `M`/`SHIFT`, writes `qparams.npz` |
+| `integer_reference.py` | The golden integer model (pure NumPy, no torch): `upscale`, `upscale_tiled`, `run_tile` (70x70 -> 128x128), `forward_layers` (all intermediates) |
+| `export_rtl.py` | Writes `hardware/rtl/weights/{weights,bias,mult}_Ln.mem`, `network_params.vh`, README, and the golden tiles in `data/golden/` |
+| `test_integer.py`, `test_export.py` | 21 + 6 tests |
+| `check_export_independent.py` | Pure-Python (no numpy) recompute of every golden tile from the exported `.mem`/`.vh`/`.hex` files only |
+| `../evaluation/eval_int8.py` | `--sweep` (validation images only) and the final test-set evaluation |
 
-- [ ] INT8 quality drop vs FP32 measured and acceptable.
-- [ ] Integer model uses only integer types (no float anywhere in the inference path).
-- [ ] Integer model matches PyTorch-quantized output within a small tolerance.
-- [ ] Edge-case unit tests pass.
-- [ ] Weight/bias/M/SHIFT files exported and the file layout is documented.
-- [ ] Golden test vectors saved.
+Scheme actually used: uint8 activations (one scale per layer), int8 symmetric weights in [-127, 127] with one scale per layer, int32 bias,
+`M` unsigned 16 bit per output channel (identical across channels with per-layer weight scales), `SHIFT` per layer (24, 23, 21, 24),
+last layer scale 1/255 and clamp [0, 255]. Worst-case accumulator magnitude fits signed 32 bit (test); `acc*M` needs about 40 bits.
 
-## 6. Common problems
+Settings were chosen on the 12 validation images (PSNR-Y, FP32 = 34.954 dB there), `results/quality/m3_ptq_sweep.md`:
+percentile 99 -> -5.3 dB (clips far too much), 99.9 -> -0.43, **99.99 -> -0.22**, max -> -0.28; per-channel weights were slightly *worse*
+than per-layer (-0.31 at 99.99), so per-layer was kept. Drop is below the 0.3 dB rule of thumb, so PTQ is enough and no QAT was done.
+
+Final test-set numbers (`results/quality/model_int8_x2.md`, PSNR-Y):
+
+| Set | Bicubic | FP32 | INT8 | Drop FP32 -> INT8 | Worst single image |
+|---|---|---|---|---|---|
+| Set5 | 33.67 | 35.21 | 35.02 | 0.18 | 0.31 |
+| Set14 | 30.32 | 31.51 | 31.40 | 0.11 | 0.29 |
+| BSD100 | 29.56 | 30.60 | 30.53 | 0.08 | 0.41 |
+
+INT8 beats bicubic on 119/119 images. SSIM-Y drops by 0.003 (Set5/Set14: 0.9449 -> 0.9420, 0.8975 -> 0.8948) and 0.003 on BSD100.
+
+Verification notes (honest limits):
+* The "PyTorch quantized model" comparison in step 6 was **not** done with `torch.ao.quantization` (its rounding is not ours and it is not
+  the reference). Instead `test_layerwise_matches_independent_float64_torch_with_real_scales` runs each layer through torch `conv2d` in
+  float64 on exact integers with the *exact* real multiplier: it differs from the integer model by at most 1 LSB on 0.004-0.06 % of values
+  (only where the 16-bit `M` flips a rounding tie). The integer output is 48 dB PSNR from the FP32 output on a test image.
+* Tiled == whole image holds **exactly** (synthetic sizes including non-multiples of 64, a small 16 px core, and a real image).
+* 22 deliberate breakages (rounding, shift, clamps, shuffle order, kernel flip, bias, padding mode, int32 overflow, scale and export
+  mistakes) were all caught by the tests.
+
+## 5. Output of this milestone
+
+1. `quantize.py`, `integer_reference.py`, `export_rtl.py` + tests (above).
+2. Exported weight/bias/multiplier files in `hardware/rtl/weights/` (layout documented in its `README.md`).
+3. Golden tiles in `data/golden/` (git-ignored, regenerate with `export_rtl.py`): zeros, full255, noise, pixel, ramp, small12, three real tiles, one border tile.
+4. FP32 vs INT8 table (above).
+
+## 6. Exit checklist
+
+- [x] INT8 quality drop vs FP32 measured and acceptable (0.08-0.18 dB mean PSNR-Y per set).
+- [x] Integer model uses only integer types (NumPy int64/int32 in the inference path; float scales in `qparams.npz` are documentation only).
+- [x] Integer model matches an independent float64 reference within 1 LSB layer by layer (see the note above for why torch.ao was not used).
+- [x] Edge-case unit tests pass (zero input, single pixel orientation, +-extremes, rounding ties, saturation, overflow).
+- [x] Weight/bias/M/SHIFT files exported and the file layout is documented and round-trip tested.
+- [x] Golden test vectors saved (regenerable, deterministic).
+
+## 7. Common problems
 
 | Symptom | Cause |
 |---|---|
-| Big quality drop | Bad activation scales (outliers); use percentile (99.9 %) instead of max, try per-channel weights, or QAT |
+| Big quality drop | Bad activation scales (outliers); use percentile (99.99 % worked best here, 99 % is far too low) or QAT |
 | Overflow | Using int8/int16 accumulation in NumPy; use int32/int64 |
 | Output off by 1 | Rounding rule differs (floor vs round-to-nearest) |
 | Colours flipped | RGB vs BGR (OpenCV) mismatch between scripts |
