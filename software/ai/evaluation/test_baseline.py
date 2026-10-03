@@ -7,8 +7,17 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "software" / "ai"))
-from dataset.pairs import downscale_pil, list_images, load_rgb, make_pair, modcrop, upscale_pil  # noqa: E402
+from dataset.pairs import downscale_pil, list_images, load_rgb, make_pair, modcrop, save_rgb, upscale_pil  # noqa: E402
 from evaluation.metrics import psnr_rgb, psnr_y, rgb_to_y, ssim_rgb, ssim_y  # noqa: E402
+
+
+class Skip(Exception):
+    pass
+
+
+def need(path):
+    if not Path(path).exists():
+        raise Skip(f"missing {Path(path).relative_to(ROOT)} (download the datasets, see data/README.md)")
 
 
 def rnd(shape, seed=0):
@@ -29,6 +38,25 @@ def test_known_mse():
 def test_y_conversion_known_values():
     assert abs(rgb_to_y(np.zeros((1, 1, 3), np.uint8))[0, 0] - 16.0) < 1e-9
     assert abs(rgb_to_y(np.full((1, 1, 3), 255, np.uint8))[0, 0] - 235.0) < 1e-6
+
+
+def test_y_conversion_distinguishes_r_g_b():
+    for rgb, expect in [((255, 0, 0), 16 + 65.481), ((0, 255, 0), 16 + 128.553), ((0, 0, 255), 16 + 24.966)]:
+        got = rgb_to_y(np.array([[rgb]], np.uint8))[0, 0]
+        assert abs(got - expect) < 1e-9, (rgb, got, expect)
+
+
+def test_colour_order_is_rgb_on_load_and_save(tmp_path=None):
+    import tempfile
+    import cv2
+    d = Path(tempfile.mkdtemp())
+    img = np.zeros((4, 4, 3), np.uint8)
+    img[..., 0] = 200   # pure-ish red in RGB
+    img[..., 2] = 10
+    save_rgb(d / "t.png", img)
+    assert np.array_equal(load_rgb(d / "t.png"), img)                     # round trip keeps RGB
+    raw = cv2.imread(str(d / "t.png"))                                    # OpenCV's own view is BGR
+    assert raw[0, 0].tolist() == [10, 0, 200]
 
 
 def test_more_noise_lower_scores():
@@ -60,7 +88,28 @@ def test_pixel_alignment_no_shift():
     assert abs(cy - 31.5) < 0.1 and abs(cx - 31.5) < 0.1
 
 
+def test_psnr_y_shaving_ignores_border_only_differences():
+    a = rnd((40, 40, 3), 3)
+    b = a.copy()
+    b[:2], b[-2:], b[:, :2], b[:, -2:] = 0, 255, 0, 255  # corrupt ONLY the outer 2 px
+    assert psnr_y(a, b, border=2) == float("inf")
+    assert psnr_y(a, b, border=0) < 40
+    assert ssim_y(a, b, border=2) > 0.999999 and ssim_y(a, b, border=0) < 0.999
+
+
+def test_ssim_uses_gaussian_11_sigma_1p5_definition():
+    from skimage.metrics import structural_similarity
+    a = rnd((48, 48, 3), 4)
+    b = np.clip(a.astype(int) + np.random.default_rng(5).integers(-30, 31, a.shape), 0, 255).astype(np.uint8)
+    ref = structural_similarity(a, b, channel_axis=2, gaussian_weights=True, sigma=1.5, use_sample_covariance=False, data_range=255)
+    assert abs(ssim_rgb(a, b) - ref) < 1e-12
+    ya, yb = rgb_to_y(a), rgb_to_y(b)
+    ref_y = structural_similarity(ya[2:-2, 2:-2], yb[2:-2, 2:-2], gaussian_weights=True, sigma=1.5, use_sample_covariance=False, data_range=255)
+    assert abs(ssim_y(a, b, 2) - ref_y) < 1e-12
+
+
 def test_real_data_lr_matches_official_and_files_exist():
+    need(ROOT / "data" / "test" / "LR" / "Set5")
     for s, n in [("Set5", 5), ("Set14", 14), ("BSD100", 100)]:
         paths = list_images(ROOT / "data" / "test" / "HR" / s)
         assert len(paths) == n, (s, len(paths))
@@ -73,6 +122,7 @@ def test_real_data_lr_matches_official_and_files_exist():
 
 
 def test_results_csv_sane():
+    need(ROOT / "results" / "quality" / "baseline_x2.csv")
     with open(ROOT / "results" / "quality" / "baseline_x2.csv") as f:
         rows = list(csv.DictReader(f))
     assert len(rows) == (5 + 14 + 100) * 3
@@ -86,5 +136,8 @@ def test_results_csv_sane():
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
-            fn()
-            print("PASS", name)
+            try:
+                fn()
+                print("PASS", name)
+            except Skip as e:
+                print("SKIP", name, "-", e)
