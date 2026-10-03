@@ -12,7 +12,9 @@ for i in $(seq 193 $((192 + COUNT))); do
   f=$(printf "img%04d.png" "$i")
   [ -f "$DEST/$f" ] && continue
   for try in 1 2 3 4 5; do
-    curl -sL --max-time 600 -C - -o "$DEST/$f.part" "$BASE/$f" && [ -s "$DEST/$f.part" ] && mv "$DEST/$f.part" "$DEST/$f" && break
+    # -f: fail on HTTP errors (otherwise an error page would be saved as a .png); then require the PNG signature
+    curl -sLf --max-time 600 -C - -o "$DEST/$f.part" "$BASE/$f" && [ "$(head -c 4 "$DEST/$f.part" | tail -c 3)" = "PNG" ] && mv "$DEST/$f.part" "$DEST/$f" && break
+    rm -f "$DEST/$f.part"
     sleep 3
   done
   echo "$(date +%T) $f $(ls "$DEST"/*.png 2>/dev/null | wc -l)"
