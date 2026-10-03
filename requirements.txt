@@ -1,6 +1,7 @@
-# Versions used for the recorded results (Python 3.12). PyTorch will be added in M2.
+# Versions used for the recorded results (Python 3.12). CPU training is enough; any torch 2.x build works.
 numpy==2.4.6
 opencv-python-headless==4.13.0.92
 pillow==10.2.0
 scikit-image==0.26.0
 matplotlib==3.10.9
+torch==2.12.0
