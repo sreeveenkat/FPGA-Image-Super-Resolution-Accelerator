@@ -1,6 +1,6 @@
 # HANDOFF — read this first in a new session
 
-Last updated: 2026-10-03. Everything needed to continue the project without the previous conversation.
+Last updated: 2026-10-04 (M3 done, not yet committed at the time of writing; check `git status`). Everything needed to continue the project without the previous conversation.
 Companion files: `CLAUDE.md` (running log of decisions/results), `README.md` (public overview), `docs/milestones/` (step-by-step guides).
 
 ---
@@ -19,8 +19,9 @@ controlled by bare-metal ARM C code over AXI-Lite + AXI DMA. 4K was dropped (220
 | M0 Zynq basics (UART, AXI GPIO, own AXI-Lite IP, DMA loopback) | **not started — owner has no ZedBoard yet** (will borrow from college) |
 | M1 Bicubic baseline, metrics, datasets | **DONE and hardened** |
 | M2 FP32 CNN training/eval | **DONE and hardened** |
-| **M3 INT8 quantization + integer Python golden model** | **NEXT — not started** (spec in section 8) |
-| M4–M5 RTL (simulation only, cocotb + Icarus/Verilator) | planned, no board needed |
+| M3 INT8 quantization + integer Python golden model | **DONE 2026-10-04** (results in section 8) |
+| **M4 conv engine RTL** (simulation only) | **NEXT — not started** |
+| M5 full network RTL (simulation only, cocotb + Icarus/Verilator) | planned, no board needed |
 | M6–M7 AXI/DMA/ARM driver, benchmark | planned, board needed |
 | M8 optional extensions | optional |
 
@@ -35,7 +36,7 @@ Frozen artifact: `software/ai/checkpoints/srnet_fp32.pt` (sha256 starts `f1ae81f
 
 Wins on 119/119 images (worst +0.46 dB). Seed-to-seed spread 0.03–0.09 dB → quote "about +1.0 to +1.5 dB, ±0.1".
 960×540→1080p works on CPU in ~0.1 s; 135 tiles (64×64 core + 3 px halo) equal the whole-image output to 6.6e-7 (float rounding only).
-Nothing about INT8, hardware, resources, timing or fps has been measured yet — do not claim any.
+INT8 (PTQ) is measured: mean PSNR-Y drop 0.18 / 0.11 / 0.08 dB on Set5 / Set14 / BSD100 (section 8). Nothing about hardware, resources, timing or fps has been measured yet — do not claim any.
 
 ## 3. The network and conventions (all decided, do not change casually)
 
@@ -62,11 +63,11 @@ software/ai/dataset/     pairs.py (load/save/LR protocol), check_dataset.py, che
 software/ai/models/      srnet.py
 software/ai/training/    train.py
 software/ai/evaluation/  metrics.py eval_baseline.py eval_model.py border_effect.py check_target_res.py test_baseline.py test_model.py
-software/ai/quantization/  (empty: M3 goes here: quantize.py, integer_reference.py, tests)
+software/ai/quantization/  quantize.py integer_reference.py export_rtl.py qparams.npz test_integer.py test_export.py   (M3; evaluation/eval_int8.py is the INT8 evaluator)
 software/ai/scripts/     fetch_div2k_subset.sh
 software/ai/checkpoints/ srnet_fp32.pt (FINAL), *_v1.pt (old 55-img model), exp/ (ablation runs A–D, seed 1)
 software/arm_driver/  software/host_tools/   (empty, later)
-hardware/rtl/{common,conv_engine,sr_core,axi_wrapper,top}  hardware/verification/{cocotb,vectors,reference}  hardware/vivado/{scripts,constraints}  (empty)
+hardware/rtl/weights/ (M3 export: *.mem, network_params.vh, README = formats)  hardware/rtl/{common,conv_engine,sr_core,axi_wrapper,top}  hardware/verification/{cocotb,vectors,reference}  hardware/vivado/{scripts,constraints}  (empty)
 data/ (git-ignored: train/HR 192 DIV2K imgs, test/HR + test/LR + test/LR_official for Set5/Set14/BSD100, golden/)   data/README.md = sources + name map
 results/quality/ (tracked: baseline_x2.*, model_fp32_x2.*, m2_training_summary.md, training_curves.png)   results/images/ (git-ignored, regenerable)
 ```
@@ -117,28 +118,32 @@ $P software/ai/dataset/check_lr_protocol.py                    # OK … matches 
 $P software/ai/evaluation/check_target_res.py                  # OK (960x540 → 1080p, 135 tiles)
 $P software/ai/evaluation/eval_baseline.py && $P software/ai/evaluation/eval_model.py   # regenerates results/quality (byte-identical when rerun)
 $P software/ai/evaluation/border_effect.py                     # interior +0.98 dB vs border band +0.83 dB
+$P -W error software/ai/quantization/test_integer.py           # 21 PASS (2 SKIP if data/test is missing)
+$P -W error software/ai/quantization/test_export.py            # 6 PASS (2 SKIP if data/golden missing: run export_rtl.py first)
+python3 software/ai/quantization/check_export_independent.py     # pure-Python recompute of all golden tiles from the exported files (~12 s)
+$P software/ai/evaluation/eval_int8.py                         # regenerates results/quality/model_int8_x2.* (byte-identical, ~5 min)
 ```
 **Rebuilding data on a new machine:** `software/ai/scripts/fetch_div2k_subset.sh 192` (DIV2K subset from the Hugging Face mirror `ScooterTaylor/DIV2K_captioned_subset`, files img0193–img0384; train = first 180, validation = last 12).
 Benchmarks: `https://huggingface.co/datasets/eugenesiow/{Set5,Set14,BSD100}/resolve/main/data/{SetN}_HR.tar.gz` and `…_LR_x2.tar.gz` (extract to `data/test/HR/<set>/` and `data/test/LR_official/<set>/`; files keep their original names). Then run `eval_baseline.py` to create `data/test/LR/`.
 Retrain the final model: `.venv/bin/python software/ai/training/train.py --epochs 100 --steps 500 --images 192 --val 12 --threads 4 --out software/ai/checkpoints/srnet_fp32.pt` (statistically, not bit-for-bit, reproducible).
 All 18 deliberate-breakage ("mutation") checks were caught by the test suite on 2026-10-03; when adding code, add tests that would catch a wrong constant/order/rounding.
 
-## 8. NEXT TASK: M3 — INT8 quantization + integer golden model
+## 8. M3 result (DONE) and NEXT TASK: M4
 
-Full guide: `docs/milestones/M3_int8_quantization.md` (its code sketch was corrected to VALID convs on 2026-10-03). Concrete spec to implement in `software/ai/quantization/`:
+**What M3 produced** (details: `docs/milestones/M3_int8_quantization.md` section 4, `CLAUDE.md` section 6d):
+* `software/ai/quantization/integer_reference.py` = THE golden model (pure NumPy integers): `upscale(net, lr)`, `upscale_tiled`, `run_tile(net, tile70x70x3 -> 128x128x3)`, `forward_layers` (all intermediate layers). Params in `qparams.npz`.
+* Arithmetic (the RTL must match bit for bit): `acc = bias + sum(uint8 * int8)`; `y = clamp((acc*M[co] + 2^(SHIFT-1)) >> SHIFT, 0, 255)` (arithmetic shift, round half up); L1..L4 SHIFT = 24, 23, 21, 24; M is uint16 per output channel (all channels of a layer currently share one value); biases int32; weights int8 in [-127, 127]; `acc` fits int32, `acc*M` needs ~40 bits.
+* Exports for the RTL in `hardware/rtl/weights/` (`weights_Ln.mem` order `[co][ci][ky][kx]`, `bias_Ln.mem`, `mult_Ln.mem`, `network_params.vh`, README). Golden tiles in `data/golden/` (git-ignored; run `export_rtl.py` to regenerate): zeros, full255, noise, pixel, ramp, small12 (12x12 -> 12x12), real0-2, real_corner; each has `.npz` and byte-per-line `.hex` files for every layer (`[y][x][c]`).
+* Quality: PSNR-Y FP32 -> INT8: Set5 35.21 -> 35.02, Set14 31.51 -> 31.40, BSD100 30.60 -> 30.53 (worst image -0.41 dB); still beats bicubic on 119/119.
+* Quantization choices were made on the 12 validation images only (99.99th percentile, per-layer weights). If the FP32 checkpoint ever changes, redo `eval_int8.py --sweep`, `quantize.py`, `export_rtl.py` and all tests.
+* Not done on purpose: no `torch.ao` quantized model (not our reference); no QAT (drop already < 0.3 dB).
 
-1. **Load** `srnet_fp32.pt`; weights have PyTorch layout `[out, in/groups, kh, kw]` (depthwise is `[16,1,3,3]`). Keep this layout `[co][ci][ky][kx]` in all exports.
-2. **Calibrate** activation ranges per layer on ~100 *training* images (use 99.9th percentile, not max). Input quantization is exact: uint8 pixel, scale 1/255, zero point 0.
-3. **Weights:** int8 symmetric (zero point 0). Start per-layer scale; move to per-output-channel if the PSNR drop is large (rule of thumb > 0.3 dB).
-4. **Bias:** int32 = `round(b / (s_in·s_w))`. **Requant constants:** integer `M`, `SHIFT` with `M / 2^SHIFT ≈ s_in·s_w / s_out`, M ≤ ~16 bits. Round half up; arithmetic right shift on int64.
-5. **Last layer:** output scale = 1/255 and clamp [0, 255] (its output *is* the pixel); hidden layers: ReLU = clamp [0, 255] on uint8.
-6. **Integer model** (`integer_reference.py`, pure NumPy, no float in the inference path): replicate-pad 3 → conv1 → dw → pw → conv4 → pixel shuffle (`k = 4c+2dy+dx`). Must also support the 70×70 tile → 128×128 case.
-7. **Tests:** hand-computed cases (zero input, single pixel for kernel orientation, ±extremes, rounding ties, saturation), plus tiled == whole image **exactly** (integer maths removes the 98-value float discrepancy seen in M2), plus mutation-style checks.
-8. **Compare** FP32 vs INT8-integer model on Set5/Set14/BSD100 (PSNR-Y/SSIM-Y) — report the real measured drop (try PTQ first, QAT only if needed). Record in `results/quality/` and `CLAUDE.md`.
-9. **Export for RTL:** `weights_L{1..4}.mem`, `bias_L{1..4}.mem`, per-layer `M`/`SHIFT`, plus golden vectors in `data/golden/` (several 70×70 input tiles and expected intermediate + final outputs). Document the layout.
-10. Exit checklist is in the M3 guide; do not start M4 until it is fully ticked.
-
-Then: M4 (one conv layer in Verilog, "tile engine" design in `docs/milestones/M4_conv_engine_rtl.md`, folded MACs P=16, ≈196 cycles/pixel ≈ 1 fps at 100 MHz — an estimate), M5 (full tile core + pixel shuffle + seam test), M6/M7 need the board.
+**NEXT: M4 — one convolution layer in Verilog** (guide: `docs/milestones/M4_conv_engine_rtl.md`). Suggested order:
+1. Install cocotb in the background (`nohup .venv/bin/pip install cocotb &`); Icarus is already installed. Plain Verilog testbenches with `$readmemh` of the golden hex files also work without cocotb.
+2. `mac_unit.v`, `requant.v` (round-half-up, arithmetic shift, clamp; 40-bit product), `tile_ram.v`, `weight_rom.v` (`$readmemh` the `.mem` files), each with a testbench against the golden model.
+3. `conv_engine.v` with parameters `C_IN, C_OUT, KSIZE, DEPTHWISE` (valid convolution, no padding), tested layer by layer against `data/golden/<tile>_L1.hex` ... `_L4.hex` starting with `small12`.
+4. Record cycles per output pixel and the Vivado synthesis utilization of the engine alone (Vivado 2024.1 is installed; no board needed).
+Use `hardware/verification/{cocotb,vectors,reference}`; no Python in `hardware/` except cocotb tests. Do not start M5 before the M4 checklist is ticked.
 
 ## 9. Known caveats / honest limits
 
@@ -163,4 +168,4 @@ Then: M4 (one conv layer in Verilog, "tile engine" design in `docs/milestones/M4
 1. `cd /home/sreevenkat/Desktop/venkat/sem_project_all && git status -sb && git log --oneline | head -5`
 2. Read this file, then `CLAUDE.md` sections 5, 6, 8.
 3. Run the checks in section 7 (about 3 minutes) to confirm the environment still works.
-4. Start M3 per section 8 (or ask the owner if the board has arrived, which would unlock M0).
+4. Start M4 per section 8 (or ask the owner if the board has arrived, which would unlock M0). Check `git status` first: M3 files may still be uncommitted.

@@ -31,11 +31,11 @@ sem_project_all/
 │   └── resources/             ← original planning .md files + reference papers (PDF)
 ├── software/                  ← everything that runs on a PC or on the ARM
 │   ├── ai/                    ← Python: dataset, models, training, quantization, evaluation
-│   │   ├── dataset/  models/  training/  quantization/  evaluation/  scripts/  checkpoints/
+│   │   ├── dataset/  models/  training/  quantization/  evaluation/  scripts/  checkpoints/   (quantization/: quantize, integer_reference, export_rtl, qparams.npz, tests)
 │   ├── arm_driver/            ← C code for the Zynq ARM (Vitis, bare-metal)
 │   └── host_tools/            ← PC helper scripts (png↔raw conversion, serial/JTAG helpers)
 ├── hardware/                  ← everything that becomes FPGA logic
-│   ├── rtl/                   ← Verilog: common/ conv_engine/ sr_core/ axi_wrapper/ top/
+│   ├── rtl/                   ← Verilog: common/ conv_engine/ sr_core/ axi_wrapper/ top/ + weights/ (exported .mem, M3)
 │   ├── verification/          ← cocotb/ testbenches, vectors/, reference/ (golden model glue)
 │   └── vivado/                ← scripts/ (Tcl) and constraints/ (.xdc); build output is git-ignored
 ├── data/                      ← datasets and golden test vectors (large files git-ignored)
@@ -66,8 +66,8 @@ Rules:
 | M0 Zynq basics | yes | not started (waiting for board) |
 | M1 Software baseline | no | **DONE** (hardened 2026-10-03: 3 test sets, official-LR validated, 9 tests, all images reviewed) |
 | M2 Train FP32 CNN | no | **DONE** 2026-10-03 (hardened: 180-image model, ablations, repro + border checks, full visual review) |
-| M3 INT8 + integer model | no | **next — not started** (spec in HANDOFF.md section 8; M3 guide sketch corrected to VALID convs) |
-| M4 Conv engine RTL | simulation only | not started |
+| M3 INT8 + integer model | no | **DONE** 2026-10-04 (PTQ, drop 0.08-0.18 dB mean PSNR-Y, tiled == whole exactly, exports + golden tiles, 22/22 mutations caught) |
+| M4 Conv engine RTL | simulation only | **next — not started** (design in the M4 guide; inputs: `hardware/rtl/weights/`, `data/golden/`) |
 | M5 Full network RTL | simulation only | not started |
 | M6 AXI/DMA/ARM driver | yes | not started |
 | M7 Benchmark + report | yes | not started |
@@ -80,7 +80,7 @@ Rules:
 | Bicubic x2 (PSNR RGB / SSIM RGB / PSNR Y / SSIM Y) | Set5: 31.79 / 0.9088 / 33.67 / 0.9303; Set14: 28.30 / 0.8426 / 30.32 / 0.8698; BSD100: 28.23 / 0.8299 / 29.56 / 0.8434 |
 | Nearest x2 (same metrics) | Set5: 29.08 / 0.8783 / 30.86 / 0.9001; Set14: 26.72 / 0.8202 / 28.58 / 0.8464; BSD100: 27.10 / 0.8117 / 28.42 / 0.8251 |
 | FP32 CNN x2 final (PSNR RGB / SSIM RGB / PSNR Y / SSIM Y) | Set5: 33.12 / 0.9244 / 35.21 / 0.9449; Set14: 29.29 / 0.8688 / 31.51 / 0.8975; BSD100: 29.24 / 0.8673 / 30.60 / 0.8785 (PSNR-Y gain over bicubic: +1.53 / +1.18 / +1.04 dB; wins 119/119) |
-| INT8 integer model PSNR/SSIM | — |
+| INT8 integer model (PSNR RGB / SSIM RGB / PSNR Y / SSIM Y) | Set5: 32.83 / 0.9160 / 35.02 / 0.9420; Set14: 29.15 / 0.8617 / 31.40 / 0.8948; BSD100: 29.11 / 0.8609 / 30.53 / 0.8756 (PSNR-Y drop vs FP32: 0.18 / 0.11 / 0.08 dB mean, worst image 0.41 dB; still wins 119/119 over bicubic) |
 | FPGA resources (LUT/FF/BRAM/DSP) | — |
 | Time per frame / FPS | — |
 
@@ -94,7 +94,7 @@ Rules:
 - Metrics: SSIM = Gaussian 11x11 sigma 1.5 (paper definition); skimage default SSIM kept only as a CSV column. Y = BT.601, 2-px shave. `bicubic` = Pillow bicubic upscale; `bicubic_cv2` (OpenCV) is comparison only and is ~0.2 dB higher.
 - Earlier first-draft numbers (OpenCV LR, no anti-alias) were discarded; do not compare with them.
 - Colour convention: RGB uint8 everywhere in Python (loaders convert from OpenCV BGR).
-- `requirements.txt` pins package versions. A git repo now exists INSIDE this folder (`git init` done 2026-10-03, branch main); checkpoints (14 KB each) are tracked, datasets/images/.venv ignored. First commit NOT made yet (waiting for user).
+- `requirements.txt` pins package versions. A git repo now exists INSIDE this folder (`git init` done 2026-10-03, branch main); checkpoints (14 KB each) are tracked, datasets/images/.venv ignored. Commits are made only when the user asks (see HANDOFF.md section 6).
 
 ## 6c. M2 facts
 - Model: `software/ai/models/srnet.py`; all convs VALID, input padded by HALO=3 (replicate for full images, real neighbours when tiling/training). 2,620 params, 2,560 MACs/px (asserted in tests).
@@ -107,6 +107,15 @@ Rules:
 - Seed spread (seed 0 vs 1): 0.03-0.09 dB on test sets; quote gains as ~+1.0 to +1.5 dB (+/-0.1). Target-res check (`evaluation/check_target_res.py`): 960x540->1080p works (~0.1 s CPU), 135 tiles == whole image to 6.6e-7 float. Training images visually reviewed, no near-duplicates with test sets. Eval rerun byte-identical.
 - 1 training "epoch" = 500 steps x 32 patches = 16k patches (~0.14 pass over data); 100 epochs = ~14 passes.
 - GPU: RTX 3050 6GB laptop, **working since 2026-10-03** (installed prebuilt `linux-modules-nvidia-595-server-open-7.0.0-34-generic` + driver 595.91.07; `torch.cuda.is_available()` = True, CUDA 13.0). Step is ~2.3x faster than CPU but training is dominated by NumPy patch sampling, so the end-to-end gain is smaller; `train.py` has no `--device` flag yet (CPU). GPU conv uses TF32, so CPU/GPU forward differs ~1e-4 (irrelevant for the integer model).
+
+## 6d. M3 facts
+- Scheme: uint8 activations (one scale/layer), int8 symmetric weights [-127,127] **per-layer scale** (per-channel was slightly worse), int32 bias, `M` uint16 per out channel + `SHIFT` per layer (24, 23, 21, 24), requant `(acc*M + 2^(SHIFT-1)) >> SHIFT` clamp [0,255]; input scale 1/255, last-layer output scale 1/255. `acc*M` needs ~40 bits; acc fits int32 (tested).
+- Settings chosen on the 12 VALIDATION images only (`results/quality/m3_ptq_sweep.md`): activation range = 99.99th percentile of all post-ReLU values over 100 training crops. 99 % is catastrophic (-5.3 dB), 99.9 % -0.43, 99.99 % -0.22, max -0.28. PTQ is enough; QAT not needed.
+- Golden model: `software/ai/quantization/integer_reference.py` (`upscale`, `upscale_tiled`, `run_tile`, `forward_layers`); parameters in `quantization/qparams.npz` (tracked, 11 KB, deterministic re-quantization verified). Never regenerate with a different FP32 checkpoint without redoing the sweep/exports.
+- Exports (tracked): `hardware/rtl/weights/{weights,bias,mult}_L{1..4}.mem`, `network_params.vh`, README (layout `[co][ci][ky][kx]`). Golden tiles (git-ignored, regenerate with `export_rtl.py`): `data/golden/<tile>.npz` + byte-per-line `.hex` dumps `[y][x][c]`; 10 tiles incl. zeros/full255/noise/pixel/ramp/small12/real/border; between them every layer hits both 0 and 255.
+- Verification: `test_integer.py` (21), `test_export.py` (6), a pure-Python recompute of all 10 golden tiles from only the exported .mem/.vh/.hex files (matches; corrupting one weight is detected), a clean-copy rebuild (qparams, .mem, .vh and golden files byte-identical), layerwise check against an independent float64 torch implementation (<=1 LSB, 0.004-0.06 % of values differ), INT8 vs FP32 output 48 dB on a test image, tiled == whole exactly (also non-multiples of 64, real image), 22 deliberate breakages all caught, `eval_int8.py` rerun byte-identical. `torch.ao` quantization was NOT used as a reference (deliberate, documented in the M3 guide).
+- Drop per set (mean PSNR-Y): Set5 0.18, Set14 0.11, BSD100 0.08; worst single image 0.41 dB (BSD100). SSIM-Y drop ~0.003.
+- Integer model speed on this CPU (measured once): 0.4 s for 481x321, 1.6 s for 960x540 (NumPy int64); the sweep (8 configs x 12 images) takes ~4 min.
 
 ## 7. Conventions
 - Python 3, type hints where useful, fixed random seeds, scripts runnable from the project root.
@@ -132,3 +141,4 @@ Rules:
 | 2026-10-03 | GitHub repo renamed by user to `FPGA-Image-Super-Resolution-Accelerator`; local `origin` updated. GPU fixed (prebuilt NVIDIA module for kernel 7.0.0-34 + driver upgrade to 595.91.07); PyTorch CUDA verified. |
 | 2026-10-03 | Wrote `HANDOFF.md` (full state, GitHub rules, environment, M3 spec, verification commands). Fact-checked environment: Vivado/Vitis 2024.1 + iverilog present, cocotb/Verilator/board files missing; Pillow is a system package. Corrected the M3 guide's code sketch (valid convs, last-layer clamp 0-255) and executed it. |
 | 2026-10-04 | **Doc consistency pass.** Fixed wrong file names in M2 guide (`srnet.py`, `eval_model.py`) and M7 script path; ticked M1/M2 exit checklists after re-verifying (22 tests pass, dataset check OK, eval rerun leaves `results/quality` unchanged, checkpoint sha256 `f1ae81f706ad3707`). Nothing committed. |
+| 2026-10-04 | **M3 done.** Added `quantization/{quantize,integer_reference,export_rtl,test_integer,test_export}.py`, `evaluation/eval_int8.py`, `qparams.npz`, `hardware/rtl/weights/*`, `data/golden/README.md` (+ generated golden tiles), `results/quality/{m3_ptq_sweep,model_int8_x2}.*`. PTQ sweep on validation images -> 99.99 pct, per-layer weights, drop 0.08-0.18 dB. 27 tests pass, 22/22 mutations caught, eval rerun identical. Updated README, M3 guide, HANDOFF. Not committed yet. |
