@@ -9,6 +9,7 @@ results/images/
 # Vivado/Vitis build output
 hardware/vivado/build/
 *.jou
+clockInfo.txt
 *.log
 .Xil/
 
