@@ -1,0 +1,713 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2024.1 (lin64) Build 5076996 Wed May 22 18:36:09 MDT 2024
+| Date         : Sun Oct  4 02:52:39 2026
+| Host         : sreevenkat-Dell-G15-5530 running 64-bit Ubuntu 24.04.5 LTS
+| Command      : report_timing_summary -file /home/sreevenkat/Desktop/venkat/sem_project_all/hardware/vivado/build/conv_L2_impl/timing_routed.txt -max_paths 5
+| Design       : conv_engine
+| Device       : 7z020-clg484
+| Speed File   : -1  PRODUCTION 1.12 2019-11-22
+| Design State : Routed
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Summary Report
+
+------------------------------------------------------------------------------------------------
+| Timer Settings
+| --------------
+------------------------------------------------------------------------------------------------
+
+  Enable Multi Corner Analysis               :  Yes
+  Enable Pessimism Removal                   :  Yes
+  Pessimism Removal Resolution               :  Nearest Common Node
+  Enable Input Delay Default Clock           :  No
+  Enable Preset / Clear Arcs                 :  No
+  Disable Flight Delays                      :  No
+  Ignore I/O Paths                           :  No
+  Timing Early Launch at Borrowing Latches   :  No
+  Borrow Time for Max Delay Exceptions       :  Yes
+  Merge Timing Exceptions                    :  Yes
+  Inter-SLR Compensation                     :  Conservative
+
+  Corner  Analyze    Analyze    
+  Name    Max Paths  Min Paths  
+  ------  ---------  ---------  
+  Slow    Yes        Yes        
+  Fast    Yes        Yes        
+
+
+------------------------------------------------------------------------------------------------
+| Report Methodology
+| ------------------
+------------------------------------------------------------------------------------------------
+
+No report available as report_methodology has not been run prior. Run report_methodology on the current design for the summary of methodology violations.
+
+
+
+check_timing report
+
+Table of Contents
+-----------------
+1. checking no_clock (0)
+2. checking constant_clock (0)
+3. checking pulse_width_clock (0)
+4. checking unconstrained_internal_endpoints (0)
+5. checking no_input_delay (130)
+6. checking no_output_delay (189)
+7. checking multiple_clock (0)
+8. checking generated_clocks (0)
+9. checking loops (0)
+10. checking partial_input_delay (0)
+11. checking partial_output_delay (0)
+12. checking latch_loops (0)
+
+1. checking no_clock (0)
+------------------------
+ There are 0 register/latch pins with no clock.
+
+
+2. checking constant_clock (0)
+------------------------------
+ There are 0 register/latch pins with constant_clock.
+
+
+3. checking pulse_width_clock (0)
+---------------------------------
+ There are 0 register/latch pins which need pulse_width check
+
+
+4. checking unconstrained_internal_endpoints (0)
+------------------------------------------------
+ There are 0 pins that are not constrained for maximum delay.
+
+ There are 0 pins that are not constrained for maximum delay due to constant clock.
+
+
+5. checking no_input_delay (130)
+--------------------------------
+ There are 130 input ports with no input delay specified. (HIGH)
+
+ There are 0 input ports with no input delay but user has a false path constraint.
+
+
+6. checking no_output_delay (189)
+---------------------------------
+ There are 189 ports with no output delay specified. (HIGH)
+
+ There are 0 ports with no output delay but user has a false path constraint
+
+ There are 0 ports with no output delay but with a timing clock defined on it or propagating through it
+
+
+7. checking multiple_clock (0)
+------------------------------
+ There are 0 register/latch pins with multiple clocks.
+
+
+8. checking generated_clocks (0)
+--------------------------------
+ There are 0 generated clocks that are not connected to a clock source.
+
+
+9. checking loops (0)
+---------------------
+ There are 0 combinational loops in the design.
+
+
+10. checking partial_input_delay (0)
+------------------------------------
+ There are 0 input ports with partial input delay specified.
+
+
+11. checking partial_output_delay (0)
+-------------------------------------
+ There are 0 ports with partial output delay specified.
+
+
+12. checking latch_loops (0)
+----------------------------
+ There are 0 combinational latch loops in the design through latch input
+
+
+
+------------------------------------------------------------------------------------------------
+| Design Timing Summary
+| ---------------------
+------------------------------------------------------------------------------------------------
+
+    WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
+    -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
+      0.261        0.000                      0                 2391        0.100        0.000                      0                 2391        4.020        0.000                       0                   978  
+
+
+All user specified timing constraints are met.
+
+
+------------------------------------------------------------------------------------------------
+| Clock Summary
+| -------------
+------------------------------------------------------------------------------------------------
+
+Clock  Waveform(ns)       Period(ns)      Frequency(MHz)
+-----  ------------       ----------      --------------
+clk    {0.000 5.000}      10.000          100.000         
+
+
+------------------------------------------------------------------------------------------------
+| Intra Clock Table
+| -----------------
+------------------------------------------------------------------------------------------------
+
+Clock             WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
+-----             -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
+clk                 0.261        0.000                      0                 2391        0.100        0.000                      0                 2391        4.020        0.000                       0                   978  
+
+
+------------------------------------------------------------------------------------------------
+| Inter Clock Table
+| -----------------
+------------------------------------------------------------------------------------------------
+
+From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints  
+----------    --------          -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------  
+
+
+------------------------------------------------------------------------------------------------
+| Other Path Groups Table
+| -----------------------
+------------------------------------------------------------------------------------------------
+
+Path Group    From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints  
+----------    ----------    --------          -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------  
+
+
+------------------------------------------------------------------------------------------------
+| Timing Details
+| --------------
+------------------------------------------------------------------------------------------------
+
+
+---------------------------------------------------------------------------------------------------
+From Clock:  clk
+  To Clock:  clk
+
+Setup :            0  Failing Endpoints,  Worst Slack        0.261ns,  Total Violation        0.000ns
+Hold  :            0  Failing Endpoints,  Worst Slack        0.100ns,  Total Violation        0.000ns
+PW    :            0  Failing Endpoints,  Worst Slack        4.020ns,  Total Violation        0.000ns
+---------------------------------------------------------------------------------------------------
+
+
+Max Delay Paths
+--------------------------------------------------------------------------------------
+Slack (MET) :             0.261ns  (required time - arrival time)
+  Source:                 rq_i_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_rq/p1_reg/PCIN[0]
+                            (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
+  Data Path Delay:        8.255ns  (logic 5.132ns (62.170%)  route 3.123ns (37.830%))
+  Logic Levels:           4  (DSP48E1=1 LUT3=1 LUT6=1 MUXF7=1)
+  Clock Path Skew:        -0.049ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.924ns = ( 10.924 - 10.000 ) 
+    Source Clock Delay      (SCD):    0.973ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.973     0.973    clk
+    SLICE_X24Y8          FDRE                                         r  rq_i_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X24Y8          FDRE (Prop_fdre_C_Q)         0.456     1.429 r  rq_i_reg[1]/Q
+                         net (fo=138, routed)         1.571     3.000    u_rq/Q[1]
+    SLICE_X13Y7          LUT6 (Prop_lut6_I2_O)        0.124     3.124 r  u_rq/p10_i_91/O
+                         net (fo=1, routed)           0.000     3.124    u_rq/p10_i_91_n_0
+    SLICE_X13Y7          MUXF7 (Prop_muxf7_I1_O)      0.217     3.341 r  u_rq/p10_i_37/O
+                         net (fo=1, routed)           0.926     4.267    u_rq/p_4_in[7]
+    SLICE_X20Y6          LUT3 (Prop_lut3_I2_O)        0.299     4.566 r  u_rq/p10_i_10/O
+                         net (fo=1, routed)           0.624     5.190    u_rq/p10_i_10_n_0
+    DSP48_X1Y4           DSP48E1 (Prop_dsp48e1_A[7]_PCOUT[0])
+                                                      4.036     9.226 r  u_rq/p10/PCOUT[0]
+                         net (fo=1, routed)           0.002     9.228    u_rq/p10_n_153
+    DSP48_X1Y5           DSP48E1                                      r  u_rq/p1_reg/PCIN[0]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)       10.000    10.000 r  
+                                                      0.000    10.000 r  clk (IN)
+                         net (fo=977, unset)          0.924    10.924    u_rq/clk
+    DSP48_X1Y5           DSP48E1                                      r  u_rq/p1_reg/CLK
+                         clock pessimism              0.000    10.924    
+                         clock uncertainty           -0.035    10.889    
+    DSP48_X1Y5           DSP48E1 (Setup_dsp48e1_CLK_PCIN[0])
+                                                     -1.400     9.489    u_rq/p1_reg
+  -------------------------------------------------------------------
+                         required time                          9.489    
+                         arrival time                          -9.228    
+  -------------------------------------------------------------------
+                         slack                                  0.261    
+
+Slack (MET) :             0.261ns  (required time - arrival time)
+  Source:                 rq_i_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_rq/p1_reg/PCIN[10]
+                            (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
+  Data Path Delay:        8.255ns  (logic 5.132ns (62.170%)  route 3.123ns (37.830%))
+  Logic Levels:           4  (DSP48E1=1 LUT3=1 LUT6=1 MUXF7=1)
+  Clock Path Skew:        -0.049ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.924ns = ( 10.924 - 10.000 ) 
+    Source Clock Delay      (SCD):    0.973ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.973     0.973    clk
+    SLICE_X24Y8          FDRE                                         r  rq_i_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X24Y8          FDRE (Prop_fdre_C_Q)         0.456     1.429 r  rq_i_reg[1]/Q
+                         net (fo=138, routed)         1.571     3.000    u_rq/Q[1]
+    SLICE_X13Y7          LUT6 (Prop_lut6_I2_O)        0.124     3.124 r  u_rq/p10_i_91/O
+                         net (fo=1, routed)           0.000     3.124    u_rq/p10_i_91_n_0
+    SLICE_X13Y7          MUXF7 (Prop_muxf7_I1_O)      0.217     3.341 r  u_rq/p10_i_37/O
+                         net (fo=1, routed)           0.926     4.267    u_rq/p_4_in[7]
+    SLICE_X20Y6          LUT3 (Prop_lut3_I2_O)        0.299     4.566 r  u_rq/p10_i_10/O
+                         net (fo=1, routed)           0.624     5.190    u_rq/p10_i_10_n_0
+    DSP48_X1Y4           DSP48E1 (Prop_dsp48e1_A[7]_PCOUT[10])
+                                                      4.036     9.226 r  u_rq/p10/PCOUT[10]
+                         net (fo=1, routed)           0.002     9.228    u_rq/p10_n_143
+    DSP48_X1Y5           DSP48E1                                      r  u_rq/p1_reg/PCIN[10]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)       10.000    10.000 r  
+                                                      0.000    10.000 r  clk (IN)
+                         net (fo=977, unset)          0.924    10.924    u_rq/clk
+    DSP48_X1Y5           DSP48E1                                      r  u_rq/p1_reg/CLK
+                         clock pessimism              0.000    10.924    
+                         clock uncertainty           -0.035    10.889    
+    DSP48_X1Y5           DSP48E1 (Setup_dsp48e1_CLK_PCIN[10])
+                                                     -1.400     9.489    u_rq/p1_reg
+  -------------------------------------------------------------------
+                         required time                          9.489    
+                         arrival time                          -9.228    
+  -------------------------------------------------------------------
+                         slack                                  0.261    
+
+Slack (MET) :             0.261ns  (required time - arrival time)
+  Source:                 rq_i_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_rq/p1_reg/PCIN[11]
+                            (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
+  Data Path Delay:        8.255ns  (logic 5.132ns (62.170%)  route 3.123ns (37.830%))
+  Logic Levels:           4  (DSP48E1=1 LUT3=1 LUT6=1 MUXF7=1)
+  Clock Path Skew:        -0.049ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.924ns = ( 10.924 - 10.000 ) 
+    Source Clock Delay      (SCD):    0.973ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.973     0.973    clk
+    SLICE_X24Y8          FDRE                                         r  rq_i_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X24Y8          FDRE (Prop_fdre_C_Q)         0.456     1.429 r  rq_i_reg[1]/Q
+                         net (fo=138, routed)         1.571     3.000    u_rq/Q[1]
+    SLICE_X13Y7          LUT6 (Prop_lut6_I2_O)        0.124     3.124 r  u_rq/p10_i_91/O
+                         net (fo=1, routed)           0.000     3.124    u_rq/p10_i_91_n_0
+    SLICE_X13Y7          MUXF7 (Prop_muxf7_I1_O)      0.217     3.341 r  u_rq/p10_i_37/O
+                         net (fo=1, routed)           0.926     4.267    u_rq/p_4_in[7]
+    SLICE_X20Y6          LUT3 (Prop_lut3_I2_O)        0.299     4.566 r  u_rq/p10_i_10/O
+                         net (fo=1, routed)           0.624     5.190    u_rq/p10_i_10_n_0
+    DSP48_X1Y4           DSP48E1 (Prop_dsp48e1_A[7]_PCOUT[11])
+                                                      4.036     9.226 r  u_rq/p10/PCOUT[11]
+                         net (fo=1, routed)           0.002     9.228    u_rq/p10_n_142
+    DSP48_X1Y5           DSP48E1                                      r  u_rq/p1_reg/PCIN[11]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)       10.000    10.000 r  
+                                                      0.000    10.000 r  clk (IN)
+                         net (fo=977, unset)          0.924    10.924    u_rq/clk
+    DSP48_X1Y5           DSP48E1                                      r  u_rq/p1_reg/CLK
+                         clock pessimism              0.000    10.924    
+                         clock uncertainty           -0.035    10.889    
+    DSP48_X1Y5           DSP48E1 (Setup_dsp48e1_CLK_PCIN[11])
+                                                     -1.400     9.489    u_rq/p1_reg
+  -------------------------------------------------------------------
+                         required time                          9.489    
+                         arrival time                          -9.228    
+  -------------------------------------------------------------------
+                         slack                                  0.261    
+
+Slack (MET) :             0.261ns  (required time - arrival time)
+  Source:                 rq_i_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_rq/p1_reg/PCIN[12]
+                            (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
+  Data Path Delay:        8.255ns  (logic 5.132ns (62.170%)  route 3.123ns (37.830%))
+  Logic Levels:           4  (DSP48E1=1 LUT3=1 LUT6=1 MUXF7=1)
+  Clock Path Skew:        -0.049ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.924ns = ( 10.924 - 10.000 ) 
+    Source Clock Delay      (SCD):    0.973ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.973     0.973    clk
+    SLICE_X24Y8          FDRE                                         r  rq_i_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X24Y8          FDRE (Prop_fdre_C_Q)         0.456     1.429 r  rq_i_reg[1]/Q
+                         net (fo=138, routed)         1.571     3.000    u_rq/Q[1]
+    SLICE_X13Y7          LUT6 (Prop_lut6_I2_O)        0.124     3.124 r  u_rq/p10_i_91/O
+                         net (fo=1, routed)           0.000     3.124    u_rq/p10_i_91_n_0
+    SLICE_X13Y7          MUXF7 (Prop_muxf7_I1_O)      0.217     3.341 r  u_rq/p10_i_37/O
+                         net (fo=1, routed)           0.926     4.267    u_rq/p_4_in[7]
+    SLICE_X20Y6          LUT3 (Prop_lut3_I2_O)        0.299     4.566 r  u_rq/p10_i_10/O
+                         net (fo=1, routed)           0.624     5.190    u_rq/p10_i_10_n_0
+    DSP48_X1Y4           DSP48E1 (Prop_dsp48e1_A[7]_PCOUT[12])
+                                                      4.036     9.226 r  u_rq/p10/PCOUT[12]
+                         net (fo=1, routed)           0.002     9.228    u_rq/p10_n_141
+    DSP48_X1Y5           DSP48E1                                      r  u_rq/p1_reg/PCIN[12]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)       10.000    10.000 r  
+                                                      0.000    10.000 r  clk (IN)
+                         net (fo=977, unset)          0.924    10.924    u_rq/clk
+    DSP48_X1Y5           DSP48E1                                      r  u_rq/p1_reg/CLK
+                         clock pessimism              0.000    10.924    
+                         clock uncertainty           -0.035    10.889    
+    DSP48_X1Y5           DSP48E1 (Setup_dsp48e1_CLK_PCIN[12])
+                                                     -1.400     9.489    u_rq/p1_reg
+  -------------------------------------------------------------------
+                         required time                          9.489    
+                         arrival time                          -9.228    
+  -------------------------------------------------------------------
+                         slack                                  0.261    
+
+Slack (MET) :             0.261ns  (required time - arrival time)
+  Source:                 rq_i_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_rq/p1_reg/PCIN[13]
+                            (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
+  Data Path Delay:        8.255ns  (logic 5.132ns (62.170%)  route 3.123ns (37.830%))
+  Logic Levels:           4  (DSP48E1=1 LUT3=1 LUT6=1 MUXF7=1)
+  Clock Path Skew:        -0.049ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.924ns = ( 10.924 - 10.000 ) 
+    Source Clock Delay      (SCD):    0.973ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.973     0.973    clk
+    SLICE_X24Y8          FDRE                                         r  rq_i_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X24Y8          FDRE (Prop_fdre_C_Q)         0.456     1.429 r  rq_i_reg[1]/Q
+                         net (fo=138, routed)         1.571     3.000    u_rq/Q[1]
+    SLICE_X13Y7          LUT6 (Prop_lut6_I2_O)        0.124     3.124 r  u_rq/p10_i_91/O
+                         net (fo=1, routed)           0.000     3.124    u_rq/p10_i_91_n_0
+    SLICE_X13Y7          MUXF7 (Prop_muxf7_I1_O)      0.217     3.341 r  u_rq/p10_i_37/O
+                         net (fo=1, routed)           0.926     4.267    u_rq/p_4_in[7]
+    SLICE_X20Y6          LUT3 (Prop_lut3_I2_O)        0.299     4.566 r  u_rq/p10_i_10/O
+                         net (fo=1, routed)           0.624     5.190    u_rq/p10_i_10_n_0
+    DSP48_X1Y4           DSP48E1 (Prop_dsp48e1_A[7]_PCOUT[13])
+                                                      4.036     9.226 r  u_rq/p10/PCOUT[13]
+                         net (fo=1, routed)           0.002     9.228    u_rq/p10_n_140
+    DSP48_X1Y5           DSP48E1                                      r  u_rq/p1_reg/PCIN[13]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)       10.000    10.000 r  
+                                                      0.000    10.000 r  clk (IN)
+                         net (fo=977, unset)          0.924    10.924    u_rq/clk
+    DSP48_X1Y5           DSP48E1                                      r  u_rq/p1_reg/CLK
+                         clock pessimism              0.000    10.924    
+                         clock uncertainty           -0.035    10.889    
+    DSP48_X1Y5           DSP48E1 (Setup_dsp48e1_CLK_PCIN[13])
+                                                     -1.400     9.489    u_rq/p1_reg
+  -------------------------------------------------------------------
+                         required time                          9.489    
+                         arrival time                          -9.228    
+  -------------------------------------------------------------------
+                         slack                                  0.261    
+
+
+
+
+
+Min Delay Paths
+--------------------------------------------------------------------------------------
+Slack (MET) :             0.100ns  (arrival time - required time)
+  Source:                 first1_reg/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            lane[0].u_mac/first_d_reg/D
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (clk rise@0.000ns - clk rise@0.000ns)
+  Data Path Delay:        0.197ns  (logic 0.141ns (71.611%)  route 0.056ns (28.389%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.022ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    0.432ns
+    Source Clock Delay      (SCD):    0.410ns
+    Clock Pessimism Removal (CPR):    -0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.410     0.410    clk
+    SLICE_X21Y12         FDRE                                         r  first1_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X21Y12         FDRE (Prop_fdre_C_Q)         0.141     0.551 r  first1_reg/Q
+                         net (fo=1, routed)           0.056     0.607    lane[0].u_mac/first1
+    SLICE_X21Y12         FDRE                                         r  lane[0].u_mac/first_d_reg/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.432     0.432    lane[0].u_mac/clk
+    SLICE_X21Y12         FDRE                                         r  lane[0].u_mac/first_d_reg/C
+                         clock pessimism              0.000     0.432    
+    SLICE_X21Y12         FDRE (Hold_fdre_C_D)         0.075     0.507    lane[0].u_mac/first_d_reg
+  -------------------------------------------------------------------
+                         required time                         -0.507    
+                         arrival time                           0.607    
+  -------------------------------------------------------------------
+                         slack                                  0.100    
+
+Slack (MET) :             0.189ns  (arrival time - required time)
+  Source:                 last1_reg/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            last_d1_reg/D
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (clk rise@0.000ns - clk rise@0.000ns)
+  Data Path Delay:        0.330ns  (logic 0.186ns (56.341%)  route 0.144ns (43.659%))
+  Logic Levels:           1  (LUT3=1)
+  Clock Path Skew:        0.022ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    0.432ns
+    Source Clock Delay      (SCD):    0.410ns
+    Clock Pessimism Removal (CPR):    -0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.410     0.410    clk
+    SLICE_X21Y12         FDRE                                         r  last1_reg/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X21Y12         FDRE (Prop_fdre_C_Q)         0.141     0.551 r  last1_reg/Q
+                         net (fo=1, routed)           0.144     0.695    last1
+    SLICE_X22Y12         LUT3 (Prop_lut3_I2_O)        0.045     0.740 r  last_d1_i_1/O
+                         net (fo=1, routed)           0.000     0.740    last_d10
+    SLICE_X22Y12         FDRE                                         r  last_d1_reg/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.432     0.432    clk
+    SLICE_X22Y12         FDRE                                         r  last_d1_reg/C
+                         clock pessimism              0.000     0.432    
+    SLICE_X22Y12         FDRE (Hold_fdre_C_D)         0.120     0.552    last_d1_reg
+  -------------------------------------------------------------------
+                         required time                         -0.552    
+                         arrival time                           0.740    
+  -------------------------------------------------------------------
+                         slack                                  0.189    
+
+Slack (MET) :             0.194ns  (arrival time - required time)
+  Source:                 lane[12].u_mac/acc_reg/CLK
+                            (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            res_reg[411]/D
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (clk rise@0.000ns - clk rise@0.000ns)
+  Data Path Delay:        0.290ns  (logic 0.126ns (43.387%)  route 0.164ns (56.613%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.022ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    0.432ns
+    Source Clock Delay      (SCD):    0.410ns
+    Clock Pessimism Removal (CPR):    -0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.410     0.410    lane[12].u_mac/clk
+    DSP48_X2Y3           DSP48E1                                      r  lane[12].u_mac/acc_reg/CLK
+  -------------------------------------------------------------------    -------------------
+    DSP48_X2Y3           DSP48E1 (Prop_dsp48e1_CLK_P[27])
+                                                      0.126     0.536 r  lane[12].u_mac/acc_reg/P[27]
+                         net (fo=1, routed)           0.164     0.701    acc_flat[411]
+    SLICE_X35Y7          FDRE                                         r  res_reg[411]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.432     0.432    clk
+    SLICE_X35Y7          FDRE                                         r  res_reg[411]/C
+                         clock pessimism              0.000     0.432    
+    SLICE_X35Y7          FDRE (Hold_fdre_C_D)         0.075     0.507    res_reg[411]
+  -------------------------------------------------------------------
+                         required time                         -0.507    
+                         arrival time                           0.701    
+  -------------------------------------------------------------------
+                         slack                                  0.194    
+
+Slack (MET) :             0.195ns  (arrival time - required time)
+  Source:                 lane[12].u_mac/acc_reg/CLK
+                            (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            res_reg[402]/D
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (clk rise@0.000ns - clk rise@0.000ns)
+  Data Path Delay:        0.292ns  (logic 0.126ns (43.090%)  route 0.166ns (56.910%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.022ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    0.432ns
+    Source Clock Delay      (SCD):    0.410ns
+    Clock Pessimism Removal (CPR):    -0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.410     0.410    lane[12].u_mac/clk
+    DSP48_X2Y3           DSP48E1                                      r  lane[12].u_mac/acc_reg/CLK
+  -------------------------------------------------------------------    -------------------
+    DSP48_X2Y3           DSP48E1 (Prop_dsp48e1_CLK_P[18])
+                                                      0.126     0.536 r  lane[12].u_mac/acc_reg/P[18]
+                         net (fo=1, routed)           0.166     0.703    acc_flat[402]
+    SLICE_X35Y10         FDRE                                         r  res_reg[402]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.432     0.432    clk
+    SLICE_X35Y10         FDRE                                         r  res_reg[402]/C
+                         clock pessimism              0.000     0.432    
+    SLICE_X35Y10         FDRE (Hold_fdre_C_D)         0.076     0.508    res_reg[402]
+  -------------------------------------------------------------------
+                         required time                         -0.508    
+                         arrival time                           0.703    
+  -------------------------------------------------------------------
+                         slack                                  0.195    
+
+Slack (MET) :             0.196ns  (arrival time - required time)
+  Source:                 lane[9].u_mac/acc_reg/CLK
+                            (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            res_reg[302]/D
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (clk rise@0.000ns - clk rise@0.000ns)
+  Data Path Delay:        0.293ns  (logic 0.126ns (43.065%)  route 0.167ns (56.935%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.022ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    0.432ns
+    Source Clock Delay      (SCD):    0.410ns
+    Clock Pessimism Removal (CPR):    -0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.410     0.410    lane[9].u_mac/clk
+    DSP48_X2Y2           DSP48E1                                      r  lane[9].u_mac/acc_reg/CLK
+  -------------------------------------------------------------------    -------------------
+    DSP48_X2Y2           DSP48E1 (Prop_dsp48e1_CLK_P[14])
+                                                      0.126     0.536 r  lane[9].u_mac/acc_reg/P[14]
+                         net (fo=1, routed)           0.167     0.703    acc_flat[302]
+    SLICE_X34Y9          FDRE                                         r  res_reg[302]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=977, unset)          0.432     0.432    clk
+    SLICE_X34Y9          FDRE                                         r  res_reg[302]/C
+                         clock pessimism              0.000     0.432    
+    SLICE_X34Y9          FDRE (Hold_fdre_C_D)         0.075     0.507    res_reg[302]
+  -------------------------------------------------------------------
+                         required time                         -0.507    
+                         arrival time                           0.703    
+  -------------------------------------------------------------------
+                         slack                                  0.196    
+
+
+
+
+
+Pulse Width Checks
+--------------------------------------------------------------------------------------
+Clock Name:         clk
+Waveform(ns):       { 0.000 5.000 }
+Period(ns):         10.000
+Sources:            { clk }
+
+Check Type        Corner  Lib Pin      Reference Pin  Required(ns)  Actual(ns)  Slack(ns)  Location      Pin
+Min Period        n/a     DSP48E1/CLK  n/a            2.154         10.000      7.846      DSP48_X0Y4    lane[0].u_mac/acc_reg/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            2.154         10.000      7.846      DSP48_X2Y4    lane[10].u_mac/acc_reg/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            2.154         10.000      7.846      DSP48_X1Y0    lane[11].u_mac/acc_reg/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            2.154         10.000      7.846      DSP48_X2Y3    lane[12].u_mac/acc_reg/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            2.154         10.000      7.846      DSP48_X2Y1    lane[13].u_mac/acc_reg/CLK
+Low Pulse Width   Slow    SRL16E/CLK   n/a            0.980         5.000       4.020      SLICE_X26Y11  u_rq/t2_reg[0]_srl2/CLK
+Low Pulse Width   Fast    SRL16E/CLK   n/a            0.980         5.000       4.020      SLICE_X26Y11  u_rq/t2_reg[0]_srl2/CLK
+Low Pulse Width   Slow    SRL16E/CLK   n/a            0.980         5.000       4.020      SLICE_X26Y11  u_rq/t2_reg[1]_srl2/CLK
+Low Pulse Width   Fast    SRL16E/CLK   n/a            0.980         5.000       4.020      SLICE_X26Y11  u_rq/t2_reg[1]_srl2/CLK
+Low Pulse Width   Slow    SRL16E/CLK   n/a            0.980         5.000       4.020      SLICE_X26Y11  u_rq/t2_reg[2]_srl2/CLK
+High Pulse Width  Slow    SRL16E/CLK   n/a            0.980         5.000       4.020      SLICE_X26Y11  u_rq/t2_reg[0]_srl2/CLK
+High Pulse Width  Fast    SRL16E/CLK   n/a            0.980         5.000       4.020      SLICE_X26Y11  u_rq/t2_reg[0]_srl2/CLK
+High Pulse Width  Slow    SRL16E/CLK   n/a            0.980         5.000       4.020      SLICE_X26Y11  u_rq/t2_reg[1]_srl2/CLK
+High Pulse Width  Fast    SRL16E/CLK   n/a            0.980         5.000       4.020      SLICE_X26Y11  u_rq/t2_reg[1]_srl2/CLK
+High Pulse Width  Slow    SRL16E/CLK   n/a            0.980         5.000       4.020      SLICE_X26Y11  u_rq/t2_reg[2]_srl2/CLK
+
+
+
