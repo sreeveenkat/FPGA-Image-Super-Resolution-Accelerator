@@ -41,6 +41,25 @@ def test_mem_files_roundtrip_exactly():
         assert (read_mem(WDIR / f"mult_L{n}.mem", 16, False) == L["m"]).all(), name
 
 
+def test_wrom_is_the_same_weights_rearranged_step_major():
+    """wrom_Ln.mem (loaded by the RTL) must contain exactly the weights of weights_Ln.mem, line s = (ky*K+kx)*CI_W + ci,
+    channel co in bits [8*co +: 8].  Independent parser + index formula (nothing shared with export_rtl.py)."""
+    for L, (name, cin, cout, k, dw) in zip(NET.layers, LAYER_SPEC):
+        n = name[1]
+        flat = read_mem(WDIR / f"weights_L{n}.mem", 8, True)
+        ci_w = 1 if dw else cin
+        lines = (WDIR / f"wrom_L{n}.mem").read_text().split("\n")[:-1]
+        assert len(lines) == k * k * ci_w, name
+        for step, line in enumerate(lines):
+            assert len(line) == 2 * cout and line == line.lower(), (name, step)
+            word = int(line, 16)
+            ci, kx, ky = step % ci_w, (step // ci_w) % k, step // (ci_w * k)
+            for co in range(cout):
+                b = (word >> (8 * co)) & 0xFF
+                b = b - 256 if b >= 128 else b
+                assert b == flat[((co * ci_w + ci) * k + ky) * k + kx], (name, step, co)
+
+
 def test_weight_file_order_is_co_ci_ky_kx():
     # element (co=1, ci=2, ky=1, kx=2) of L1 sits at flat index ((1*3 + 2)*3 + 1)*3 + 2 = 50
     w = read_mem(WDIR / "weights_L1.mem", 8, True)

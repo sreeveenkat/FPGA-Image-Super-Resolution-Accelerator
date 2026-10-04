@@ -8,9 +8,10 @@ Accumulator fits signed 32 bit; the product `acc*M` needs up to ~40 bits (checke
 | File | Format | Order |
 |---|---|---|
 | `weights_Ln.mem` | int8, 2 hex digits, two's complement | `[co][ci][ky][kx]`, C order (L2: `[c][0][ky][kx]`) |
+| `wrom_Ln.mem` | same weights, step-major for the RTL ROM: 1 line per step `s=(ky*K+kx)*CI_W+ci`, `2*C_OUT` hex digits, channel `co` at bits `8*co+:8` (channel 0 = rightmost byte) | `[step]` |
 | `bias_Ln.mem` | int32, 8 hex digits, two's complement | `[co]` |
 | `mult_Ln.mem` | uint16, 4 hex digits | `[co]` |
 
-Line counts: L1 432 weights / 16 bias, L2 144 / 16, L3 256 / 16, L4 1728 / 12.
+Line counts: L1 432 weights / 27 wrom / 16 bias, L2 144 / 9 / 16, L3 256 / 16 / 16, L4 1728 / 144 / 12. The RTL loads `wrom_Ln.mem`; `weights_Ln.mem` is the canonical interchange file (C driver, other tools).
 `ky` = vertical tap (0 = row above the output pixel), `kx` = horizontal tap; output(y,x) uses input(y+ky, x+kx) (VALID, no padding).
 Pixel shuffle: high-res pixel (2y+dy, 2x+dx), colour c = L4 channel 4c + 2dy + dx at (y,x).
