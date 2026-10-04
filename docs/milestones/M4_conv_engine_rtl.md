@@ -67,7 +67,7 @@ for each (ky, kx, ci):              # C_in·9 steps
 | L2 depthwise 16 | 9 (each MAC works on its own channel) | 16 |
 | L3 pointwise 16→16 | 16 | 16 |
 | L4 conv 16→12 | 144 | 12 |
-| **Total** | **≈ 196 cycles per input pixel** | |
+| **Total** | **≈ 196 cycles per input pixel** | *(design estimate; measured 203 because the depthwise layer takes 16, see section 4b)* |
 
 At 100 MHz, 960×540 (518,400 pixels): 518,400 × 196 ≈ 102 M cycles ≈ **~1 s per frame (~1 fps)**.
 That is slow but **correct**, and it is only version 1. Once it is verified you can raise P (see Section 8). All numbers here are my estimates.
@@ -116,7 +116,7 @@ In this milestone you may **zero-pad** or use "valid" convolution (output shrink
 tiles that include a halo. Choose now and make the Python reference do the same thing.
 
 ### Memory estimate
-Tile of 70×70 pixels × 16 B = 78 KB per buffer; ≈ 20 BRAM36 each (my estimate); two buffers ≈ 40 of 140. Weights: ~2.6 KB
+Tile of 70×70 pixels × 16 B = 78 KB per buffer; ≈ 20 BRAM36 each (my estimate; **measured: 32 for a 70×70×128-bit buffer**, see section 4b); two buffers ≈ 40 of 140 (measured ≈ 64). Weights: ~2.6 KB
 (tiny). Fits comfortably.
 
 ---
@@ -137,7 +137,7 @@ M/SHIFT/bias per layer. They must match the exported files from M3.
 Loops: `for y { for x { clear acc ← bias; for tap/ci { read, MAC }; requant each channel; write } }`.
 Start with the **smallest case**: a 3→16 layer on a 8×8 tile. Parameterize: `C_IN`, `C_OUT`, `KSIZE` (1 or 3), `DEPTHWISE`.
 
-### Step 4 — Verify against Python with cocotb
+### Step 4 — Verify against Python with cocotb (done with self-checking Verilog testbenches + Icarus instead, see section 4b)
 ```python
 # pseudo-test
 z    = np.load("data/golden/small12.npz")   # made by software/ai/quantization/export_rtl.py (keys: tile, L1..L4, out)
@@ -154,19 +154,76 @@ DSP usage ≈ P, BRAM as expected, no inferred latches, timing at 100 MHz.
 
 ---
 
+## 4b. Results achieved (2026-10-04)
+
+What was built:
+
+| File | Purpose |
+|---|---|
+| `hardware/rtl/common/mac_unit.v` | One MAC lane: `acc <= (first ? bias : acc) + a*w`, 2 pipeline stages, forced onto a DSP48 |
+| `hardware/rtl/common/requant.v` | `(acc*M + 2^(SHIFT-1)) >>> SHIFT`, clamp 0..255, 3 stages, tag passthrough |
+| `hardware/rtl/common/tile_ram.v` | Simple dual-port RAM, 1-cycle read (infers block RAM) |
+| `hardware/rtl/common/weight_rom.v` | Step-major weight ROM, loaded with `$readmemh` from `wrom_Ln.mem` |
+| `hardware/rtl/conv_engine/conv_engine.v` | The engine: parameters `C_IN, C_OUT, K, DEPTHWISE, IN_W, IN_H, SHIFT` + 3 files; VALID convolution |
+| `hardware/verification/tb/*.v`, `run_tests.sh` | Self-checking testbenches and the regression runner |
+| `hardware/vivado/scripts/synth_conv_engine.tcl` | Out-of-context synthesis (+ `impl` place&route, `small` post-synthesis netlist) of one layer |
+| `hardware/verification/run_postsynth.sh` | Simulates the synthesized netlists with xsim |
+| `software/ai/quantization/gen_unit_vectors.py` | Requant vectors + randomized layer tests from the Python golden model |
+
+Design decisions (differences from the sketch above):
+* **One engine instance per layer** (compile-time parameters), not one runtime-reconfigurable engine. The M5 sequencer just starts them in
+  order. Cost: 68 DSPs for all four instead of 18; the DSP budget is 220, so this was chosen for simplicity.
+* **Overlapped requantizer.** The shared requantizer works on pixel n while the MAC lanes already accumulate pixel n+1, so a new pixel starts
+  every `PERIOD = max(steps, C_OUT)` cycles. Consequence: the depthwise layer takes 16 cycles/pixel, not 9.
+* **Plain Verilog testbenches with Icarus, not cocotb** (cocotb is not installed and adds nothing here: the golden data are hex files).
+* **Each layer is tested independently** against the golden hex dump of that layer (layer n reads the golden output of layer n-1).
+  Not yet tested: the layers chained together (that is M5).
+* The activation RAMs are outside the engine (in_addr/in_data read port, out_we/out_addr/out_data write port), so M5 can ping-pong them.
+
+Verification (`hardware/verification/run_tests.sh [quick|full]`, `run_postsynth.sh`):
+* Unit: requant against 5,000-13,000 Python vectors for each of 7 shifts (random, dense in-range sweeps, exact rounding ties, saturation, extremes);
+  mac_unit 300 random sequences + 144-step extremes (+-4.7 M, no overflow) + back-to-back pixels; RAM; weight ROM vs the canonical file.
+* Layers: all four layers on all 10 golden tiles (zeros, full255, noise, single pixel, ramp, 3 real tiles, border tile, 12x12 tile),
+  bit-exact. `full` = 57 runs (about 5 minutes), `quick` = 25 runs (about 30 seconds).
+* Randomized layers with a DIFFERENT M per output channel, extreme weights, large biases and a NON-square tile: these catch bugs that the
+  real parameters cannot (the real network has the same M in all channels of a layer, and all golden tiles are square).
+* Robustness (every small and randomized run): the output RAM is poisoned first; the engine is run a second time right after the first
+  (identical result and identical cycle count); then it is aborted by a ONE-cycle reset at PERIOD+6 different moments (every pipeline stage
+  holds live data at some moment) and must stay completely quiet (no busy, no write, no done); then a fresh run must be exact again.
+* **Post-synthesis simulation:** Vivado writes a functional netlist of each layer and the same testbench runs on it in xsim (small tile): 4 of 4 exact.
+* RTL breakage checks: deliberate breakages of rounding, clamp, shift, signedness, bias/first handling, address maths, pipeline alignment,
+  requantizer overrun, channel mapping, per-channel M, output-counter restart, base-address restart and each reset gate were run against
+  `quick` on the final RTL: 32 breakages, all caught (plus the two equivalent mutants below). Two breakages (single M for all channels, wrong row stride for a non-square tile) are caught
+  ONLY by the randomized tests; the reset gates are caught ONLY by the abort sweep (a single fixed abort moment missed most of them).
+  Known equivalent mutants (cannot change behaviour): `> 254` instead of `> 255` in the clamp; the reset gate on the MAC lane's valid flag
+  (removed as dead logic). ROM packing is protected by `test_export.py` (a ky/kx-swapped packing was checked to be caught).
+
+Synthesis and implementation findings (`results/utilization/m4_conv_engine.md`):
+* **Pitfall found and fixed:** the first weight ROM rebuilt its layout in an `initial` loop. Simulation passed, but Vivado printed
+  `Synth 8-311 ignoring non-constant assignment in initial block` and optimized the engine away (2 DSPs, 200 LUTs). The exporter now writes
+  `wrom_Ln.mem` (step-major) and the RTL loads it with a plain `$readmemh`. Always read the synthesis warnings, not only the simulation result.
+* **Pitfall 2:** small 9x8 multipliers go to LUTs by default; `(* use_dsp = "yes" *)` on `mac_unit` forces one DSP per lane.
+* **Pitfall 3:** a netlist simulation needs the testbench to wait for the Xilinx global reset (`glbl.GSR`, first 100 ns), otherwise `start` is ignored.
+* Per layer after place and route: 347-397 LUT, 692-952 FF, 14-18 DSP, 0-2 BRAM; all four instances 68 DSP (31 %), 3.5 BRAM tiles.
+  Routed slack at 100 MHz: +0.135 (L1), +0.261, +0.582, +0.698 ns; hold >= +0.10 ns; no failing endpoints (out-of-context, no I/O timing).
+  Critical path: `rq_i` -> result mux -> requantizer DSP; L1 margin is small, so 125-150 MHz needs another pipeline stage.
+* One 70x70x128-bit activation buffer infers **32 RAMB36** (23 % of the chip), not the ~20 estimated above: plan for it in M5.
+* Cycles per 64x64 tile (simulated): L1 124,871 / L2 69,712 / L3 69,719 / L4 589,843 = 854,145; x135 tiles = about 1.15 s per 960x540 frame
+  at 100 MHz, compute only (simulation arithmetic, not a board measurement).
+
 ## 5. Output of this milestone
 
-1. Verilog: `mac_unit.v`, `requant.v`, `tile_ram.v`, `conv_engine.v` (+ weight ROM).
-2. cocotb testbenches that print **PASS** against the golden vectors.
-3. A utilization report for the engine.
-4. Measured cycles per output pixel (compare with the table above).
+1. Verilog: `mac_unit.v`, `requant.v`, `tile_ram.v`, `weight_rom.v`, `conv_engine.v` (table above).
+2. Self-checking testbenches that print **PASS** against the golden vectors (`run_tests.sh`; Verilog + Icarus instead of cocotb).
+3. Utilization and timing reports: `results/utilization/m4_conv_*`.
+4. Measured cycles per output pixel: 27 / 16 / 16 / 144 (section 4b).
 
 ## 6. Exit checklist
 
-- [ ] MAC and requant units match Python on random + boundary tests.
-- [ ] Conv engine output equals the integer model **exactly** for layer 1 on random and boundary inputs.
-- [ ] Depthwise (`DEPTHWISE=1`) and pointwise (`KSIZE=1`) modes also match.
-- [ ] Synthesizes at your target clock with the expected DSP/BRAM numbers.
+- [x] MAC and requant units match Python on random + boundary tests (requant: Python vectors; mac_unit: independent 64-bit model).
+- [x] Conv engine output equals the integer model **exactly** for layer 1 on random and boundary inputs (and layers 2-4).
+- [x] Depthwise (`DEPTHWISE=1`) and pointwise (`K=1`) modes also match.
+- [x] Synthesizes AND routes at the target clock (100 MHz, routed slack +0.135 ns or better, out-of-context) with the expected DSP/BRAM numbers (one DSP per MAC lane + 2), and the synthesized netlist simulates bit-exact.
 
 ## 7. Common problems
 

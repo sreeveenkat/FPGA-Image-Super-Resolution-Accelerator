@@ -1,6 +1,6 @@
 # HANDOFF — read this first in a new session
 
-Last updated: 2026-10-04 (M3 done, not yet committed at the time of writing; check `git status`). Everything needed to continue the project without the previous conversation.
+Last updated: 2026-10-04 (M4 done, not yet committed at the time of writing; check `git status`). Everything needed to continue the project without the previous conversation.
 Companion files: `CLAUDE.md` (running log of decisions/results), `README.md` (public overview), `docs/milestones/` (step-by-step guides).
 
 ---
@@ -20,8 +20,8 @@ controlled by bare-metal ARM C code over AXI-Lite + AXI DMA. 4K was dropped (220
 | M1 Bicubic baseline, metrics, datasets | **DONE and hardened** |
 | M2 FP32 CNN training/eval | **DONE and hardened** |
 | M3 INT8 quantization + integer Python golden model | **DONE 2026-10-04** (results in section 8) |
-| **M4 conv engine RTL** (simulation only) | **NEXT — not started** |
-| M5 full network RTL (simulation only, cocotb + Icarus/Verilator) | planned, no board needed |
+| M4 conv engine RTL (simulation + synthesis) | **DONE 2026-10-04** (results in section 8) |
+| **M5 full network RTL** (simulation only, Icarus) | **NEXT — not started**, no board needed |
 | M6–M7 AXI/DMA/ARM driver, benchmark | planned, board needed |
 | M8 optional extensions | optional |
 
@@ -67,7 +67,7 @@ software/ai/quantization/  quantize.py integer_reference.py export_rtl.py qparam
 software/ai/scripts/     fetch_div2k_subset.sh
 software/ai/checkpoints/ srnet_fp32.pt (FINAL), *_v1.pt (old 55-img model), exp/ (ablation runs A–D, seed 1)
 software/arm_driver/  software/host_tools/   (empty, later)
-hardware/rtl/weights/ (M3 export: *.mem, network_params.vh, README = formats)  hardware/rtl/{common,conv_engine,sr_core,axi_wrapper,top}  hardware/verification/{cocotb,vectors,reference}  hardware/vivado/{scripts,constraints}  (empty)
+hardware/rtl/weights/ (M3 export: weights/wrom/bias/mult *.mem, network_params.vh, README = formats)  hardware/rtl/common/{mac_unit,requant,tile_ram,weight_rom}.v  hardware/rtl/conv_engine/conv_engine.v (M4)  hardware/verification/{run_tests.sh, tb/*.v}  hardware/vivado/scripts/synth_conv_engine.tcl  (empty so far: rtl/{sr_core,axi_wrapper,top}, verification/{cocotb,vectors,reference}, vivado/constraints)  results/utilization/ (M4 reports)
 data/ (git-ignored: train/HR 192 DIV2K imgs, test/HR + test/LR + test/LR_official for Set5/Set14/BSD100, golden/)   data/README.md = sources + name map
 results/quality/ (tracked: baseline_x2.*, model_fp32_x2.*, m2_training_summary.md, training_curves.png)   results/images/ (git-ignored, regenerable)
 ```
@@ -78,7 +78,7 @@ Rules: no Python in `hardware/` except cocotb tests; no Verilog in `software/`; 
 * Machine: Dell G15, Ubuntu 24.04, kernel 7.0.0-34, 16 CPU threads, 15 GB RAM. Project folder: `/home/sreevenkat/Desktop/venkat/sem_project_all`.
 * Python 3.12. Use **`.venv/bin/python`** from the project root. The venv was created with `--system-site-packages` (numpy, opencv, matplotlib, pillow and **torch 2.12.0+cu130** come from the system; only scikit-image and pyflakes are installed inside the venv). Pinned versions: `requirements.txt`.
 * **GPU works** (RTX 3050 6GB, driver 595.91.07, `torch.cuda.is_available()` True). Fixed on 2026-10-03 by installing the prebuilt module `linux-modules-nvidia-595-server-open-7.0.0-34-generic`. `train.py` is CPU-only (no `--device` flag). GPU convs use TF32 (≈1e-4 forward difference vs CPU) — irrelevant for the integer model.
-* **FPGA tools (verified 2026-10-03):** Vivado, Vitis and Vitis HLS **2024.1** are installed under `~/Desktop/vivado_install/{Vivado,Vitis,Vitis_HLS}/2024.1/` (binaries `…/Vivado/2024.1/bin/vivado`, `…/Vitis/2024.1/bin/{vitis,xsct}`; source `settings64.sh` in each to put them on PATH). Icarus Verilog 12.0 is installed (`/usr/bin/iverilog`, `vvp`). **Not installed:** cocotb, Verilator, GTKWave, Yosys (install cocotb with pip, in the background, before M4).
+* **FPGA tools (verified 2026-10-03):** Vivado, Vitis and Vitis HLS **2024.1** are installed under `~/Desktop/vivado_install/{Vivado,Vitis,Vitis_HLS}/2024.1/` (binaries `…/Vivado/2024.1/bin/vivado`, `…/Vitis/2024.1/bin/{vitis,xsct}`; source `settings64.sh` in each to put them on PATH). Icarus Verilog 12.0 is installed (`/usr/bin/iverilog`, `vvp`). **Not installed:** cocotb, Verilator, GTKWave, Yosys (not needed: the M4 testbenches are plain Verilog run with Icarus; cocotb is optional).
 * **ZedBoard board files are NOT installed** (Vivado's `data/boards/board_files` does not exist). For M0 either install Digilent's board files (github.com/Digilent/vivado-boards) or create the project for part `xc7z020clg484-1` and configure the Zynq PS manually/with the ZedBoard preset.
 * `~/Desktop/VITIS_WORKSPACE/` already contains `hello_world`, `zynq_platform`, `logs` (from earlier work, board and status **unverified** — look before redoing M0 step 1). Home also holds Vivado logs from a session on 2026-10-03; the owner's earlier designs (RISC-V, posit/FP32 MACs) live in folders on `~/Desktop/`.
 * `pip install` from PyPI is slow/flaky here: run it in the background (`nohup … &`) and poll. The shell blocks long `sleep`; wait with `until <cond>; do sleep 5; done` (use `run_in_background` for long waits).
@@ -119,8 +119,11 @@ $P software/ai/evaluation/check_target_res.py                  # OK (960x540 →
 $P software/ai/evaluation/eval_baseline.py && $P software/ai/evaluation/eval_model.py   # regenerates results/quality (byte-identical when rerun)
 $P software/ai/evaluation/border_effect.py                     # interior +0.98 dB vs border band +0.83 dB
 $P -W error software/ai/quantization/test_integer.py           # 21 PASS (2 SKIP if data/test is missing)
-$P -W error software/ai/quantization/test_export.py            # 6 PASS (2 SKIP if data/golden missing: run export_rtl.py first)
+$P -W error software/ai/quantization/test_export.py            # 7 PASS (2 SKIP if data/golden missing: run export_rtl.py first)
 python3 software/ai/quantization/check_export_independent.py     # pure-Python recompute of all golden tiles from the exported files (~12 s)
+$P software/ai/quantization/gen_unit_vectors.py               # requant vectors + randomized layers -> data/golden/unit
+hardware/verification/run_tests.sh quick                       # RTL regression, ~30 s, must end with '25 test runs passed, 0 failed' (full: 57, ~5 min)
+hardware/verification/run_postsynth.sh                         # xsim on the synthesized netlists (Vivado needed, ~1 min): '4 passed, 0 failed'
 $P software/ai/evaluation/eval_int8.py                         # regenerates results/quality/model_int8_x2.* (byte-identical, ~5 min)
 ```
 **Rebuilding data on a new machine:** `software/ai/scripts/fetch_div2k_subset.sh 192` (DIV2K subset from the Hugging Face mirror `ScooterTaylor/DIV2K_captioned_subset`, files img0193–img0384; train = first 180, validation = last 12).
@@ -128,7 +131,7 @@ Benchmarks: `https://huggingface.co/datasets/eugenesiow/{Set5,Set14,BSD100}/reso
 Retrain the final model: `.venv/bin/python software/ai/training/train.py --epochs 100 --steps 500 --images 192 --val 12 --threads 4 --out software/ai/checkpoints/srnet_fp32.pt` (statistically, not bit-for-bit, reproducible).
 All 18 deliberate-breakage ("mutation") checks were caught by the test suite on 2026-10-03; when adding code, add tests that would catch a wrong constant/order/rounding.
 
-## 8. M3 result (DONE) and NEXT TASK: M4
+## 8. M3 and M4 results (DONE) and NEXT TASK: M5
 
 **What M3 produced** (details: `docs/milestones/M3_int8_quantization.md` section 4, `CLAUDE.md` section 6d):
 * `software/ai/quantization/integer_reference.py` = THE golden model (pure NumPy integers): `upscale(net, lr)`, `upscale_tiled`, `run_tile(net, tile70x70x3 -> 128x128x3)`, `forward_layers` (all intermediate layers). Params in `qparams.npz`.
@@ -138,12 +141,20 @@ All 18 deliberate-breakage ("mutation") checks were caught by the test suite on 
 * Quantization choices were made on the 12 validation images only (99.99th percentile, per-layer weights). If the FP32 checkpoint ever changes, redo `eval_int8.py --sweep`, `quantize.py`, `export_rtl.py` and all tests.
 * Not done on purpose: no `torch.ao` quantized model (not our reference); no QAT (drop already < 0.3 dB).
 
-**NEXT: M4 — one convolution layer in Verilog** (guide: `docs/milestones/M4_conv_engine_rtl.md`). Suggested order:
-1. Install cocotb in the background (`nohup .venv/bin/pip install cocotb &`); Icarus is already installed. Plain Verilog testbenches with `$readmemh` of the golden hex files also work without cocotb.
-2. `mac_unit.v`, `requant.v` (round-half-up, arithmetic shift, clamp; 40-bit product), `tile_ram.v`, `weight_rom.v` (`$readmemh` the `.mem` files), each with a testbench against the golden model.
-3. `conv_engine.v` with parameters `C_IN, C_OUT, KSIZE, DEPTHWISE` (valid convolution, no padding), tested layer by layer against `data/golden/<tile>_L1.hex` ... `_L4.hex` starting with `small12`.
-4. Record cycles per output pixel and the Vivado synthesis utilization of the engine alone (Vivado 2024.1 is installed; no board needed).
-Use `hardware/verification/{cocotb,vectors,reference}`; no Python in `hardware/` except cocotb tests. Do not start M5 before the M4 checklist is ticked.
+**M4 result (DONE, re-audited)** (details: `docs/milestones/M4_conv_engine_rtl.md` section 4b, `results/utilization/m4_conv_engine.md`, `CLAUDE.md` section 6e):
+* `conv_engine` = one layer, one instance per layer, VALID conv, memories outside (read port 1-cycle latency, write port), compile-time params `C_IN,C_OUT,K,DEPTHWISE,IN_W,IN_H,SHIFT` + `wrom/bias/mult` files. Interface: `rst` (sync; one cycle is enough), `start` pulse, `busy`, `done` pulse, `cycles`; can be restarted right after `done`. Bit-exact with the golden model on all 4 layers x 10 golden tiles and on randomized layers (distinct M per channel, non-square), and the synthesized netlists are bit-exact too (small tile). Cycles per output pixel 27 / 16 / 16 / 144; per 64x64 tile 124,871 / 69,712 / 69,719 / 589,843 (sum 854,145 = ~1.15 s per frame at 100 MHz for 135 tiles, SIMULATED compute only).
+* Place and route (out-of-context, one engine at a time): 347-397 LUT, 692-952 FF, 14-18 DSP, 0-2 BRAM per layer; 68 DSP total for four instances; routed WNS at 100 MHz +0.135 (L1) / +0.261 / +0.582 / +0.698 ns; critical path: requantizer feed (register the result mux to gain margin).
+* **Memory finding for M5:** a 70x70x128-bit `tile_ram` infers 32 RAMB36 (23 % of the chip). Two ping-pong buffers = 64 of 140. Plan the activation memory before wiring (e.g. one buffer per boundary only where needed, narrower/other word organisation, or smaller tile).
+* Traps already hit (do not repeat): ROM layout built in an `initial` loop is ignored by Vivado (use the exporter's `wrom_Ln.mem` + `$readmemh`); small multipliers need `(* use_dsp = "yes" *)`; TB stimulus must be driven on the falling edge; netlist simulation must wait for `glbl.GSR`; Vivado keeps `*.backup.log` files (do not glob `L*.log`); check `grep 8-311` and the DSP count after every synthesis.
+* Verification commands: `hardware/verification/run_tests.sh quick|full` (25 / 57 runs), `hardware/verification/run_postsynth.sh` (4 netlists, ~1 min, needs the `small` netlists: it generates them if missing), `software/ai/quantization/gen_unit_vectors.py` first on a fresh clone (the runner does it automatically).
+* Layers were tested one at a time on GOLDEN inputs. Chaining them is the M5 job. Not covered: full 70x70 netlist simulation, board behaviour, I/O timing.
+
+**NEXT: M5 — full network in RTL** (guide: `docs/milestones/M5_full_network_rtl.md`). Suggested order:
+1. `sr_tile_core.v`: four `conv_engine` instances (L1 70x70 -> L2 68x68 -> L3 66x66 -> L4 66x66 -> 64x64 out) with activation RAMs between them (`tile_ram`: word widths 24 / 128 / 128 / 128 / 96 bits; the RAMs can be shared ping-pong A/B as in the guide, or one RAM per boundary first for simplicity) and a layer sequencer that pulses `start` of the next engine on `done` of the previous one. Compare EVERY intermediate RAM with `data/golden/<tile>_Ln.hex` (same hex format, `[y][x][c]`).
+2. Pixel shuffle + output packer: `out(2y+dy, 2x+dx, c) = L4[4c+2dy+dx](y,x)`, raster RGB bytes of the 128x128 tile; compare with `<tile>_out.hex`.
+3. Input loader (stream of 70x70x3 bytes into the L1 input RAM) and output stream; then the seam test (tiled == whole image, bit-exact), border tiles (`real_corner`), and a cycle count per tile (expect about 854 k + chaining overhead).
+4. Synthesize the whole core (`synth_conv_engine.tcl` is per-layer; write a core script), check DSP (68 expected from engines), BRAM (activation buffers are the big item: ONE 70x70x128-bit buffer is 32 RAMB36 as measured), timing.
+Open design question for M5: keep four engines (68 DSP, simplest) or share one engine with runtime config (fewer DSPs, more control logic). Four engines is the suggested start. Do not start M6 before the M5 checklist is ticked.
 
 ## 9. Known caveats / honest limits
 
@@ -168,4 +179,4 @@ Use `hardware/verification/{cocotb,vectors,reference}`; no Python in `hardware/`
 1. `cd /home/sreevenkat/Desktop/venkat/sem_project_all && git status -sb && git log --oneline | head -5`
 2. Read this file, then `CLAUDE.md` sections 5, 6, 8.
 3. Run the checks in section 7 (about 3 minutes) to confirm the environment still works.
-4. Start M4 per section 8 (or ask the owner if the board has arrived, which would unlock M0). Check `git status` first: M3 files may still be uncommitted.
+4. Start M5 per section 8 (or ask the owner if the board has arrived, which would unlock M0). Check `git status` first: M4 files may still be uncommitted.

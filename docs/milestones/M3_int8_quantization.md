@@ -147,7 +147,7 @@ What was built, in `software/ai/quantization/`:
 | `quantize.py` | Calibrates on the first 100 of the 180 *training* images (one random 256x256 LR crop each), quantizes weights/biases, picks `M`/`SHIFT`, writes `qparams.npz` |
 | `integer_reference.py` | The golden integer model (pure NumPy, no torch): `upscale`, `upscale_tiled`, `run_tile` (70x70 -> 128x128), `forward_layers` (all intermediates) |
 | `export_rtl.py` | Writes `hardware/rtl/weights/{weights,bias,mult}_Ln.mem`, `network_params.vh`, README, and the golden tiles in `data/golden/` |
-| `test_integer.py`, `test_export.py` | 21 + 6 tests |
+| `test_integer.py`, `test_export.py` | 21 + 7 tests |
 | `check_export_independent.py` | Pure-Python (no numpy) recompute of every golden tile from the exported `.mem`/`.vh`/`.hex` files only |
 | `../evaluation/eval_int8.py` | `--sweep` (validation images only) and the final test-set evaluation |
 

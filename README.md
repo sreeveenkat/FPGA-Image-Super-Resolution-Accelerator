@@ -16,7 +16,7 @@ moves image tiles with AXI DMA.
 | **M1** | Bicubic baseline + metrics + datasets | no | **done** |
 | **M2** | FP32 CNN training and evaluation | no | **done** |
 | **M3** | INT8 quantization + bit-accurate integer Python model | no | **done** |
-| M4 | One convolution layer in Verilog (cocotb, bit-exact) | simulation | planned |
+| **M4** | Convolution engine in Verilog, bit-exact with the integer model | simulation | **done** |
 | M5 | Full network RTL, pixel shuffle, tiling with halo | simulation | planned |
 | M6 | AXI wrapper, DMA, ARM driver | yes | planned |
 | M7 | Benchmark, resource/timing/power report | yes | planned |
@@ -75,13 +75,37 @@ per-layer weight scale) were chosen on 12 *validation* images, never on the test
 * The sweep over quantization settings is in [`results/quality/m3_ptq_sweep.md`](results/quality/m3_ptq_sweep.md), full tables in
   [`results/quality/model_int8_x2.md`](results/quality/model_int8_x2.md).
 
+## Convolution engine in RTL (M4, simulated + synthesized, not on a board)
+
+`hardware/rtl/conv_engine/conv_engine.v` is a folded convolution engine for one layer (one instance per layer): one MAC lane per output
+channel (DSP48), a shared requantizer that overlaps with the next pixel, and a step-major weight ROM. Every layer reproduces the golden
+integer model **bit for bit** on 10 golden tiles (zeros, saturated, noise, single pixel, ramp, real image tiles, a border tile), plus
+randomized layers with distinct per-channel multipliers on a non-square tile. The testbenches are self-checking Verilog run with Icarus
+(`hardware/verification/run_tests.sh`).
+
+| Layer | Cycles / output pixel | Cycles per 64x64 tile (simulated) | LUT | FF | DSP | BRAM36 | WNS @ 100 MHz (routed) |
+|---|---|---|---|---|---|---|---|
+| L1 conv 3->16 | 27 | 124,871 | 360 | 850 | 18 | 2 | +0.135 ns |
+| L2 depthwise 16 | 16 | 69,712 | 397 | 952 | 18 | 0 | +0.261 ns |
+| L3 pointwise 16->16 | 16 | 69,719 | 361 | 840 | 18 | 0 | +0.582 ns |
+| L4 conv 16->12 | 144 | 589,843 | 347 | 692 | 14 | 1.5 | +0.698 ns |
+
+* Vivado 2024.1 out-of-context **synthesis and place-and-route**, one engine at a time (no I/O timing, no activation RAMs): all four layers meet
+  100 MHz with no failing endpoints, but L1 has only +0.135 ns of margin. All four instances together use 68 of 220 DSPs (31 %).
+  The synthesized netlists were also simulated (xsim) and are bit-exact on the golden tile.
+* A 70x70x128-bit activation buffer infers **32 RAMB36 (23 % of the chip)**, more than the ~20 the guide assumed; M5 has to plan for it.
+* 854,145 cycles per tile x 135 tiles = 115 M cycles = about 1.15 s per 960x540 frame at 100 MHz, **compute only and from simulation**; DMA,
+  ARM copying and the layer chaining/shuffle (M5) are not measured yet. No board measurements exist yet.
+* Details, pitfalls found (a ROM initialisation that simulated fine but was ignored by Vivado) and the breakage tests:
+  [`results/utilization/m4_conv_engine.md`](results/utilization/m4_conv_engine.md), [`docs/milestones/M4_conv_engine_rtl.md`](docs/milestones/M4_conv_engine_rtl.md).
+
 ## Repository layout
 
 ```
 docs/          plan, milestone guides, original notes
 software/ai/   dataset, models, training, quantization, evaluation (Python)
 software/arm_driver/, software/host_tools/   ARM C driver and PC helpers (later milestones)
-hardware/      rtl/ (Verilog; rtl/weights = exported network parameters), verification/ (cocotb), vivado/ (scripts, constraints)
+hardware/      rtl/ (Verilog: common, conv_engine; rtl/weights = exported network parameters), verification/ (tb/ testbenches, run_tests.sh), vivado/ (scripts, constraints)
 data/          datasets and golden vectors (git-ignored, see data/README.md)
 results/       measured quality tables and plots
 CLAUDE.md      running project log: decisions, status, measured numbers
@@ -111,6 +135,12 @@ software/ai/scripts/fetch_div2k_subset.sh 192          # training images (DIV2K 
 .venv/bin/python software/ai/evaluation/eval_int8.py            # INT8 vs FP32 vs bicubic on the test sets
 .venv/bin/python -W error software/ai/quantization/test_integer.py
 .venv/bin/python -W error software/ai/quantization/test_export.py
+
+# M4: RTL (needs iverilog; Vivado only for the synthesis line)
+.venv/bin/python software/ai/quantization/gen_unit_vectors.py                  # requant vectors + randomized layers
+hardware/verification/run_tests.sh quick                                       # ~30 s; use `full` for all golden tiles (~4 min)
+vivado -mode batch -source hardware/vivado/scripts/synth_conv_engine.tcl -tclargs 1 10.0 impl   # layer 1..4 synth + place&route
+hardware/verification/run_postsynth.sh                                         # xsim on the synthesized netlists (~1 min)
 ```
 
 Training is statistically but not bit-for-bit reproducible (thread count changes floating-point summation order); the trained
