@@ -4,6 +4,16 @@ Board: **ZedBoard, Zynq-7000 XC7Z020-CLG484** | Tools: Vivado/Vitis 2024.x, Pyth
 
 ---
 
+> **Status update (2026-10-04) — read this before the estimates below.**
+> The scope was narrowed after this plan was written: **no 4K**, plain RGB input, **×2 from 960×540 to 1920×1080** (see `docs/milestones/README.md`).
+> Milestones M1-M5 are done in software and in simulation; nothing has run on a board yet. The compute-budget table in section 2 contains EARLY ESTIMATES;
+> the measured/simulated values are: network 2,620 parameters and 2,560 MACs per input pixel (not ~3,000), one MAC lane per output channel in each
+> layer engine (14-18 DSPs per layer, 68 for the whole core) instead of the assumed ~128 DSP-MACs per cycle, **926,197 simulated cycles per 64×64 tile =
+> about 1.25 s per 960×540 frame at 100 MHz (~0.8 fps)**, versus the ~0.17 s (~6 fps) estimated below. Reaching the estimate needs roughly 7x more
+> parallelism (the speed-ups listed in `docs/milestones/M8_optional_extensions.md`). Always prefer `CLAUDE.md` section 6 and `results/` over the numbers in this plan.
+
+---
+
 ## 1. What is this project? (plain words)
 
 You take a **small, blurry image** (e.g. 480×270) and use a **small neural network (CNN)** to produce a

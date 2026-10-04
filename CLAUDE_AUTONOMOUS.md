@@ -6,8 +6,8 @@
 
 ## Project
 FPGA image super-resolution (x2, 960x540 -> 1920x1080) on a ZedBoard: a 2,620-parameter INT8 CNN is trained in PyTorch (software/ai),
-quantized to a bit-exact NumPy integer model (the golden reference) and implemented in Verilog (hardware/). M1-M4 are done (software
-baseline, FP32 model, INT8 + golden model, conv engine RTL); M5 (full network RTL) is next; M0/M6/M7 need the board, which is not available.
+quantized to a bit-exact NumPy integer model (the golden reference) and implemented in Verilog (hardware/). M1-M5 are done (software
+baseline, FP32 model, INT8 + golden model, conv engine RTL, full tile core RTL); preparation of M6 (AXI wrapper in simulation) is next; M0/M6/M7 need the board, which is not available.
 
 ## Commands
 All commands are run from the project root, with the venv Python: `.venv/bin/python`. Every command below was executed on 2026-10-04 and exited 0.
@@ -32,9 +32,9 @@ python3 software/ai/quantization/check_export_independent.py           # pure-Py
 ```
 RTL (Icarus Verilog 12; the script exits non-zero if any run prints FAIL or no PASS):
 ```bash
-hardware/verification/run_tests.sh quick     # 25 runs, about 30 s   -> "== summary: 25 test runs passed, 0 failed (quick)"
-hardware/verification/run_tests.sh full      # 57 runs, several min  -> "== summary: 57 test runs passed, 0 failed (full)"
-hardware/verification/run_postsynth.sh       # needs Vivado 2024.1; simulates the synthesized netlists -> "4 passed, 0 failed"
+hardware/verification/run_tests.sh quick     # 29 runs, about 2 min   -> "== summary: 29 test runs passed, 0 failed (quick)"   (engine + tile core + 20-tile seam test)
+hardware/verification/run_tests.sh full      # 73 runs, about 20 min -> "== summary: 73 test runs passed, 0 failed (full)"    (adds all real-size tiles and the real-size seam test)
+hardware/verification/run_postsynth.sh       # needs Vivado 2024.1; simulates the synthesized netlists (4 layers + tile core), about 2.5 min -> "5 passed, 0 failed"
 ```
 Results guard (after running any eval script; only tracked files are covered):
 ```bash
@@ -44,6 +44,7 @@ git diff --exit-code -- results/quality software/ai/quantization/qparams.npz   #
 **Which verify to run:** changed `software/ai/models|dataset|training|evaluation` -> the Python tests + dataset/LR/target checks; changed
 `software/ai/quantization` -> all four Python tests + `check_export_independent.py` + `run_tests.sh quick`; changed anything in `hardware/rtl`,
 `hardware/verification` or the exported weights -> `run_tests.sh full` AND `run_postsynth.sh`. When unsure, run everything.
+After a change to RTL that is on a timing-critical path also re-run place and route and compare the slack (see the Vivado commands below).
 
 ### Run (regenerate things)
 ```bash
@@ -55,6 +56,8 @@ git diff --exit-code -- results/quality software/ai/quantization/qparams.npz   #
 .venv/bin/python software/ai/quantization/export_rtl.py         # -> hardware/rtl/weights/* and data/golden/* (git-ignored golden tiles)
 .venv/bin/python software/ai/quantization/gen_unit_vectors.py   # -> data/golden/unit/* (requant vectors, randomized layers)
 vivado -mode batch -nojournal -source hardware/vivado/scripts/synth_conv_engine.tcl -tclargs <layer 1-4> 10.0 [small|impl]   # after: source ~/Desktop/vivado_install/Vivado/2024.1/settings64.sh
+vivado -mode batch -nojournal -source hardware/vivado/scripts/synth_sr_tile_core.tcl -tclargs 10.0 [small|impl]          # whole tile core (impl ~2 min)
+.venv/bin/python software/ai/quantization/seam_test.py gen --hc 8 --h 37 --w 29    # seam test data (run_tests.sh does gen + simulate + check; "check" needs the RTL dumps)
 ```
 Training smoke test (works, exit 0; NOT the real training): `.venv/bin/python software/ai/training/train.py --epochs 1 --steps 3 --images 192 --val 12 --threads 2 --out <scratch dir>/tiny.pt` (run once; wrote only the scratch file).
 The real training command is in CLAUDE.md section 6c. **Never run it with `--out software/ai/checkpoints/srnet_fp32.pt`**: that checkpoint is frozen.
@@ -74,7 +77,8 @@ The task is finished only when ALL of these hold in the same run:
 - Never edit tests, golden vectors, expected outputs, the verify scripts (`run_tests.sh`, `run_postsynth.sh`, `test_*.py`, `check_*.py`) to make them pass.
   Changing a test is allowed only when the test itself is shown to be wrong, and then say so explicitly and ask first.
 - Never claim success without pasting the final command output.
-- A passing test does not prove the test checks anything. After writing or changing a testbench or test, break the code on purpose once and confirm the test fails.
+- A passing test does not prove the test checks anything. After writing or changing a testbench or test, break the code on purpose once and confirm the test fails; also check that missing or truncated golden files make it FAIL (an `X === X` comparison passes vacuously), and that parameters the testbench overrides are also tested at their DEFAULT values.
+- Never `pkill -f '<pattern>'` with a pattern that also appears in your own command line: it kills your own shell.
 - Read the Vivado/iverilog warnings, not only the pass/fail line (a ROM that simulated fine was silently ignored by Vivado once).
 - Git (from HANDOFF.md): commit and push ONLY when the user asks; messages short, past tense, specific ("Added ..."); NO `Co-Authored-By` or other trailers;
   several small commits; never force-push; plain `git` over SSH, not the `gh` CLI; run git from inside this folder (`/home/sreevenkat` is also a git repo).

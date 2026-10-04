@@ -17,7 +17,7 @@ moves image tiles with AXI DMA.
 | **M2** | FP32 CNN training and evaluation | no | **done** |
 | **M3** | INT8 quantization + bit-accurate integer Python model | no | **done** |
 | **M4** | Convolution engine in Verilog, bit-exact with the integer model | simulation | **done** |
-| M5 | Full network RTL, pixel shuffle, tiling with halo | simulation | planned |
+| **M5** | Full network RTL, pixel shuffle, tiling with halo | simulation | **done** |
 | M6 | AXI wrapper, DMA, ARM driver | yes | planned |
 | M7 | Benchmark, resource/timing/power report | yes | planned |
 | M8 | Optional: HDMI, ×4, luma-only, ray-traced input, custom multiplier | — | optional |
@@ -93,11 +93,32 @@ randomized layers with distinct per-channel multipliers on a non-square tile. Th
 * Vivado 2024.1 out-of-context **synthesis and place-and-route**, one engine at a time (no I/O timing, no activation RAMs): all four layers meet
   100 MHz with no failing endpoints, but L1 has only +0.135 ns of margin. All four instances together use 68 of 220 DSPs (31 %).
   The synthesized netlists were also simulated (xsim) and are bit-exact on the golden tile.
-* A 70x70x128-bit activation buffer infers **32 RAMB36 (23 % of the chip)**, more than the ~20 the guide assumed; M5 has to plan for it.
-* 854,145 cycles per tile x 135 tiles = 115 M cycles = about 1.15 s per 960x540 frame at 100 MHz, **compute only and from simulation**; DMA,
-  ARM copying and the layer chaining/shuffle (M5) are not measured yet. No board measurements exist yet.
+* A plain 70x70x128-bit activation buffer infers **32 RAMB36 (23 % of the chip)**, more than the ~20 the guide assumed; M5 fixed this with a split RAM (18.5 tiles, see below).
+* 854,145 engine cycles per tile x 135 tiles = 115 M cycles = about 1.15 s per 960x540 frame at 100 MHz, **compute only and from simulation**. The chained
+  core with byte-wide I/O (M5, below) needs 926,197 cycles per tile (about 1.25 s per frame); DMA and ARM time (M6) are not included. No board measurements exist yet.
 * Details, pitfalls found (a ROM initialisation that simulated fine but was ignored by Vivado) and the breakage tests:
   [`results/utilization/m4_conv_engine.md`](results/utilization/m4_conv_engine.md), [`docs/milestones/M4_conv_engine_rtl.md`](docs/milestones/M4_conv_engine_rtl.md).
+
+## Full tile core in RTL (M5, simulated + synthesized, not on a board)
+
+`hardware/rtl/sr_core/sr_tile_core.v` takes one tile as a byte stream (70x70 RGB with a 3 px halo), runs the four conv engines one after the other
+through five activation RAMs, applies the pixel shuffle and streams the 128x128 RGB result out (valid/ready handshakes, `out_last`).
+It is **bit-exact with the integer model**: every layer buffer and the output stream match the golden data on 9 real-size tiles (also with random stalls
+on both streams), and the **seam test** passes: tiles cut with a 3 px halo from a real image (not a multiple of the tile size), run through the RTL and pasted
+together, equal the whole-image result exactly (20 tiles at a small core size, 4 tiles at the real 64x64 core). One-cycle-reset aborts at 60 different
+moments leave the core quiet, and the synthesized netlist passes the same stream test.
+
+| Whole core (HC = 64) | Value |
+|---|---|
+| Cycles per tile (simulated, no stalls) | 926,197 (engines 854,145 + byte-wide load/output 72,052) |
+| Frame estimate, 960x540 = 135 tiles | about 1.25 s at 100 MHz (~0.80 fps), compute + byte streams only, **not a board measurement** |
+| LUT / FF / DSP / BRAM36 tiles (after place and route) | 1,900 / 3,337 / 68 (31 %) / 70 (50 %) |
+| Routed setup slack at 100 MHz | **+0.234 ns** (thin; out-of-context, no I/O timing), hold +0.081 ns |
+
+* Block-RAM finding: Vivado rounds the depth of a cascaded RAM up to a power of two, so one 4624x128-bit buffer needs 32 tiles; splitting the address
+  range (`tile_ram_split`) needs 18.5. Without it the five buffers would not leave room on the chip.
+* Details, design decisions and the breakage checks: [`results/utilization/m5_tile_core.md`](results/utilization/m5_tile_core.md),
+  [`docs/milestones/M5_full_network_rtl.md`](docs/milestones/M5_full_network_rtl.md). Not done: AXI/DMA wrapper and ARM driver (M6), any board measurement.
 
 ## Repository layout
 
@@ -105,7 +126,7 @@ randomized layers with distinct per-channel multipliers on a non-square tile. Th
 docs/          plan, milestone guides, original notes
 software/ai/   dataset, models, training, quantization, evaluation (Python)
 software/arm_driver/, software/host_tools/   ARM C driver and PC helpers (later milestones)
-hardware/      rtl/ (Verilog: common, conv_engine; rtl/weights = exported network parameters), verification/ (tb/ testbenches, run_tests.sh), vivado/ (scripts, constraints)
+hardware/      rtl/ (Verilog: common, conv_engine, sr_core; rtl/weights = exported network parameters), verification/ (tb/ testbenches, run_tests.sh), vivado/ (scripts, constraints)
 data/          datasets and golden vectors (git-ignored, see data/README.md)
 results/       measured quality tables and plots
 CLAUDE.md      running project log: decisions, status, measured numbers
@@ -138,9 +159,10 @@ software/ai/scripts/fetch_div2k_subset.sh 192          # training images (DIV2K 
 
 # M4: RTL (needs iverilog; Vivado only for the synthesis line)
 .venv/bin/python software/ai/quantization/gen_unit_vectors.py                  # requant vectors + randomized layers
-hardware/verification/run_tests.sh quick                                       # ~30 s; use `full` for all golden tiles (~4 min)
+hardware/verification/run_tests.sh quick                                       # ~2 min (engine + tile core + seam test); `full` = all golden tiles at the real size, ~20 min
 vivado -mode batch -source hardware/vivado/scripts/synth_conv_engine.tcl -tclargs 1 10.0 impl   # layer 1..4 synth + place&route
-hardware/verification/run_postsynth.sh                                         # xsim on the synthesized netlists (~1 min)
+vivado -mode batch -source hardware/vivado/scripts/synth_sr_tile_core.tcl -tclargs 10.0 impl      # whole core
+hardware/verification/run_postsynth.sh                                         # xsim on the synthesized netlists: 4 layers + the tile core (~2.5 min)
 ```
 
 Training is statistically but not bit-for-bit reproducible (thread count changes floating-point summation order); the trained

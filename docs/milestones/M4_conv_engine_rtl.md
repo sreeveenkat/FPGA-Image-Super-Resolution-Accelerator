@@ -184,7 +184,7 @@ Verification (`hardware/verification/run_tests.sh [quick|full]`, `run_postsynth.
 * Unit: requant against 5,000-13,000 Python vectors for each of 7 shifts (random, dense in-range sweeps, exact rounding ties, saturation, extremes);
   mac_unit 300 random sequences + 144-step extremes (+-4.7 M, no overflow) + back-to-back pixels; RAM; weight ROM vs the canonical file.
 * Layers: all four layers on all 10 golden tiles (zeros, full255, noise, single pixel, ramp, 3 real tiles, border tile, 12x12 tile),
-  bit-exact. `full` = 57 runs (about 5 minutes), `quick` = 25 runs (about 30 seconds).
+  bit-exact. at the end of M4 `full` was 57 runs (about 5 minutes) and `quick` 25 runs (about 30 seconds); both have grown with M5 (see section 4b of the M5 guide).
 * Randomized layers with a DIFFERENT M per output channel, extreme weights, large biases and a NON-square tile: these catch bugs that the
   real parameters cannot (the real network has the same M in all channels of a layer, and all golden tiles are square).
 * Robustness (every small and randomized run): the output RAM is poisoned first; the engine is run a second time right after the first

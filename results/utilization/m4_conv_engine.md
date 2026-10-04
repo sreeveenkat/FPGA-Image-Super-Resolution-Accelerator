@@ -36,7 +36,7 @@ a 960x540 frame (135 tiles, layers one after the other, no DMA/ARM/shuffle time)
   L1 (+0.135 ns)**; there is no room for 125-150 MHz without extra pipelining. In L1 and L2 the critical path is `rq_i` -> result-register mux -> requantizer DSP (8.4 ns of data path); registering the mux output (one extra requantizer stage) is the obvious first fix, not done.
 * DSPs = one per MAC lane (C_OUT) + 2 for the shared 32x17-bit requantizer multiplier.
 * **Activation buffer (measured):** a 70x70 x 128-bit `tile_ram` infers **32 RAMB36 (23 % of the chip)**, not the ~20 estimated in the guide
-  (`m4_tile_ram_70x70x128_utilization.txt`). Two ping-pong buffers would take 64 of 140 BRAM36 (46 %); M5 has to plan for this
+  (`m4_tile_ram_70x70x128_utilization.txt`). Two ping-pong buffers would take 64 of 140 BRAM36 (46 %); M5 solved this with a split RAM (about 18.5 tiles, see m5_tile_core.md)
   (for example a narrower/other word organisation, or one buffer per boundary only where needed).
 
 ## Post-synthesis functional simulation (the synthesized netlist itself)

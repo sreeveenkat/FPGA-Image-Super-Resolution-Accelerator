@@ -1,6 +1,6 @@
 # HANDOFF — read this first in a new session
 
-Last updated: 2026-10-04 (M4 done, not yet committed at the time of writing; check `git status`). Everything needed to continue the project without the previous conversation.
+Last updated: 2026-10-04 (M5 done, not yet committed at the time of writing; check `git status`). Everything needed to continue the project without the previous conversation.
 Companion files: `CLAUDE.md` (running log of decisions/results), `README.md` (public overview), `docs/milestones/` (step-by-step guides).
 
 ---
@@ -21,7 +21,8 @@ controlled by bare-metal ARM C code over AXI-Lite + AXI DMA. 4K was dropped (220
 | M2 FP32 CNN training/eval | **DONE and hardened** |
 | M3 INT8 quantization + integer Python golden model | **DONE 2026-10-04** (results in section 8) |
 | M4 conv engine RTL (simulation + synthesis) | **DONE 2026-10-04** (results in section 8) |
-| **M5 full network RTL** (simulation only, Icarus) | **NEXT — not started**, no board needed |
+| M5 full network RTL (simulation + synthesis) | **DONE 2026-10-04** (results in section 8) |
+| **M6 prep (PC only): AXI-Stream/AXI-Lite wrapper in simulation, ARM driver draft** | **NEXT** (the board itself is still missing: M0, the real M6 and M7 wait for it) |
 | M6–M7 AXI/DMA/ARM driver, benchmark | planned, board needed |
 | M8 optional extensions | optional |
 
@@ -122,8 +123,8 @@ $P -W error software/ai/quantization/test_integer.py           # 21 PASS (2 SKIP
 $P -W error software/ai/quantization/test_export.py            # 7 PASS (2 SKIP if data/golden missing: run export_rtl.py first)
 python3 software/ai/quantization/check_export_independent.py     # pure-Python recompute of all golden tiles from the exported files (~12 s)
 $P software/ai/quantization/gen_unit_vectors.py               # requant vectors + randomized layers -> data/golden/unit
-hardware/verification/run_tests.sh quick                       # RTL regression, ~30 s, must end with '25 test runs passed, 0 failed' (full: 57, ~5 min)
-hardware/verification/run_postsynth.sh                         # xsim on the synthesized netlists (Vivado needed, ~1 min): '4 passed, 0 failed'
+hardware/verification/run_tests.sh quick                       # RTL regression (engine + tile core + 20-tile seam test), ~2 min, must end with '29 test runs passed, 0 failed' (full: 73 runs, ~20 min)
+hardware/verification/run_postsynth.sh                         # xsim on the synthesized netlists (Vivado needed, ~2.5 min): '5 passed, 0 failed' (4 layers + tile core)
 $P software/ai/evaluation/eval_int8.py                         # regenerates results/quality/model_int8_x2.* (byte-identical, ~5 min)
 ```
 **Rebuilding data on a new machine:** `software/ai/scripts/fetch_div2k_subset.sh 192` (DIV2K subset from the Hugging Face mirror `ScooterTaylor/DIV2K_captioned_subset`, files img0193–img0384; train = first 180, validation = last 12).
@@ -131,7 +132,7 @@ Benchmarks: `https://huggingface.co/datasets/eugenesiow/{Set5,Set14,BSD100}/reso
 Retrain the final model: `.venv/bin/python software/ai/training/train.py --epochs 100 --steps 500 --images 192 --val 12 --threads 4 --out software/ai/checkpoints/srnet_fp32.pt` (statistically, not bit-for-bit, reproducible).
 All 18 deliberate-breakage ("mutation") checks were caught by the test suite on 2026-10-03; when adding code, add tests that would catch a wrong constant/order/rounding.
 
-## 8. M3 and M4 results (DONE) and NEXT TASK: M5
+## 8. M3-M5 results (DONE) and NEXT TASK: M6 preparation
 
 **What M3 produced** (details: `docs/milestones/M3_int8_quantization.md` section 4, `CLAUDE.md` section 6d):
 * `software/ai/quantization/integer_reference.py` = THE golden model (pure NumPy integers): `upscale(net, lr)`, `upscale_tiled`, `run_tile(net, tile70x70x3 -> 128x128x3)`, `forward_layers` (all intermediate layers). Params in `qparams.npz`.
@@ -144,17 +145,26 @@ All 18 deliberate-breakage ("mutation") checks were caught by the test suite on 
 **M4 result (DONE, re-audited)** (details: `docs/milestones/M4_conv_engine_rtl.md` section 4b, `results/utilization/m4_conv_engine.md`, `CLAUDE.md` section 6e):
 * `conv_engine` = one layer, one instance per layer, VALID conv, memories outside (read port 1-cycle latency, write port), compile-time params `C_IN,C_OUT,K,DEPTHWISE,IN_W,IN_H,SHIFT` + `wrom/bias/mult` files. Interface: `rst` (sync; one cycle is enough), `start` pulse, `busy`, `done` pulse, `cycles`; can be restarted right after `done`. Bit-exact with the golden model on all 4 layers x 10 golden tiles and on randomized layers (distinct M per channel, non-square), and the synthesized netlists are bit-exact too (small tile). Cycles per output pixel 27 / 16 / 16 / 144; per 64x64 tile 124,871 / 69,712 / 69,719 / 589,843 (sum 854,145 = ~1.15 s per frame at 100 MHz for 135 tiles, SIMULATED compute only).
 * Place and route (out-of-context, one engine at a time): 347-397 LUT, 692-952 FF, 14-18 DSP, 0-2 BRAM per layer; 68 DSP total for four instances; routed WNS at 100 MHz +0.135 (L1) / +0.261 / +0.582 / +0.698 ns; critical path: requantizer feed (register the result mux to gain margin).
-* **Memory finding for M5:** a 70x70x128-bit `tile_ram` infers 32 RAMB36 (23 % of the chip). Two ping-pong buffers = 64 of 140. Plan the activation memory before wiring (e.g. one buffer per boundary only where needed, narrower/other word organisation, or smaller tile).
+* **Memory finding (solved in M5):** a plain 70x70x128-bit `tile_ram` infers 32 RAMB36 (23 % of the chip); `tile_ram_split` needs about 18.5 (see the M5 result below).
 * Traps already hit (do not repeat): ROM layout built in an `initial` loop is ignored by Vivado (use the exporter's `wrom_Ln.mem` + `$readmemh`); small multipliers need `(* use_dsp = "yes" *)`; TB stimulus must be driven on the falling edge; netlist simulation must wait for `glbl.GSR`; Vivado keeps `*.backup.log` files (do not glob `L*.log`); check `grep 8-311` and the DSP count after every synthesis.
-* Verification commands: `hardware/verification/run_tests.sh quick|full` (25 / 57 runs), `hardware/verification/run_postsynth.sh` (4 netlists, ~1 min, needs the `small` netlists: it generates them if missing), `software/ai/quantization/gen_unit_vectors.py` first on a fresh clone (the runner does it automatically).
-* Layers were tested one at a time on GOLDEN inputs. Chaining them is the M5 job. Not covered: full 70x70 netlist simulation, board behaviour, I/O timing.
+* Verification commands: `hardware/verification/run_tests.sh quick|full` (25 / 57 runs at the end of M4; now 29 / 73 after M5), `hardware/verification/run_postsynth.sh` (4 netlists, ~1 min, needs the `small` netlists: it generates them if missing), `software/ai/quantization/gen_unit_vectors.py` first on a fresh clone (the runner does it automatically).
+* In M4 the layers were tested one at a time on GOLDEN inputs; chaining them was done in M5. Not covered in M4: board behaviour, I/O timing.
 
-**NEXT: M5 — full network in RTL** (guide: `docs/milestones/M5_full_network_rtl.md`). Suggested order:
-1. `sr_tile_core.v`: four `conv_engine` instances (L1 70x70 -> L2 68x68 -> L3 66x66 -> L4 66x66 -> 64x64 out) with activation RAMs between them (`tile_ram`: word widths 24 / 128 / 128 / 128 / 96 bits; the RAMs can be shared ping-pong A/B as in the guide, or one RAM per boundary first for simplicity) and a layer sequencer that pulses `start` of the next engine on `done` of the previous one. Compare EVERY intermediate RAM with `data/golden/<tile>_Ln.hex` (same hex format, `[y][x][c]`).
-2. Pixel shuffle + output packer: `out(2y+dy, 2x+dx, c) = L4[4c+2dy+dx](y,x)`, raster RGB bytes of the 128x128 tile; compare with `<tile>_out.hex`.
-3. Input loader (stream of 70x70x3 bytes into the L1 input RAM) and output stream; then the seam test (tiled == whole image, bit-exact), border tiles (`real_corner`), and a cycle count per tile (expect about 854 k + chaining overhead).
-4. Synthesize the whole core (`synth_conv_engine.tcl` is per-layer; write a core script), check DSP (68 expected from engines), BRAM (activation buffers are the big item: ONE 70x70x128-bit buffer is 32 RAMB36 as measured), timing.
-Open design question for M5: keep four engines (68 DSP, simplest) or share one engine with runtime config (fewer DSPs, more control logic). Four engines is the suggested start. Do not start M6 before the M5 checklist is ticked.
+**M5 result (DONE)** (details: `docs/milestones/M5_full_network_rtl.md` section 4b, `results/utilization/m5_tile_core.md`, `CLAUDE.md` section 6f):
+* `hardware/rtl/sr_core/sr_tile_core.v`: byte stream in (70x70x3 with halo, RGB raster) -> loader -> ram0 -L1-> ram1 -L2-> ram2 -L3-> ram3 -L4-> ram4 -> pixel shuffle -> byte stream out (128x128x3). Ports: `rst` (1 cycle enough), `start` pulse, `busy`, `done` pulse, `in_valid/in_data/in_ready`, `out_valid/out_data/out_ready/out_last`, `cycles`. Parameter `HC` (64 real; 6 and 8 in tests), `SHIFT1..4` (defaults = exported), `WDIR`.
+* Verified bit-exact: every layer buffer (ram1..ram4) and the output stream on all 9 real-size golden tiles (also with random stalls), the seam test (tiled == whole image: 20 tiles at HC=8, 4 tiles at HC=64), re-run / second tile / 60 one-cycle-reset aborts, and the synthesized HC=6 netlist (stream interface). 21 deliberate breakages caught. 73 runs in `full`.
+* Numbers: 926,197 cycles per tile (engines 854,145 + ~72,052 byte-wide I/O) => ~1.25 s per 960x540 frame at 100 MHz (SIMULATED, no DMA/ARM). Whole core after place and route: 1,900 LUT, 3,337 FF, 68 DSP, 70 BRAM tiles (50 %); routed setup slack at 100 MHz only +0.234 ns (hold +0.081), critical path = engine requantizer feed (res mux -> DSP).
+* Memory lesson: a plain 4624x128-bit RAM costs 32 RAMB36 (cascade depth rounded to a power of two); `tile_ram_split` costs 18.5. Keep using it.
+* Traps already hit (do not repeat): ROM layout in an `initial` loop is ignored by Vivado; small multipliers need `use_dsp`; testbench stimulus on the falling edge; netlist simulation waits for `glbl.GSR`; a testbench that passes parameters explicitly cannot see wrong DEFAULT parameters; `X === X` passes vacuously (guard against missing golden files); NEVER `pkill -f` a pattern that appears in your own command line (it killed the shell); Vivado keeps `*.backup.log` files.
+* Not covered: no AXI/DMA wrapper, nothing on a board, netlist simulation only at HC=6 and only the stream interface, out-of-context timing without I/O constraints, load/compute/output are not overlapped.
+
+**NEXT (no board needed): prepare M6 in simulation** (guide: `docs/milestones/M6_axi_dma_arm_driver.md`). Suggested order, each step with its own testbench that can fail:
+1. Gain timing margin first: register the result mux in front of the requantizer DSP (one extra requantizer stage; the engine's cycle count and every golden test must stay bit-exact; re-run synthesis/place&route and expect more than +0.234 ns).
+2. AXI-Stream wrapper: byte stream <-> 32-bit AXI-Stream (TDATA/TVALID/TREADY/TLAST, little-endian, TLAST on the last byte/word of each DMA packet, back-pressure safe) around `sr_tile_core`; testbench acting as a DMA (random stalls, TLAST check, 70x70x3 = 14,700 bytes in, 49,152 bytes out). 14,700 is divisible by 4, 49,152 too.
+3. AXI4-Lite register block (CONTROL start/soft reset, STATUS busy/done/error, TILE_SIZE, CYCLES, ERROR_CODE, VERSION per the M6 guide) with an AXI-Lite master testbench; one register-map document + C header that must agree (test it).
+4. ARM driver draft in C (tile loop, padding, timeouts) that can at least be compiled with the Vitis ARM toolchain and unit-tested on the PC for the geometry/padding logic against `integer_reference.py`. Anything that touches real hardware stays UNVERIFIED until the board exists - say so.
+5. Only then: block design Tcl (Zynq PS + AXI DMA + wrapper) can be written, but not tested without the board files (not installed).
+Do not claim M6/M7 results without a board. When the board arrives: M0 first (guide `M0_zynq_basics.md`).
 
 ## 9. Known caveats / honest limits
 
@@ -179,4 +189,4 @@ Open design question for M5: keep four engines (68 DSP, simplest) or share one e
 1. `cd /home/sreevenkat/Desktop/venkat/sem_project_all && git status -sb && git log --oneline | head -5`
 2. Read this file, then `CLAUDE.md` sections 5, 6, 8.
 3. Run the checks in section 7 (about 3 minutes) to confirm the environment still works.
-4. Start M5 per section 8 (or ask the owner if the board has arrived, which would unlock M0). Check `git status` first: M4 files may still be uncommitted.
+4. Start the M6 preparation per section 8 (or ask the owner if the board has arrived, which would unlock M0). Check `git status` first: M5 files may still be uncommitted.
