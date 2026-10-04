@@ -103,6 +103,10 @@ def golden_tiles():
     ramp[..., 2] = 255 * ((np.add.outer(np.arange(70), np.arange(70)) // 5) % 2)
     tiles.append(("ramp", ramp))
     tiles.append(("small12", rng.integers(0, 256, (12, 12, 3)).astype(np.uint8)))  # 6x6 core -> 12x12 output, quick RTL smoke test
+    rng_b = np.random.default_rng(4321)  # own stream: adding this tile must not change any other golden tile
+    gy, gx = np.mgrid[0:12, 0:12]
+    small_b = np.stack([(gx * 21) % 256, (gy * 21) % 256, ((gx + gy) * 11) % 256], axis=2) ^ rng_b.integers(0, 64, (12, 12, 3))
+    tiles.append(("small12b", small_b.astype(np.uint8)))  # second small tile with different content (stale-data test)
     train = list_images(ROOT / "data" / "train" / "HR")[:3]
     for i, p in enumerate(train):
         lr, _ = make_pair(load_rgb(p), 2)
