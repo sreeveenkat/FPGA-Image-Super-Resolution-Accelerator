@@ -36,6 +36,7 @@ set gen [list C_IN=$cin C_OUT=$cout K=$k DEPTHWISE=$dw IN_W=$iw IN_H=$iw SHIFT=$
     "W_FILE=\"$wd/wrom_L$layer.mem\"" "B_FILE=\"$wd/bias_L$layer.mem\"" "M_FILE=\"$wd/mult_L$layer.mem\""]
 synth_design -top conv_engine -part xc7z020clg484-1 -mode out_of_context -generic [lindex $gen 0] -generic [lindex $gen 1] -generic [lindex $gen 2] -generic [lindex $gen 3] -generic [lindex $gen 4] -generic [lindex $gen 5] -generic [lindex $gen 6] -generic [lindex $gen 7] -generic [lindex $gen 8] -generic [lindex $gen 9] -flatten_hierarchy rebuilt
 create_clock -name clk -period $clk_ns [get_ports clk]
+write_checkpoint -force $out/post_synth.dcp   ;# open later in the GUI:  vivado <this file>
 report_utilization    -file $out/utilization.txt
 report_timing_summary -file $out/timing.txt -max_paths 5
 report_utilization
@@ -47,6 +48,7 @@ if {$impl} {
     opt_design
     place_design
     route_design
+    write_checkpoint -force $out/routed.dcp       ;# open later in the GUI:  vivado <this file>
     report_utilization    -file $out/utilization_routed.txt
     report_timing_summary -file $out/timing_routed.txt -max_paths 5
     report_route_status   -file $out/route_status.txt

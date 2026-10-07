@@ -23,6 +23,7 @@ synth_design -top sr_tile_core -part xc7z020clg484-1 -mode out_of_context -flatt
     -generic HC=$hc -generic SHIFT1=$shift1 -generic SHIFT2=$shift2 -generic SHIFT3=$shift3 -generic SHIFT4=$shift4 \
     -generic "WDIR=\"$root/hardware/rtl/weights/\""
 create_clock -name clk -period $clk_ns [get_ports clk]
+write_checkpoint -force $out/post_synth.dcp   ;# open later in the GUI:  vivado <this file>
 report_utilization    -file $out/utilization.txt
 report_timing_summary -file $out/timing.txt -max_paths 5
 report_utilization
@@ -32,6 +33,7 @@ if {$impl} {
     opt_design
     place_design
     route_design
+    write_checkpoint -force $out/routed.dcp       ;# open later in the GUI:  vivado <this file>
     report_utilization    -file $out/utilization_routed.txt
     report_timing_summary -file $out/timing_routed.txt -max_paths 5
     report_route_status   -file $out/route_status.txt
