@@ -24,6 +24,8 @@ moves image tiles with AXI DMA.
 
 Step-by-step guides for every milestone are in [`docs/milestones/`](docs/milestones/README.md).
 
+**Want to check everything yourself?** Follow [`docs/VERIFY_YOURSELF.md`](docs/VERIFY_YOURSELF.md): software in VS Code, RTL in Vivado, with the expected output of every step.
+
 ## The network
 
 ```
