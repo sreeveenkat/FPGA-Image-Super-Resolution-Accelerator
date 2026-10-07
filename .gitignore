@@ -23,3 +23,6 @@ __pycache__/
 
 # Third-party PDFs carry an institutional IEEE licence footer - do not publish
 docs/resources/papers/
+
+# Owner-made Vivado GUI projects (generated)
+ray_tracing_example/

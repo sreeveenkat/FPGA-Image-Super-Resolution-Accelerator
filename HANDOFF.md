@@ -1,6 +1,6 @@
 # HANDOFF — read this first in a new session
 
-Last updated: 2026-10-04 (M5 done, not yet committed at the time of writing; check `git status`). Everything needed to continue the project without the previous conversation.
+Last updated: 2026-10-07 (M1-M5 done; RTL also verified in Vivado's xsim inside a GUI project; several files still uncommitted - check `git status`). Everything needed to continue the project without the previous conversation.
 Companion files: `CLAUDE.md` (running log of decisions/results), `README.md` (public overview), `docs/milestones/` (step-by-step guides).
 
 ---
@@ -68,7 +68,7 @@ software/ai/quantization/  quantize.py integer_reference.py export_rtl.py qparam
 software/ai/scripts/     fetch_div2k_subset.sh
 software/ai/checkpoints/ srnet_fp32.pt (FINAL), *_v1.pt (old 55-img model), exp/ (ablation runs A–D, seed 1)
 software/arm_driver/  software/host_tools/   (empty, later)
-hardware/rtl/weights/ (M3 export: weights/wrom/bias/mult *.mem, network_params.vh, README = formats)  hardware/rtl/common/{mac_unit,requant,tile_ram,weight_rom}.v  hardware/rtl/conv_engine/conv_engine.v (M4)  hardware/verification/{run_tests.sh, tb/*.v}  hardware/vivado/scripts/synth_conv_engine.tcl  (empty so far: rtl/{sr_core,axi_wrapper,top}, verification/{cocotb,vectors,reference}, vivado/constraints)  results/utilization/ (M4 reports)
+hardware/rtl/weights/ (M3 export: weights/wrom/bias/mult *.mem, network_params.vh, README = formats)  hardware/rtl/common/{mac_unit,requant,tile_ram,weight_rom}.v  hardware/rtl/conv_engine/conv_engine.v (M4)  hardware/verification/{run_tests.sh, tb/*.v}  hardware/vivado/scripts/{synth_conv_engine,synth_sr_tile_core,create_project,add_to_open_project,sim_helpers}.tcl  (empty so far: rtl/{sr_core,axi_wrapper,top}, verification/{cocotb,vectors,reference}, vivado/constraints)  results/utilization/ (M4 reports)
 data/ (git-ignored: train/HR 192 DIV2K imgs, test/HR + test/LR + test/LR_official for Set5/Set14/BSD100, golden/)   data/README.md = sources + name map
 results/quality/ (tracked: baseline_x2.*, model_fp32_x2.*, m2_training_summary.md, training_curves.png)   results/images/ (git-ignored, regenerable)
 ```
@@ -84,6 +84,8 @@ Rules: no Python in `hardware/` except cocotb tests; no Verilog in `software/`; 
 * `~/Desktop/VITIS_WORKSPACE/` already contains `hello_world`, `zynq_platform`, `logs` (from earlier work, board and status **unverified** — look before redoing M0 step 1). Home also holds Vivado logs from a session on 2026-10-03; the owner's earlier designs (RISC-V, posit/FP32 MACs) live in folders on `~/Desktop/`.
 * `pip install` from PyPI is slow/flaky here: run it in the background (`nohup … &`) and poll. The shell blocks long `sleep`; wait with `until <cond>; do sleep 5; done` (use `run_in_background` for long waits).
 * Never `pkill -f "<text>"` from the same command line (it matches and kills its own shell).
+* **Vivado GUI project + simulation (2026-10-07):** the owner created a project `ray_tracing_example/` in the repo root (git-ignored) and ran ALL testbenches in Vivado's xsim: 25 PASS, 0 FAIL (tile core small/stalls/real size HC=64, conv L1-4 golden+randomized, requant x7, mac, ram, splitram, rom x4). Scripts: `hardware/vivado/scripts/{add_to_open_project,create_project,sim_helpers}.tcl`; how-to: `docs/VERIFY_YOURSELF.md` section 4.5b. The sim folder of such a project holds COPIES of `hardware/rtl/weights` and `data/golden` (refresh them when those change). Do not `run all` after `run_tb`.
+* **INCIDENT 2026-10-07 - never repeat:** `create_project -force` FOLLOWS symlinks. A first version of `create_project.tcl` put symlinks `hardware`/`data` into the project's sim folder; re-running it deleted the contents of `hardware/` and `data/`. Recovery: `git checkout -- hardware data` (tracked files), re-applied the uncommitted `.dcp` lines to the two synth scripts, regenerated `data/golden` (`export_rtl.py` AFTER the DIV2K download, because the `real*` tiles come from `data/train/HR`; then `gen_unit_vectors.py`), re-downloaded Set5/Set14/BSD100 (HR + official LR from `eugenesiow/*` on Hugging Face) and the 192 DIV2K images, rebuilt `data/test/LR` with `eval_baseline.py`. Everything verified afterwards (see CLAUDE.md log): results byte-identical, tests and RTL regressions pass. Rule: scripts must never create links into the real source folders; commit early so `git checkout` can recover.
 * `sudo` needs the owner's password: Claude cannot run it. Ask the owner to run commands with the `!` prefix in the prompt.
 
 ## 6. GitHub (everything needed)
