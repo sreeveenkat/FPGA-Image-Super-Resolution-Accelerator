@@ -7,12 +7,12 @@
 #include "xaxidma.h"
 #include "sr_regs.h"
 
-/* !!! PLACEHOLDER !!!  Base address of sr_accel_top/s_axi.  Take it from the Vivado Address Editor (and xparameters.h) after the block design exists.
- * A wrong value is dangerous: reading an address nobody decodes can hang the AXI bus or raise a data abort on the Zynq. */
+/* Base address of sr_accel_top/s_axi: from the Vivado Address Editor of the block design (project m6_sr), 4K range.  Override with -DSR_BASE=... if the design changes.
+ * A wrong value is dangerous: reading an address nobody decodes can hang the AXI bus or raise a data abort on the Zynq; sr_init() reads VERSION first for that reason. */
 #ifndef SR_BASE
-#define SR_BASE        0x43C00000u
+#define SR_BASE        0x40000000u
 #endif
-/* AXI DMA S_AXI_LITE base: 0x40400000 in the M0 design (axi_dma_0); change it if the new block design assigns another one. */
+/* AXI DMA S_AXI_LITE base (axi_dma_0, 64K): 0x40400000 in the block design m6_sr, as in M0. */
 #ifndef SR_DMA_BASE
 #define SR_DMA_BASE    0x40400000u
 #endif

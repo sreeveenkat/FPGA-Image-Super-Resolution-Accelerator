@@ -36,8 +36,8 @@ this linker script) ends below 0x1000_0000. Image limits: 16 + 12*w*h <= 16 MB (
 ## Building in Vitis 2024.1 (SDT flow) - when the block design exists
 1. Vivado: block design with `sr_accel_top` (module reference, `s_axi` on GP0, `s_axis`/`m_axis` to the AXI DMA, DMA memory ports to HP0) -> bitstream -> export `.xsa`.
 2. Vitis: platform from the new `.xsa` (Switch XSA in `vitis-comp.json`, build), new application `sr_app` (empty), copy `sr_app/*.c *.h`, `golden_tile.h` and `sr_regs.h` into its `src`.
-3. Set the base address of `sr_accel_top` from the Vivado Address Editor: `-DSR_BASE=0x43C0_0000` in the compiler flags (or edit the placeholder in `sr_driver.h`; a WRONG value can hang the bus).
-   `SR_DMA_BASE` is 0x40400000 as in M0; change it if the new design differs.
+3. Base addresses (block design `m6_sr`, Address Editor): `SR_BASE` = **0x40000000** (`sr_accel_top_0/s_axi`, 4K) and `SR_DMA_BASE` = 0x40400000 (`axi_dma_0`) are the defaults in `sr_driver.h`.
+   Override with `-DSR_BASE=0x...` if the design changes (a WRONG value can hang the bus). Full address map: `docs/REGISTER_MAP.md`.
 4. Check the app's `_ide/launch.json`: the init file must be `ps7_init.tcl` (M0 trap).
 5. UART: `sudo picocom -b 115200 /dev/ttyACM0` (menu) - or build with `-DSR_TEST=1|2|3`.
 6. First tests, in this order: T1 (one golden tile) -> `128x128` image via T2 (`run_board.tcl`, compare with `compare_raw.py`) -> 960x540 -> T3.

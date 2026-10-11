@@ -2,8 +2,7 @@
 
 Source of truth: `hardware/rtl/top/sr_accel_top.v` (header comment + code). C view: `software/board/sr_regs.h`.
 `software/board/test_regs.py` (part of `hardware/verification/run_tests.sh quick`) fails when the header and the Verilog disagree.
-Status: **simulated and synthesized only, not yet seen on a board.** The AXI base address of the block is assigned in the Vivado Address Editor
-(not known yet: `SR_BASE` in `software/board/sr_app/sr_driver.h` is a placeholder).
+Status: **simulated and synthesized only, not yet seen on a board.** The AXI base address of the block comes from the Vivado Address Editor (see "Address map of the block design" below; `SR_BASE` in `software/board/sr_app/sr_driver.h`).
 
 32-bit registers, 6-bit byte address (64-byte window). Reads of other addresses return 0; writes to read-only or unmapped addresses are accepted
 (response OKAY) and ignored. AW and W may arrive in any order. A write needs the matching `wstrb`.
@@ -30,3 +29,14 @@ Status: **simulated and synthesized only, not yet seen on a board.** The AXI bas
 * Streams: 32-bit beats, little endian (byte 0 = `tdata[7:0]`). Input tile = 14,700 bytes = 3,675 beats (RGB raster `[y][x][c]`, 70 x 70 with halo),
   output tile = 49,152 bytes = 12,288 beats (RGB raster of the 128 x 128 tile). `m_axis_tlast` is on the last output beat; the DMA MM2S generates `tlast` on the last input beat.
 * Measured in simulation (not on a board): CYCLES = 926,202 per tile at HC = 64 without stalls (`results/utilization/m6_top.md`).
+
+## Address map of the block design (Vivado project `/home/sreevenkat/Desktop/venkat/vitis/m6_sr`, from the Address Editor, as reported by the owner)
+| Master | Slave | Base | Range |
+|---|---|---|---|
+| ARM (M_AXI_GP0) | `sr_accel_top_0/s_axi` | **0x4000_0000** (`SR_BASE`) | 4K (the registers use the first 0x18 bytes; the block decodes a 64-byte window) |
+| ARM (M_AXI_GP0) | `axi_dma_0/S_AXI_LITE` | 0x4040_0000 (`SR_DMA_BASE`) | 64K |
+| ARM (M_AXI_GP0), unchanged from M0 | `adder_ip_0` 0x43C0_0000, GPIO LEDs 0x4120_0000, GPIO switches 0x4121_0000 | | |
+| `axi_dma_0` MM2S and S2MM | S_AXI_HP0 -> DDR | 0x0000_0000 - 0x1FFF_FFFF | 512 MB |
+
+`sr_accel_top` has no address check of its own beyond `addr[5:2]`: within its 4K window the six registers repeat every 64 bytes (addresses 0x18-0x3F read 0).
+The driver only uses offsets 0x00-0x14.
