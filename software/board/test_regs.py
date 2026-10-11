@@ -41,7 +41,10 @@ def c_values(names):
     return {k: int(v) for k, v in (l.split("=") for l in out.split())}
 
 
+DBG = {"DBG_IN_BEATS": "dbg_in_beats", "DBG_TLAST_AT": "dbg_tlast_at", "DBG_START2BEAT": "dbg_s2b", "DBG_PRE_BEATS": "dbg_pre",
+       "DBG_STARTS": "{dbg_starts_ign, dbg_starts_ok}", "DBG_ERR_BEATS": "dbg_err_beats", "DBG_ERR_CYCLES": "dbg_err_cyc"}
 NAMES = ["SR_REG_CONTROL", "SR_REG_STATUS", "SR_REG_TILE_SIZE", "SR_REG_CYCLES", "SR_REG_ERROR_CODE", "SR_REG_VERSION",
+         *[f"SR_REG_{n}" for n in DBG],
          "SR_CTRL_START", "SR_CTRL_SRESET", "SR_STATUS_BUSY", "SR_STATUS_DONE", "SR_STATUS_ERROR",
          "SR_ERR_NONE", "SR_ERR_EARLY_TLAST", "SR_ERR_MISSING_TLAST", "SR_ERR_BAD_TKEEP",
          "SR_VERSION", "SR_HC", "SR_HALO", "SR_TILE_IN_W", "SR_TILE_OUT_W", "SR_TILE_IN_BYTES", "SR_TILE_OUT_BYTES"]
@@ -68,7 +71,9 @@ check((HC + 6) ** 2 * 3 % 4 == 0 and (2 * HC) ** 2 * 3 % 4 == 0, "tile byte coun
 cases = dict()
 for n, expr in re.findall(r"4'd(\d+):\s+rdata <= (.*?);", code):
     cases[int(n) * 4] = expr.strip()
-check(len(cases) == 6, f"expected 6 read-case entries, found {len(cases)}")
+check(len(cases) == 6 + len(DBG), f"expected {6 + len(DBG)} read-case entries, found {len(cases)}")
+for n, expr in DBG.items():
+    check(cases.get(C[f"SR_REG_{n}"]) == expr, f"{n} (offset 0x{C['SR_REG_' + n]:02x}): Verilog read value {cases.get(C['SR_REG_' + n])!r}, expected {expr!r}")
 exp_reads = {"SR_REG_CONTROL": "32'd0", "SR_REG_TILE_SIZE": "HC", "SR_REG_CYCLES": "wrap_cycles", "SR_REG_ERROR_CODE": "{30'd0, err_code}", "SR_REG_VERSION": "VERSION"}
 for name, expr in exp_reads.items():
     check(cases.get(C[name]) == expr, f"{name} (offset 0x{C[name]:02x}): Verilog read value {cases.get(C[name])!r}, expected {expr!r}")
@@ -108,8 +113,9 @@ check(re.search(r"!s_axis_tlast && wcnt == NWI - 1\)\s*error_flags\[1\]", wcode)
 check(re.search(r"s_axis_tkeep != 4'hF", code) is not None, "tkeep check (!= 4'hF) not found in the top")
 
 # ---- the comment table in the Verilog header and the document
-tab = {n: int(o, 16) for o, n in re.findall(r"^//\s+(0x[0-9A-Fa-f]{2})\s+([A-Z_]+)", top, re.M)}
-names = {"CONTROL": "SR_REG_CONTROL", "STATUS": "SR_REG_STATUS", "TILE_SIZE": "SR_REG_TILE_SIZE", "CYCLES": "SR_REG_CYCLES", "ERROR_CODE": "SR_REG_ERROR_CODE", "VERSION": "SR_REG_VERSION"}
+tab = {n: int(o, 16) for o, n in re.findall(r"^//\s+(0x[0-9A-Fa-f]{2})\s+([A-Z0-9_]+)", top, re.M)}
+names = {"CONTROL": "SR_REG_CONTROL", "STATUS": "SR_REG_STATUS", "TILE_SIZE": "SR_REG_TILE_SIZE", "CYCLES": "SR_REG_CYCLES", "ERROR_CODE": "SR_REG_ERROR_CODE", "VERSION": "SR_REG_VERSION",
+         **{n: f"SR_REG_{n}" for n in DBG}}
 for n, cn in names.items():
     check(tab.get(n) == C[cn], f"Verilog header comment: {n} at {tab.get(n)} vs header {C[cn]}")
     rows = re.findall(rf"\|\s*(0x[0-9A-Fa-f]{{2}})\s*\|\s*{n}\s*\|", doc)
@@ -122,4 +128,4 @@ if errors:
         print("FAIL:", e)
     print(f"FAIL test_regs: {len(errors)} disagreement(s)")
     sys.exit(1)
-print(f"PASS test_regs: sr_regs.h == sr_accel_top.v == REGISTER_MAP.md ({len(NAMES)} constants, 6 registers, HC={HC})")
+print(f"PASS test_regs: sr_regs.h == sr_accel_top.v == REGISTER_MAP.md ({len(NAMES)} constants, {6 + len(DBG)} registers, HC={HC})")

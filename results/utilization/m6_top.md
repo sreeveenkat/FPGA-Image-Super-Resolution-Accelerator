@@ -34,3 +34,17 @@ A module reference of `sr_accel_top` in a fresh Vivado project showed: interface
 ## Limits
 Out-of-context: no I/O constraints, no PS, no DMA. The absolute `WDIR` ties the synthesis to this machine. The AXI-Lite and stream timing with the
 real PS7 and DMA is not covered. Power is a tool estimate.
+
+## Version 0x53520602: with the debug registers (2026-10-11, out-of-context, same script, NOT yet in a bitstream)
+`hardware/rtl/top/sr_accel_top.v` with the 7 read-only debug registers (0x18-0x30, `docs/REGISTER_MAP.md`). Reports: `m6_top_dbg_utilization_routed.txt`, `m6_top_dbg_timing_routed.txt`.
+
+| Item | 0x53520601 (above, in the board bitstream) | 0x53520602 (debug registers) |
+|---|---|---|
+| Slice LUT (routed) | 1,988 | 2,114 |
+| Slice registers | 3,479 | 3,705 |
+| Block RAM tiles | 70 | 70 |
+| DSP48 | 68 | 68 |
+| WNS / WHS at 100 MHz | +0.677 / +0.085 ns | +0.305 / +0.081 ns (0 failing of 12,691) |
+
+12 of 12 `.mem` files read (Synth 8-3876), no Synth 8-311 / 8-4445. The lower WNS is placement of a slightly bigger design (the debug counters are not on the
+old critical path); still met, but a full in-system build must be re-checked if this version is ever put into the block design.

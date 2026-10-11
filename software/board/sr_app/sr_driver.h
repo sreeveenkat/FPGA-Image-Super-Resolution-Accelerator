@@ -8,7 +8,8 @@
 #include "sr_regs.h"
 
 /* A9 global timer (see sr_driver.c); sr_init() enables it */
-extern uint32_t sr_dbg[6];
+#define SR_DBG_WORDS 13
+extern uint32_t sr_dbg[SR_DBG_WORDS];
 void     sr_timer_init(void);
 uint64_t sr_now_ticks(void);
 uint64_t sr_ticks_per_sec(void);
@@ -42,12 +43,16 @@ typedef struct {
     XAxiDma  dma;
     uintptr_t base;          /* SR_BASE */
     uint32_t last_cycles;    /* CYCLES register after the last successful tile */
+    uint32_t last_error_code; /* ERROR_CODE register of the last tile that failed with SR_RC_HW_ERROR */
+    uint32_t version;        /* VERSION register read by sr_init */
 } sr_dev_t;
 
 int      sr_init(sr_dev_t *d);                                   /* DMA init, VERSION / TILE_SIZE check, DMA reset, core soft reset, STATUS idle + ERROR_CODE 0 */
 int      sr_soft_reset(sr_dev_t *d);                             /* CONTROL.SRESET and wait until STATUS is idle */
 int      sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out); /* in: 14,700 B, out: 49,152 B, both 64-byte aligned, in DDR; resets DMA + core after any error */
 int      sr_run_tile_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t in_len, uint32_t out_len);   /* test only: wrong lengths on purpose */
+int      sr_reset_all(sr_dev_t *d);                              /* core soft reset, DMA reset (wait), core soft reset, STATUS idle + ERROR_CODE 0 */
+extern int sr_start_order;                                       /* 0 normal (MM2S armed before START), 1 START first (T6 experiment) */
 extern int sr_last_recover;                                      /* result of the reset after the last failed tile (SR_RC_OK = the reset worked) */
 void     sr_dump(const sr_dev_t *d, const char *why);            /* prints STATUS, ERROR_CODE, CYCLES and both DMA status registers */
 uint32_t sr_reg_read(const sr_dev_t *d, uint32_t off);

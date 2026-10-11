@@ -153,8 +153,13 @@ Problems found on the board (details in `results/speed/m6_board.md` section 6):
   (L2 off, ELF loaded twice).
 * Reset order: DMA reset before the core reset gave a wrong tile after an "S2MM too short" error; now core -> DMA -> core.
 * Stale DMA/core states left by interrupted programs (DMA blocked half-way, core stuck in LOAD or OUTPUT): the driver recovers, 14/14 with the PL state kept.
-* **Open:** intermittent first-tile stream errors (ERROR_CODE 2 / 1: one input word too many / too few), sometimes lasting until a system reset. Not explained. Last change
-  (PL held in reset + level shifters off before reprogramming) is not yet proven by enough runs.
+* First-tile stream errors (ERROR_CODE 2 / 1, or wrong data), sometimes lasting until a system reset. Owner's hypothesis "race between START and the first beat"
+  was tested and ruled out: simulation sweep of the START-to-first-beat offset (-33..+28 cycles, all write orders, gaps; 918 tiles exact; kept in `run_tests.sh full`)
+  and on the board T6: 8,000 "fresh" tiles with both driver orders, 0 errors. Cause found by A/B on the board: **reprogramming the PL while a DMA transfer is in flight,
+  without first holding the PL in reset and switching the PS-PL level shifters off**: after exactly 16 such reloads every tile failed (2 of 2 blocks); with the
+  isolation step 50 of 50 OK; without interrupted transfers 40 of 40 OK. Fixed in the xsdb scripts (isolation is the default now). The exact PS-internal mechanism
+  is an interpretation (orphaned HP0 read transactions), not proven. Two single failures in a run set with `rst -system` remain unexplained.
+* Debug counters for the stream (VERSION 0x53520602, 7 read-only registers) are written and simulated but NOT in a bitstream; not needed after the A/B above.
 
 Not done: runs from the Vitis GUI with the new driver; interrupt-driven driver; any speed-up (M6 improvements / M7).
 
@@ -162,8 +167,9 @@ Not done: runs from the Vitis GUI with the new driver; interrupt-driven driver; 
 
 - [x] One tile through DMA + core matches the golden tile exactly. (board, 2026-10-11)
 - [x] A full image (start with 128×128 → 256×256, then 960×540 → 1920×1080) matches the integer model exactly. (board, both sizes)
-- [ ] Repeated runs and power cycles give identical output. **Not closed:** every SUCCESSFUL run gave identical output (3 + 15 frames, after a power cycle too), but runs
-      sometimes fail with the open first-tile stream error (`results/speed/m6_board.md` 6.5).
+- [x] Repeated runs and power cycles give identical output. (board: identical outputs before/after a power cycle, 15 T3 frames, T6 8,000 tiles with 0 errors, 50/50
+      fresh program loads with the isolation step.) Condition: load programs with Vitis (system reset) or with `run_board.tcl` (PL isolation); reloading the PL over a
+      running DMA without either breaks the board after 16 reloads until a system reset (`results/speed/m6_board.md` 6.7). 2 earlier single failures unexplained.
 - [x] Timeout/error paths exist (no infinite loops). (board: T5 injects 4 error kinds, all caught, recovery works; stale-state tests)
 - [x] Register map document and C header agree. (`software/board/test_regs.py`, PC test; VERSION / TILE_SIZE read correctly on the board)
 

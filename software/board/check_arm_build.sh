@@ -16,7 +16,7 @@ bad=0
 for f in sr_tiling sr_driver; do
     "$BIN/arm-none-eabi-gcc" $CF -c software/board/sr_app/$f.c -o "$T/$f.o" 2> "$T/$f.log" || { cat "$T/$f.log"; bad=1; }
 done
-for t in 0 1 2 3 5 6 7 8 9; do
+for t in 0 1 2 3 5 6 7 8 9 10; do
     "$BIN/arm-none-eabi-gcc" $CF -DSR_TEST=$t -c software/board/sr_app/main.c -o "$T/main$t.o" 2> "$T/m$t.log" || { grep -v redefined "$T/m$t.log"; bad=1; continue; }
     w=$(grep 'warning:' "$T"/*.log | grep -vc 'redefined\|previous definition' || true)
     "$BIN/arm-none-eabi-gcc" -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -specs="$P/Xilinx.spec" -Wl,-T -Wl,"$LS" -L"$P/lib" "$T/main$t.o" "$T/sr_driver.o" "$T/sr_tiling.o" \

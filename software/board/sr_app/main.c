@@ -24,7 +24,7 @@
 #include "golden_tile.h"      /* generated: software/host_tools/golden_tile_h.py */
 
 #ifndef SR_TEST
-#define SR_TEST 0             /* 0 = UART menu; 1, 2, 3, 5 = run that test and stop; 6-9 = stale-state programs for stale_test.sh (never finish) */
+#define SR_TEST 0             /* 0 = UART menu; 1, 2, 3, 5, 10 (T6) = run that test and stop; 6-9 = stale-state programs for stale_test.sh (never finish) */
 #endif
 #ifndef SR_T3_FRAMES
 #define SR_T3_FRAMES 5
@@ -83,7 +83,13 @@ SR_MAYBE_UNUSED static int test1(void)
     if (rc != SR_RC_OK) { xil_printf("T1 FAIL: sr_run_tile returned %d\r\n", rc); return rc; }
     const int bad = compare_tile(out, sr_golden_out, SR_TILE_OUT_BYTES, "golden");
     xil_printf("T1: CYCLES = %u (expected 926202 in simulation), tile time %u us (DMA + compute)\r\n", dev.last_cycles, ticks_to_us(t1 - t0));
-    if (bad) { xil_printf("T1 FAIL: %d of %u bytes differ from the golden output\r\n", bad, (unsigned)SR_TILE_OUT_BYTES); return -1; }
+    if (bad) {
+        xil_printf("T1 FAIL: %d of %u bytes differ from the golden output\r\n", bad, (unsigned)SR_TILE_OUT_BYTES);
+        g_stats[20] = (uint32_t)bad; g_stats[0] = dev.last_cycles;
+        sr_dump(&dev, "T1 first tile: output wrong although no error was reported");   /* records STATUS / DMA / debug registers for the marker */
+        write_marker(100, 0, 0, 1, 1);
+        return -1;
+    }
     xil_printf("T1: first run: all %u bytes identical to the golden output\r\n", (unsigned)SR_TILE_OUT_BYTES);
     memcpy(first, out, SR_TILE_OUT_BYTES);
 
@@ -163,6 +169,7 @@ static void write_marker(uint32_t result, uint32_t bytes, uint32_t fnv, uint32_t
     m[SR_MARK_W_RESULT] = result; m[SR_MARK_W_BYTES] = bytes; m[SR_MARK_W_FNV] = fnv; m[SR_MARK_W_TILES] = tiles; m[SR_MARK_W_TEST] = test;
     for (int i = 0; i < SR_MARK_NSTATS; i++) m[SR_MARK_W_STATS + i] = g_stats[i];
     for (int i = 0; i < 6; i++) m[SR_MARK_W_STATS + 24 + i] = sr_dbg[i];   /* first register dump at stat24..29 (all 0 = no dump) */
+    for (int i = 0; i < 7; i++) m[SR_MARK_W_STATS + 32 + i] = sr_dbg[6 + i]; /* and its debug registers at stat32..38 (VERSION 0x53520602 only) */
     Xil_DCacheFlushRange((UINTPTR)SR_MARK_ADDR, SR_MARK_SIZE);
     m[SR_MARK_W_MAGIC] = SR_MARK_MAGIC;                          /* last: the host polls this word */
     Xil_DCacheFlushRange((UINTPTR)SR_MARK_ADDR, SR_MARK_SIZE);
@@ -308,6 +315,47 @@ SR_MAYBE_UNUSED static int test5(void)
     return fails ? -1 : 0;
 }
 
+/* ------------------------------------------------------------------ T6: "first tile of a fresh run", many times (SR_TEST=6 is taken: this is SR_TEST=10)
+ * Per iteration: full init reset (sr_reset_all: core soft reset, DMA reset, core soft reset, STATUS idle + ERROR_CODE 0), then one golden tile, compared.
+ * Iterations alternate between the two driver orders, so both see the same board conditions:  order 0 = arm S2MM, arm MM2S, START (normal);
+ * order 1 = arm S2MM, START, arm MM2S.  EVERY failure is counted, nothing is retried.
+ * stats: [0] iterations per order, then per order o at 1 + 10*o: [+0] byte-exact, [+1] rc OK but output wrong, [+2] rc 7 (core error), [+3] rc 6 (timeout),
+ *        [+4] other rc, [+5] ERROR_CODE 1, [+6] ERROR_CODE 2, [+7] ERROR_CODE 3, [+8] reset (sr_reset_all) failed, [+9] index of the first failing iteration + 1 (0 = none) */
+#ifndef SR_T6_ITERS
+#define SR_T6_ITERS 1000
+#endif
+SR_MAYBE_UNUSED static int test6(void)
+{
+    static uint8_t out[SR_TILE_OUT_BYTES] __attribute__((aligned(64)));
+    uint32_t *st = g_stats;
+    st[0] = SR_T6_ITERS;
+    for (int i = 0; i < 2 * SR_T6_ITERS; i++) {
+        const int o = i & 1;
+        uint32_t *c = &st[1 + 10 * o];
+        sr_start_order = o;
+        if (sr_reset_all(&dev) != SR_RC_OK) { c[8]++; if (!c[9]) c[9] = (uint32_t)(i / 2 + 1); continue; }
+        memset(out, 0xA5, SR_TILE_OUT_BYTES);
+        dev.last_error_code = 0;
+        const int rc = sr_run_tile(&dev, sr_golden_in, out);
+        int fail = 1;
+        if (rc == SR_RC_OK) { if (memcmp(out, sr_golden_out, SR_TILE_OUT_BYTES) == 0) { c[0]++; fail = 0; } else c[1]++; }
+        else if (rc == SR_RC_HW_ERROR) { c[2]++; if (dev.last_error_code >= 1 && dev.last_error_code <= 3) c[4 + dev.last_error_code]++; }
+        else if (rc == SR_RC_TIMEOUT) c[3]++;
+        else c[4]++;
+        if (fail && !c[9]) c[9] = (uint32_t)(i / 2 + 1);
+    }
+    sr_start_order = 0;
+    for (int o = 0; o < 2; o++) {
+        const uint32_t *c = &st[1 + 10 * o];
+        xil_printf("T6 order %d: %u of %u byte-exact; wrong data %u, core error %u (ERROR_CODE 1/2/3: %u/%u/%u), timeout %u, other %u, reset failed %u\r\n",
+                   o, c[0], (unsigned)SR_T6_ITERS, c[1], c[2], c[5], c[6], c[7], c[3], c[4], c[8]);
+    }
+    const int ok = (st[1] == SR_T6_ITERS) && (st[11] == SR_T6_ITERS);
+    xil_printf(ok ? "T6 PASS\r\n" : "T6 FAIL\r\n");
+    write_marker(ok ? 0u : 100u, 0, 0, 2u * SR_T6_ITERS, 10);
+    return ok ? 0 : -1;
+}
+
 /* ------------------------------------------------------------------ main */
 int main(void)
 {
@@ -335,6 +383,8 @@ int main(void)
     for (;;) { }
 #elif SR_TEST == 5
     rc = test5();
+#elif SR_TEST == 10
+    rc = test6();
 #elif SR_TEST == 1
     rc = test1();
 #elif SR_TEST == 2

@@ -6,6 +6,11 @@
 //                 on the last beat, TKEEP F, m_axis hold rule, nothing moves outside a tile); nothing accepted before start; busy/done/error in STATUS
 //                 (done sticky after the run, cleared by the next start, busy low after); CYCLES == the core's cycle counter; no X on any output.
 // With a second tile (+TILE2) : back to back, no reset, exact.
+// +OFFSWEEP[=N] : START-vs-first-beat race sweep: the first input beat is offered from N cycles BEFORE to N cycles AFTER the start pulse (default 20),
+//                 for every AW/W order of the START write, without gaps and with a gap pattern; every tile must be exact with ERROR_CODE 0 and exact beat counts.
+//                 The covered offsets (first offered beat minus start_r pulse, measured) are printed.
+// +OFFFEW        : the same at 6 points only (issue delays -6 -2 0 5 10 24, all three AW/W orders, gaps on every second one; the measured offsets are
+//                 printed and must include negative and positive values): for HC=64.
 // Extra (default for HC <= 8, or +REPEAT): start while busy ignored, early TLAST -> ERROR_CODE 1, missing TLAST -> 2, TKEEP != F -> 3, flags cleared by
 //                 the next start, soft reset at many moments (quiet afterwards, STATUS cleared) and a fresh exact tile after each series.
 `timescale 1ns/1ps
@@ -54,6 +59,8 @@ module tb_sr_accel_top;
     reg sp = 0, rp = 0, in_tile = 0;
     reg bpv = 0, bpr = 0, rpv = 0, rpr = 0; reg [31:0] rpd = 0;  // previous B / R beats (hold rule)
     integer i, j, p, tmo;
+    integer cyc = 0, gapmode = 0, t_beat = -1, t_start = -1;
+    integer n_start_ok = 0, n_start_ign = 0;                      // monitor counts for the DBG_STARTS register     // offset sweep: cycle counter, gap pattern on/off, first offered beat / start pulse
 
     function [31:0] word(input integer k);
         word = {inmem[4*k+3], inmem[4*k+2], inmem[4*k+1], inmem[4*k]};
@@ -69,7 +76,7 @@ module tb_sr_accel_top;
                 s_tdata  <= word(wi);
                 s_tlast  <= ((wi == NWI - 1) && !(inject & 2)) || ((wi == 5) && (inject & 1));
                 s_tkeep  <= ((wi == 7) && (inject & 4)) ? 4'b0111 : 4'hF;
-                s_tvalid <= (stall && ($random(seed) & 3) == 0) ? 1'b0 : 1'b1;
+                s_tvalid <= ((stall && ($random(seed) & 3) == 0) || (gapmode && (cyc % 5 == 2 || cyc % 7 == 0))) ? 1'b0 : 1'b1;
             end
         end else s_tvalid <= 1'b0;
         m_tready <= (stall && ($random(seed) & 3) == 0) ? 1'b0 : 1'b1;
@@ -79,6 +86,11 @@ module tb_sr_accel_top;
 
     // ---- monitors at the rising edge
     always @(posedge aclk) begin
+        cyc <= cyc + 1;
+        if (dut.start_r && !dut.wrap.busy) n_start_ok <= n_start_ok + 1;
+        if (dut.start_r && dut.wrap.busy)  n_start_ign <= n_start_ign + 1;
+        if (s_tvalid && t_beat < 0) t_beat <= cyc;
+        if (dut.start_r && t_start < 0) t_start <= cyc;
         acc <= s_tvalid && s_tready;
         if (s_tvalid && s_tready) wi <= wi + 1;
         if (m_tvalid && m_tready) begin
@@ -233,6 +245,51 @@ module tb_sr_accel_top;
             expect_reg(6'h10, exp_code, "ERROR_CODE");
             axil_read(6'h0C); cyc_reg = rd; cyc_core = dut.wrap.cycles;
             if (cyc_reg !== cyc_core || cyc_reg == 0) begin errors = errors + 1; $display("  CYCLES register %0d, core counter %0d", cyc_reg, cyc_core); end
+            // debug registers (VERSION 0602): beat counts, first TLAST position, error snapshot, beats outside a tile, start counters
+            expect_reg(6'h18, NWI, "DBG_IN_BEATS");
+            expect_reg(6'h1C, (exp_code == 1) ? 6 : (exp_code == 2) ? 0 : NWI, "DBG_TLAST_AT");
+            expect_reg(6'h24, 0, "DBG_PRE_BEATS");
+            expect_reg(6'h2C, (exp_code == 0) ? 0 : (exp_code == 1) ? 6 : (exp_code == 2) ? NWI : 8, "DBG_ERR_BEATS");
+            axil_read(6'h30);
+            if ((exp_code == 0 && rd !== 0) || (exp_code != 0 && (rd == 0 || rd > cyc_reg))) begin errors = errors + 1; $display("  DBG_ERR_CYCLES %0d (CYCLES %0d, error %0d)", rd, cyc_reg, exp_code); end
+            expect_reg(6'h28, {n_start_ign[15:0], n_start_ok[15:0]}, "DBG_STARTS");
+        end
+    endtask
+
+
+    // START-vs-first-beat race: d < 0 -> offer the input |d| cycles before issuing the START write; d >= 0 -> issue the write, offer the input d cycles later.
+    // The real offset (first offered beat minus the start_r pulse) is measured; the caller sweeps d so that the measured offsets cover the wanted range.
+    integer off_min, off_max, off_n, ord_i;
+    task run_tile_offset(input integer d, input integer order);
+        reg fin;
+        begin
+            wi = 0; rn = 0; bad = 0; inject = 0; t_beat = -1; t_start = -1;
+            if (d < 0) begin
+                feed_en = 1; repeat (-d) @(negedge aclk);
+                axil_write(6'h00, 32'd1, 4'hF, order);
+            end else begin
+                fork
+                    axil_write(6'h00, 32'd1, 4'hF, order);
+                    begin repeat (d) @(negedge aclk); feed_en = 1; end
+                join
+            end
+            tmo = 0; fin = 0;
+            while (!fin && tmo < 40000) begin
+                axil_read(6'h04);
+                if (rd[1]) fin = 1; else begin repeat (20 + ($random(seed2) & 63)) @(negedge aclk); tmo = tmo + 1; end
+            end
+            if (!fin) begin errors = errors + 1; $display("FAIL: timeout (words in %0d/%0d, out %0d/%0d)", wi, NWI, rn, NWO); end
+            feed_en = 0;
+            repeat (10) @(negedge aclk);
+            if (t_beat - t_start < off_min) off_min = t_beat - t_start;
+            if (t_beat - t_start > off_max) off_max = t_beat - t_start;
+            off_n = off_n + 1;
+            j = errors;
+            axil_read(6'h20);
+            if (rd[31] !== (t_beat <= t_start) || (t_beat > t_start && rd[30:0] < t_beat - t_start - 1)) begin
+                errors = errors + 1; $display("  DBG_START2BEAT %08x for a first beat offered %0d cycles after the start pulse", rd, t_beat - t_start); end
+            check_tile(0);
+            if (errors != j) $display("  ^ offset sweep: d=%0d order=%0d gap=%0d, first beat offered %0d cycles after the start pulse", d, order, gapmode, t_beat - t_start);
         end
     endtask
 
@@ -247,14 +304,17 @@ module tb_sr_accel_top;
         repeat (4) @(negedge aclk); aresetn = 1; repeat (2) @(negedge aclk);
         check_x = 1;
         // ---- registers
-        expect_reg(6'h14, 32'h5352_0601, "VERSION");
+        expect_reg(6'h14, 32'h5352_0602, "VERSION");
         expect_reg(6'h08, HC, "TILE_SIZE");
         expect_reg(6'h04, 32'd0, "STATUS");
         expect_reg(6'h10, 32'd0, "ERROR_CODE");
         expect_reg(6'h00, 32'd0, "CONTROL");
-        expect_reg(6'h20, 32'd0, "unmapped 0x20");
+        expect_reg(6'h20, 32'd0, "DBG_START2BEAT (reset)");
         expect_reg(6'h3C, 32'd0, "unmapped 0x3C");
-        axil_write(6'h14, 32'hFFFF_FFFF, 4'hF, 0); expect_reg(6'h14, 32'h5352_0601, "VERSION (write)");
+        expect_reg(6'h34, 32'd0, "unmapped 0x34");
+        expect_reg(6'h24, 32'd0, "DBG_PRE_BEATS (reset)");
+        expect_reg(6'h28, 32'd0, "DBG_STARTS (reset)");
+        axil_write(6'h14, 32'hFFFF_FFFF, 4'hF, 0); expect_reg(6'h14, 32'h5352_0602, "VERSION (write)");
         axil_write(6'h08, 32'd3, 4'hF, 1);         expect_reg(6'h08, HC, "TILE_SIZE (write)");
         axil_write(6'h0C, 32'd5, 4'hF, 2);         axil_write(6'h04, 32'hFFFF_FFFF, 4'hF, 0);
         expect_reg(6'h04, 32'd0, "STATUS (write)");
@@ -268,6 +328,29 @@ module tb_sr_accel_top;
         t_total = cyc_reg;
         $display("INFO HC=%0d tile %0s: CYCLES register = %0d (core counter %0d)%0s", HC, tile, cyc_reg, cyc_core, stall ? ", random stalls" : "");
         if (tile2 != "") begin load_tile(tile2); run_tile(0, 0, 0); end       // back to back, no reset
+        if ($test$plusargs("OFFFEW")) begin
+            off_min = 1 << 30; off_max = -(1 << 30); off_n = 0;
+            gapmode = 0; run_tile_offset(-6, 0);
+            gapmode = 1; run_tile_offset(-2, 1);
+            gapmode = 0; run_tile_offset(0, 2);
+            gapmode = 1; run_tile_offset(5, 0);
+            gapmode = 0; run_tile_offset(10, 1);
+            gapmode = 1; run_tile_offset(24, 2);
+            gapmode = 0;
+            $display("INFO offset points: %0d tiles, first input beat offered from %0d to %0d cycles relative to the start pulse", off_n, off_min, off_max);
+            if (off_min >= 0 || off_max <= 0) begin errors = errors + 1; $display("FAIL: offset points do not include both signs"); end
+        end
+        if ($value$plusargs("OFFSWEEP=%d", n_sweep) || $test$plusargs("OFFSWEEP")) begin
+            if (!$value$plusargs("OFFSWEEP=%d", n_sweep)) n_sweep = 20;
+            off_min = 1 << 30; off_max = -(1 << 30); off_n = 0;
+            for (gapmode = 0; gapmode < 2; gapmode = gapmode + 1)
+                for (ord_i = 0; ord_i < 3; ord_i = ord_i + 1)
+                    for (sweep_n = -n_sweep - 4; sweep_n <= n_sweep + 6; sweep_n = sweep_n + 1) run_tile_offset(sweep_n, ord_i);
+            gapmode = 0;
+            $display("INFO offset sweep: %0d tiles, first input beat offered from %0d to %0d cycles relative to the start pulse, AW/W orders 0-2, gaps off/on",
+                     off_n, off_min, off_max);
+            if (off_min > -n_sweep || off_max < n_sweep) begin errors = errors + 1; $display("FAIL: offset sweep did not cover -%0d..+%0d", n_sweep, n_sweep); end
+        end
         if (errors == 0 && mode_extra) begin
             load_tile(tile);
             seed2 = seed2 + 5; run_tile(0, 0, 0);                            // same tile again, other write orders

@@ -13,7 +13,15 @@
 //   0x0C CYCLES     R: core cycles of the last/current tile (start to last output byte)
 //   0x10 ERROR_CODE R: 0 none | 1 s_axis_tlast on a beat that is not the last input beat | 2 last input beat without tlast | 3 s_axis_tkeep != 4'hF
 //                      (the FIRST error of a tile is kept).  Errors are only reported; the tile is still processed.  Recovery = soft reset.
-//   0x14 VERSION    R: 32'h5352_0601
+//   0x14 VERSION    R: 32'h5352_0602  (0601 = the first board version, without the debug registers below)
+//   Debug registers (read-only, added 2026-10-11 to find the board's first-tile stream errors; they do not change the data path):
+//   0x18 DBG_IN_BEATS   input beats accepted since the last accepted start
+//   0x1C DBG_TLAST_AT   1 + index (since start) of the first accepted input beat with tlast; 0 = none yet
+//   0x20 DBG_START2BEAT bits 30:0 cycles from the accepted start to the first accepted input beat (saturating); bit 31 = s_axis_tvalid was high in the start cycle
+//   0x24 DBG_PRE_BEATS  input beats accepted while no tile was running, since aresetn (must stay 0)
+//   0x28 DBG_STARTS     bits 15:0 accepted starts, bits 31:16 ignored starts (written while busy), since aresetn
+//   0x2C DBG_ERR_BEATS  DBG_IN_BEATS when the first error of the tile was recorded (cleared with ERROR_CODE)
+//   0x30 DBG_ERR_CYCLES CYCLES when the first error of the tile was recorded (cleared with ERROR_CODE)
 //   other addresses read 0, writes to them are accepted and ignored (OKAY response).
 //
 // Differences to the first sketch, on purpose: STATUS.busy is the wrapper's busy (core busy OR the last output word not yet taken by the DMA) and also
@@ -72,7 +80,7 @@ module sr_accel_top #(
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TREADY" *) input  wire        m_axis_tready,
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TLAST" *)  output wire        m_axis_tlast
 );
-    localparam [31:0] VERSION = 32'h5352_0601;
+    localparam [31:0] VERSION = 32'h5352_0602;
 
     // ------------------------------------------------------------------ AXI4-Lite slave: AW and W may arrive in any order, one write at a time
     reg         aw_got, w_got, bvalid, rvalid;
@@ -127,6 +135,37 @@ module sr_accel_top #(
         end
     end
 
+    // ------------------------------------------------------------------ debug counters (observation only)
+    wire        s_take = s_axis_tvalid && s_axis_tready;
+    reg         in_tile_d, first_seen;
+    reg  [31:0] dbg_in_beats, dbg_tlast_at, dbg_s2b, dbg_pre, dbg_err_beats, dbg_err_cyc;
+    reg  [15:0] dbg_starts_ok, dbg_starts_ign;
+    wire        err_now = (err_code == 2'd0) && (wrap_flags[0] || wrap_flags[1] || keep_bad);   // the cycle the first error is recorded
+    always @(posedge aclk) begin
+        if (!aresetn) begin
+            in_tile_d <= 1'b0; first_seen <= 1'b0; dbg_in_beats <= 0; dbg_tlast_at <= 0; dbg_s2b <= 0; dbg_pre <= 0;
+            dbg_err_beats <= 0; dbg_err_cyc <= 0; dbg_starts_ok <= 0; dbg_starts_ign <= 0;
+        end else begin
+            if (start_ok) begin
+                in_tile_d <= 1'b1; first_seen <= 1'b0; dbg_in_beats <= 0; dbg_tlast_at <= 0; dbg_s2b <= {s_axis_tvalid, 31'd0};
+                dbg_err_beats <= 0; dbg_err_cyc <= 0; dbg_starts_ok <= dbg_starts_ok + 1'b1;
+            end else begin
+                if (srst_r || wrap_done) in_tile_d <= 1'b0;
+                if (srst_r) begin dbg_err_beats <= 0; dbg_err_cyc <= 0; end
+                if (start_r) dbg_starts_ign <= dbg_starts_ign + 1'b1;
+                if (in_tile_d && !first_seen && !s_take && dbg_s2b[30:0] != 31'h7FFF_FFFF) dbg_s2b[30:0] <= dbg_s2b[30:0] + 1'b1;
+                if (s_take) begin
+                    if (in_tile_d) begin
+                        dbg_in_beats <= dbg_in_beats + 1;
+                        first_seen <= 1'b1;
+                        if (s_axis_tlast && dbg_tlast_at == 0) dbg_tlast_at <= dbg_in_beats + 1;
+                    end else dbg_pre <= dbg_pre + 1;
+                end
+                if (err_now && !srst_r) begin dbg_err_beats <= dbg_in_beats + (s_take ? 1 : 0); dbg_err_cyc <= wrap_cycles; end
+            end
+        end
+    end
+
     // ------------------------------------------------------------------ write channel
     always @(posedge aclk) begin
         start_r <= 1'b0;
@@ -161,6 +200,13 @@ module sr_accel_top #(
                     4'd3:    rdata <= wrap_cycles;
                     4'd4:    rdata <= {30'd0, err_code};
                     4'd5:    rdata <= VERSION;
+                    4'd6:    rdata <= dbg_in_beats;
+                    4'd7:    rdata <= dbg_tlast_at;
+                    4'd8:    rdata <= dbg_s2b;
+                    4'd9:    rdata <= dbg_pre;
+                    4'd10:   rdata <= {dbg_starts_ign, dbg_starts_ok};
+                    4'd11:   rdata <= dbg_err_beats;
+                    4'd12:   rdata <= dbg_err_cyc;
                     default: rdata <= 32'd0;
                 endcase
             end

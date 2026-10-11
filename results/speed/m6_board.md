@@ -113,7 +113,7 @@ Owner's hypothesis: stale DMA / core state from an interrupted run. What was don
 So the driver does recover from a DMA blocked half-way, a core stuck in LOAD, a core stuck in OUTPUT and a tile left running, when the PL keeps that state.
 The DMA reset finished even with the MM2S channel blocked half-way (SR_TEST=9 then fresh run with the bitstream kept).
 
-### 6.5 Finding 3 (NOT explained, open): first-tile stream errors, sometimes a lasting "bad state"
+### 6.5 Finding 3: first-tile stream errors, sometimes a lasting "bad state" (cause found in 6.7)
 * Signature (the same as the very first failures): first tile of a program, STATUS busy+error, ERROR_CODE 2 (input word 3,675 without TLAST = the core counted one word more
   than the DMA sent before TLAST) or 1 (TLAST early), CYCLES about 14,850 (end of the load phase), MM2S idle; or (rarer) a timeout with the core still in LOAD and MM2S not
   finished. When a whole tile is processed in that state its output differs in 48,385 of 49,152 bytes (twice the same number: looks like a 1-word shift).
@@ -132,6 +132,52 @@ The DMA reset finished even with the MM2S channel blocked half-way (SR_TEST=9 th
 * What would settle it: (1) a long soak (a few hundred program starts) with and without the isolation step; (2) debug counters in `sr_accel_top` (input words since START,
   words accepted before START, START count) so a failure shows exactly which side added the word; (3) an ILA on s_axis. (2) and (3) need an RTL change and a new bitstream.
 
-### 6.6 State at the end of the day
-With the final scripts (PL isolation + double load + final driver), after a system reset: T5 PASS, T3 byte-exact (1.313 s per frame), soak 15 of 15. Finding 3 is
-open; the M6 checklist item "repeated runs give identical output" is therefore not closed.
+### 6.6 State before 6.7
+With the final scripts (PL isolation + double load + final driver), after a system reset: T5 PASS, T3 byte-exact (1.313 s per frame), soak 15 of 15.
+
+### 6.7 Follow-up (2026-10-11, about 2 h, owner's hypothesis "START vs first beat race")
+**A. Simulation sweep (no board).** `tb_sr_accel_top.v +OFFSWEEP=20` offers the first input beat at every offset from 33 cycles BEFORE to 28 cycles AFTER the
+START pulse (measured, not just requested), for all three AW/W orders of the START write, with tvalid held high and with a gap pattern, and with random stalls:
+306 tiles per run at HC=6, 3 runs (one with random stalls, one with the debug-register checks of C): 918 tiles, **all byte-exact, ERROR_CODE 0, exact beat
+counts**. At HC=64 (`+OFFFEW`): 6 tiles, offsets -8 to +15: all exact.
+A mutant that lets the wrapper take a beat in the START cycle is caught at 114 of 126 offsets. In the RTL the race cannot happen: `s_axis_tready` is high only
+in the core's LOAD state, which starts the cycle AFTER the accepted start, and the beat counter is cleared by that start. **No RTL bug, no RTL fix.**
+The sweep is kept as a regression test (`run_tests.sh full`).
+
+**B. Board, T6 (`SR_TEST=10`), current bitstream.** 1000 x (full init reset: core -> DMA -> core, check idle) + one golden tile, for each driver order, interleaved:
+| Run | order 0: arm S2MM, arm MM2S, START | order 1: arm S2MM, START, arm MM2S |
+|---|---|---|
+| 1, 2, 3 (3 program loads) | 1000 / 1000 byte-exact each | 1000 / 1000 byte-exact each |
+| 4 (after the driver changes below) | 1000 / 1000 | 1000 / 1000 |
+
+8,000 tiles, 0 errors of any kind (no ERROR_CODE, no timeout, no wrong data, no failed reset). So the failure does NOT come from the START / first-beat timing and
+does not happen inside a running program. It needs a program LOAD.
+
+**The real cause: reprogramming the PL while a DMA transfer is in flight, without isolating the PL.** A/B on the board, blocks of 25 iterations, each iteration = a
+program that starts an MM2S transfer that cannot finish (SR_TEST=9), stopped after 300 ms, then a normal fresh T1 run (which reprograms the PL), system reset between blocks:
+| Block | PL isolation before `fpga -file` (PL reset asserted + PS-PL level shifters off) | Result |
+|---|---|---|
+| OFF (1) | no | 16 OK, then **iterations 17-25 all failed** (ERROR_CODE 2, or output wrong with no error) |
+| ON (1) | yes | **25 / 25 OK** |
+| OFF (2) | no | 16 OK, then **iterations 17-25 all failed** (same iteration as block 1) |
+| ON (2) | yes | **25 / 25 OK** |
+| OFF, T1 only (no interrupted DMA transfer), 40 program loads | no | 40 / 40 OK |
+
+Reading of this (measured facts, then my interpretation):
+* Measured: the bad state needs BOTH an interrupted DMA transfer and a PL reprogram without isolation; it starts after exactly 16 such events in both blocks; once it is
+  there every tile fails; a PS reset (`rst -system` / `dap_reset.tcl`) clears it; the isolation step prevents it (50 / 50).
+* Interpretation (not proven, no PS-internal visibility): every PL reprogram that cuts off a DMA with read requests outstanding on HP0 leaves an orphaned transaction
+  in the PS side of the HP0 port; 16 of them fill some table/FIFO, after which read data comes back to the wrong request (a one-word shift: 48,385 of 49,152 bytes
+  wrong, or the TLAST position off by one = ERROR_CODE 2). This also fits the first failures of the day (many reloads during M0/M6 bring-up since the last power-up,
+  without isolation). It does NOT explain the 2 single failures in the run set with `rst -system` (6.4); those remain unexplained.
+* Fix (software, no new bitstream): `run_board.tcl` and `interrupt_test.tcl` isolate the PL before reprogramming (now the default; `SR_NO_ISOLATE=1` only for this
+  A/B). Vitis' own "Run" does a system reset first, which also clears the state; the problem is specific to reloading with a plain xsdb script.
+
+**C. Debug counters (written and simulated, NOT in a bitstream).** VERSION 0x53520602 adds 7 read-only registers (`docs/REGISTER_MAP.md`): input beats since START,
+position of the first TLAST, START -> first beat cycles (+ tvalid-at-start flag), beats accepted outside a tile, accepted / ignored STARTs, and the beat count and CYCLES
+latched at the first error. `tb_sr_accel_top.v` checks all of them after every tile (normal, every error kind, start-while-busy, stalls, offset sweep). Out-of-context:
+2,114 LUT, 3,705 FF, 70 BRAM, 68 DSP, WNS +0.305 / WHS +0.081 ns (`results/utilization/m6_top.md`). The driver accepts both 0x53520601 and 0x53520602 and puts the
+debug registers into its error dump (marker stat32..38). Since B + the A/B explain the failure, a rebuild is NOT needed for M6; it is ready if the problem returns.
+
+**Driver honesty rule.** No test retries a failed tile: T2/T3 stop at the first error and report it in the marker; T5/T6 count every failure by kind; the benchmark
+numbers in sections 2-3 contain only complete, byte-exact frames, and no failed run was dropped silently (all failures are listed in this file).

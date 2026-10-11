@@ -15,7 +15,7 @@ set OUT_ADDR   0x12000000
 set MARK_ADDR  0x13000000
 set MARK_MAGIC 0x52454459
 set TIMEOUT_S  900
-set NSTATS     32
+set NSTATS     40
 
 if {$argc < 3} { puts "usage: xsdb run_board.tcl <elf> <input.raw|-> <output.raw|-> [stats_file]"; exit 2 }
 set ELF     [lindex $argv 0]

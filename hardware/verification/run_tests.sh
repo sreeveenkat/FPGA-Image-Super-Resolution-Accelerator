@@ -73,6 +73,7 @@ TOP="$AXIS hardware/rtl/top/sr_accel_top.v"
 build top6 -P tb_sr_accel_top.HC=6 $TOP $TB/tb_sr_accel_top.v && {
     run top6 +TILE=small12 +TILE2=small12b
     run top6 +TILE=small12b +TILE2=small12 +STALL=1
+    if [ "$MODE" = full ]; then run top6 +TILE=small12 +NOEXTRA +OFFSWEEP=20; fi   # full only: START vs first input beat, -20..+20 cycles, 3 AW/W orders, gaps off/on (~3 min)
 }
 
 echo "== board software (no board): register header vs Verilog, host tools, C tiling code"
@@ -126,6 +127,7 @@ if [ "$MODE" = full ]; then
     build top64 -P tb_sr_accel_top.HC=64 $TOP $TB/tb_sr_accel_top.v && {
         run top64 +TILE=real0 +TILE2=noise
         run top64 +TILE=real0 +STALL=1
+        run top64 +TILE=real0 +NOEXTRA +OFFFEW                  # START vs first input beat at 6 points, real size
     }
 fi
 

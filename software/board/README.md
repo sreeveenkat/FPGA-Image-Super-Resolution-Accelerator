@@ -21,6 +21,7 @@ after the timer/driver changes.
 | `run_board.tcl` | xsdb script: program the PL, init the PS, load the ELF (twice, L2 off), push input, run, wait for the marker, read output + numbers. Before reprogramming the PL it holds the PL in reset and switches the PS-PL level shifters off. Env: `SR_SYSRST=1` system reset first, `SR_NO_ISOLATE=1` skip the PL isolation (test only), `SR_NOFPGA=1` keep the loaded bitstream, `SR_DOW2=0` load once (test only), `SR_VERIFY_DUMP`/`SR_VERIFY_BYTES` dump the program image after the run |
 | `interrupt_test.tcl` | xsdb: start a program, stop the CPU after N ms, print DMA/core registers (stale-state tests) |
 | `stale_test.sh` | board test: leave the DMA/core half-way (stopped T2, SR_TEST=6..9 programs), then a fresh 128x128 run must be byte-exact; `nofpga` = without reloading the bitstream |
+| `../../hardware/verification/tb/tb_sr_accel_top.v +OFFSWEEP` | (simulation) START-vs-first-beat offset sweep, part of `run_tests.sh full` |
 | `soak_test.sh` | board test: N rounds of T1 / T2 128x128 / T2 960x540, every run checked (result, byte-exact, program image intact) |
 | `verify_load.py` | compares the program image read back from DDR (physically) with the ELF |
 | `dap_reset.tcl` | xsdb: system reset when the debug port is stuck ("AHB AP transaction error") |
@@ -69,8 +70,12 @@ Image format SRIM: `software/host_tools/srim.py`. The board prints `fnv1a32=...`
 * The driver (`sr_init`, and after every tile error/timeout) resets: core soft reset -> AXI DMA reset (wait, ~1 s timeout) -> core soft reset -> check STATUS idle
   and ERROR_CODE 0. Core first: with the DMA reset first, a tile after an "S2MM buffer too short" error came out wrong on the board.
 * If xsdb says "AHB AP transaction error" / no ARM targets: `xsdb software/board/dap_reset.tcl` (seen after interrupting programs and after reading AFI registers).
-* OPEN PROBLEM: sometimes the first tile fails with ERROR_CODE 2 or 1 (one input word too many / too few), sometimes the board then stays in that state until a system
-  reset (`dap_reset.tcl`). Not explained yet; see results/speed/m6_board.md section 6.5. If a run fails with result 7 and stat25 = 2 or 1: run `dap_reset.tcl` and repeat.
+* PL RELOAD RULE (found 2026-10-11, results/speed/m6_board.md 6.7): reprogramming the PL while a DMA transfer is in flight, without holding the PL in reset and
+  switching the PS-PL level shifters off first, broke the board after exactly 16 such reloads (every tile then fails, until `rst -system` / `dap_reset.tcl`).
+  `run_board.tcl` and `interrupt_test.tcl` do this isolation by default (`SR_NO_ISOLATE=1` only for tests). Vitis' Run does a system reset first, which also avoids it.
+  If a run fails with result 7 and stat25 = 2 or 1, or with wrong data: `xsdb software/board/dap_reset.tcl`, then repeat.
+* T6 (`build_elf.sh 10`): 1000 x (init reset + one golden tile) for both driver orders; every failure is counted by kind (stats in main.c).
+* VERSION 0x53520602 (not yet in a bitstream) adds debug registers; the driver reads them into its first error dump (stat32..38) when present.
 * In this BSP `COUNTS_PER_SECOND` is `XPAR_CPU_CORE_CLOCK_FREQ_HZ/2` WITHOUT parentheses (xtimer_config.h): the sources wrap it (`TICKS_PER_SEC`). `xtime_l.h` does not exist
   in the SDT platform export; `XTime_GetTime` comes from `xiltimer.h` (the sources use `#if defined(SDT)`).
 * The driver arms S2MM first, then MM2S, then writes CONTROL.START (the core accepts no data before START). After any timeout or error it soft-resets the core and the DMA.

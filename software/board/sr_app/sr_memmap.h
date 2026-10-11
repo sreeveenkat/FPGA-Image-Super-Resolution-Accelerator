@@ -40,7 +40,7 @@
 #define SR_MARK_W_FNV       3                /* FNV-1a 32 of the output payload */
 #define SR_MARK_W_TILES     4
 #define SR_MARK_W_STATS     8                /* SR_MARK_NSTATS result numbers of the test (timing in us, CYCLES, ...) */
-#define SR_MARK_NSTATS      32
+#define SR_MARK_NSTATS      40               /* 8 + 40 words = 192 bytes <= SR_MARK_SIZE */
 #define SR_MARK_W_TEST      5                /* which test wrote it (1, 2 or 3) */
 
 #define SR_REGION_OK(base, size) ((base) >= SR_PROGRAM_START && (base) + (size) <= SR_DDR_END && ((base) & 63u) == 0u)
