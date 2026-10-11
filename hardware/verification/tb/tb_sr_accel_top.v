@@ -15,6 +15,12 @@ module tb_sr_accel_top;
     localparam NOUT = (2 * HC) * (2 * HC) * 3;
     localparam NWI  = NIN / 4, NWO = NOUT / 4;
 
+    // HC rule: 32-bit beats need byte counts that are multiples of 4 (fail at time 0, the RTL has no elaboration-time check)
+    initial if (((HC + 6) * (HC + 6) * 3) % 4 != 0 || ((2 * HC) * (2 * HC) * 3) % 4 != 0) begin
+        $display("FAIL sr_accel_top: HC=%0d gives byte counts that are not multiples of 4 ((HC+6)^2*3 = %0d, (2HC)^2*3 = %0d)", HC, (HC + 6) * (HC + 6) * 3, (2 * HC) * (2 * HC) * 3);
+        $finish;
+    end
+
     reg aclk = 0, aresetn = 0;
     always #5 aclk = ~aclk;
 

@@ -22,7 +22,7 @@
 //
 // Streams: one 32-bit beat = 4 bytes, little endian (first byte = tdata[7:0]).  A tile is (HC+6)^2*3 bytes in (3,675 beats at HC=64) and (2HC)^2*3 bytes out
 // (12,288 beats).  s_axis_tready stays low until CONTROL.start has been written (the DMA may be armed first).  HC must be even so that the input byte count
-// is a multiple of 4 (the output count always is); an odd HC stops elaboration.
+// is a multiple of 4 (the output count always is); an odd HC is NOT accepted: there is deliberately no elaboration-time check here (an unresolved dummy module blocks Vivado's module reference). It is enforced by tb_sr_accel_top.v (fails at time 0) and synth_sr_accel_top.tcl (checked before synthesis); sr_axis_wrapper.v also stops a simulation.
 //
 // WDIR default is an ABSOLUTE path: it ties the build to this machine (the .mem files must be found by $readmemh during synthesis).  Change it, or override
 // it in the block design, when the project moves.  The derived parameters of the core are deliberately not exposed here.
@@ -73,13 +73,6 @@ module sr_accel_top #(
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TLAST" *)  output wire        m_axis_tlast
 );
     localparam [31:0] VERSION = 32'h5352_0601;
-
-    // An odd HC makes the input byte count (HC+6)^2*3 not a multiple of 4: refuse to elaborate (unknown module = error in simulator and Vivado).
-    generate
-        if (HC % 2 != 0) begin : hc_must_be_even
-            sr_accel_top_HC_must_be_even_see_comment bad_hc ();
-        end
-    endgenerate
 
     // ------------------------------------------------------------------ AXI4-Lite slave: AW and W may arrive in any order, one write at a time
     reg         aw_got, w_got, bvalid, rvalid;

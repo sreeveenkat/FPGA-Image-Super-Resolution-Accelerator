@@ -8,6 +8,12 @@ set root [pwd]
 set out $root/hardware/vivado/build/sr_accel_top
 file mkdir $out
 
+# HC rule (not checked in the RTL, see the header of sr_accel_top.v): the default HC must give byte counts that are multiples of 4
+set fh [open $root/hardware/rtl/top/sr_accel_top.v]; set src [read $fh]; close $fh
+if {![regexp {parameter HC\s*=\s*(\d+)} $src -> hc]} { error "cannot find the default HC in sr_accel_top.v" }
+if {(($hc + 6) * ($hc + 6) * 3) % 4 != 0 || ((2 * $hc) * (2 * $hc) * 3) % 4 != 0} { error "HC=$hc: (HC+6)^2*3 and (2*HC)^2*3 must be multiples of 4" }
+puts "HC rule ok for default HC=$hc"
+
 read_verilog [glob $root/hardware/rtl/common/*.v]
 read_verilog $root/hardware/rtl/conv_engine/conv_engine.v
 read_verilog $root/hardware/rtl/sr_core/sr_tile_core.v
