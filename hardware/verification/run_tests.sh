@@ -68,6 +68,13 @@ build axis6 -P tb_sr_axis.HC=6 $AXIS $TB/tb_sr_axis.v && {
     run axis6 +TILE=small12b +TILE2=small12 +STALL=1
 }
 
+echo "== accelerator top (sr_accel_top): AXI4-Lite registers + AXI-Stream, driven like the ARM/DMA"
+TOP="$AXIS hardware/rtl/top/sr_accel_top.v"
+build top6 -P tb_sr_accel_top.HC=6 $TOP $TB/tb_sr_accel_top.v && {
+    run top6 +TILE=small12 +TILE2=small12b
+    run top6 +TILE=small12b +TILE2=small12 +STALL=1
+}
+
 seam() {  # seam <hc> <lr_h> <lr_w> : tiled RTL output must equal the whole-image integer model
     local hc=$1 h=$2 w=$3 d=data/golden/seam
     $PY software/ai/quantization/seam_test.py gen --hc $hc --h $h --w $w > /dev/null || { fail=$((fail+1)); return; }
@@ -99,6 +106,11 @@ if [ "$MODE" = full ]; then
     build axis64 -P tb_sr_axis.HC=64 $AXIS $TB/tb_sr_axis.v && {
         run axis64 +TILE=real0 +STALL=1
         run axis64 +TILE=noise
+    }
+    echo "== accelerator top at the real size (HC=64)"
+    build top64 -P tb_sr_accel_top.HC=64 $TOP $TB/tb_sr_accel_top.v && {
+        run top64 +TILE=real0 +TILE2=noise
+        run top64 +TILE=real0 +STALL=1
     }
 fi
 

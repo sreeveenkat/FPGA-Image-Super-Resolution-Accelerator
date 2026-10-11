@@ -105,7 +105,7 @@ module sr_axis_wrapper #(
     always @(posedge aclk) begin
         done <= 1'b0;
         if (rst) begin
-            ov <= 1'b0; ob <= 2'd0; olast <= 1'b0;
+            ov <= 1'b0; ob <= 2'd0; olast <= 1'b0; ow <= 32'd0;   // ow reset: no X on m_axis_tdata
         end else begin
             if (m_take) begin
                 ov <= 1'b0;
