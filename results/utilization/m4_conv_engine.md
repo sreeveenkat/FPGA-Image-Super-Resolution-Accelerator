@@ -11,29 +11,32 @@ clock-skew estimation), one engine at a time, no activation RAMs, nothing measur
 
 | Layer | Steps / pixel | Cycles / pixel (PERIOD) | Output pixels | Cycles per tile |
 |---|---|---|---|---|
-| L1 conv3x3 3->16 | 27 | 27 | 68x68 = 4,624 | 124,871 |
-| L2 depthwise3x3 16 | 9 | **16** (the shared requantizer needs 16 cycles/pixel) | 66x66 = 4,356 | 69,712 |
-| L3 pointwise 16->16 | 16 | 16 | 66x66 = 4,356 | 69,719 |
-| L4 conv3x3 16->12 | 144 | 144 | 64x64 = 4,096 | 589,843 |
-| **Total** | | | | **854,145** |
+| L1 conv3x3 3->16 | 27 | 27 | 68x68 = 4,624 | 124,872 |
+| L2 depthwise3x3 16 | 9 | **16** (the shared requantizer needs 16 cycles/pixel) | 66x66 = 4,356 | 69,713 |
+| L3 pointwise 16->16 | 16 | 16 | 66x66 = 4,356 | 69,720 |
+| L4 conv3x3 16->12 | 144 | 144 | 64x64 = 4,096 | 589,844 |
+| **Total** | | | | **854,149** |
 
 The cycle counts are identical on every tile, on re-runs, and in the post-synthesis netlist simulation (data independent).
 The M4 guide estimated about 196 cycles per input pixel; the engine needs 27 + 16 + 16 + 144 = 203 in steady state. Compute-only consequence for
-a 960x540 frame (135 tiles, layers one after the other, no DMA/ARM/shuffle time): 135 x 854,145 = 115.3 M cycles = about **1.15 s at 100 MHz
+a 960x540 frame (135 tiles, layers one after the other, no DMA/ARM/shuffle time): 135 x 854,149 = 115.3 M cycles = about **1.15 s at 100 MHz
 (~0.87 fps)**. This is simulated cycle counting, NOT a board measurement.
 
 ## Resources and timing (one engine instance per layer, 64x64-core tile geometry)
 
 | Layer | LUT (synth / routed) | FF | DSP48E1 | BRAM36 tiles | WNS synth | WNS routed | WHS routed |
 |---|---|---|---|---|---|---|---|
-| L1 | 389 / 360 | 850 | 18 | 2 | +0.850 ns | +0.135 ns | +0.128 ns |
-| L2 | 431 / 397 | 952 | 18 | 0 | +0.850 ns | +0.261 ns | +0.100 ns |
-| L3 | 424 / 361 | 840 | 18 | 0 | +0.821 ns | +0.582 ns | +0.111 ns |
-| L4 | 358 / 347 | 692 | 14 | 1.5 | +0.938 ns | +0.698 ns | +0.147 ns |
-| **All four** | **1,602 / 1,465 (2.8 %)** | **3,334 (3.1 %)** | **68 (31 %)** | **3.5 (2.5 %)** | | | |
+| L1 | 310 / 298 | 851 | 18 | 2 | +4.255 ns | +3.853 ns | +0.131 ns |
+| L2 | 432 / 398 | 953 | 18 | 0 | +4.255 ns | +3.393 ns | +0.138 ns |
+| L3 | 432 / 369 | 841 | 18 | 0 | +4.255 ns | +2.913 ns | +0.097 ns |
+| L4 | 359 / 349 | 693 | 14 | 1.5 | +4.255 ns | +3.146 ns | +0.144 ns |
+| **All four** | **1,533 / 1,414 (2.7 %)** | **3,338 (3.1 %)** | **68 (31 %)** | **3.5 (2.5 %)** | | | |
 
-* All four routed designs: 0 failing timing endpoints, 0 routing errors, 0 latches. Every layer meets 100 MHz with **the smallest margin in
-  L1 (+0.135 ns)**; there is no room for 125-150 MHz without extra pipelining. In L1 and L2 the critical path is `rq_i` -> result-register mux -> requantizer DSP (8.4 ns of data path); registering the mux output (one extra requantizer stage) is the obvious first fix, not done.
+* All four routed designs: 0 failing timing endpoints, 0 routing errors, 0 latches. Every layer meets 100 MHz; the smallest margin is
+  in L3 (+2.913 ns). **Timing fix (2026-10-09):** the critical path used to be `rq_i` -> result-register mux -> requantizer DSP (8.4 ns of data path, slack
+  +0.135 / +0.261 / +0.582 / +0.698 ns for L1..L4). One register stage after that mux (`rq_acc_r`, `rq_m_r`, `rq_tag_r`, `rq_v_r` in `conv_engine.v`) gave the slacks in the table
+  at the price of one extra cycle per run (the cycle counts above include it: previously 124,871 / 69,712 / 69,719 / 589,843). The 100 MHz target now has large
+  margin per engine; the cheapest remaining limit is the DSP multiply itself, so 125-150 MHz may be possible but was NOT tried.
 * DSPs = one per MAC lane (C_OUT) + 2 for the shared 32x17-bit requantizer multiplier.
 * **Activation buffer (measured):** a 70x70 x 128-bit `tile_ram` infers **32 RAMB36 (23 % of the chip)**, not the ~20 estimated in the guide
   (`m4_tile_ram_70x70x128_utilization.txt`). Two ping-pong buffers would take 64 of 140 BRAM36 (46 %); M5 solved this with a split RAM (about 18.5 tiles, see m5_tile_core.md)

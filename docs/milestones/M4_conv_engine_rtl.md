@@ -204,11 +204,11 @@ Synthesis and implementation findings (`results/utilization/m4_conv_engine.md`):
   `wrom_Ln.mem` (step-major) and the RTL loads it with a plain `$readmemh`. Always read the synthesis warnings, not only the simulation result.
 * **Pitfall 2:** small 9x8 multipliers go to LUTs by default; `(* use_dsp = "yes" *)` on `mac_unit` forces one DSP per lane.
 * **Pitfall 3:** a netlist simulation needs the testbench to wait for the Xilinx global reset (`glbl.GSR`, first 100 ns), otherwise `start` is ignored.
-* Per layer after place and route: 347-397 LUT, 692-952 FF, 14-18 DSP, 0-2 BRAM; all four instances 68 DSP (31 %), 3.5 BRAM tiles.
-  Routed slack at 100 MHz: +0.135 (L1), +0.261, +0.582, +0.698 ns; hold >= +0.10 ns; no failing endpoints (out-of-context, no I/O timing).
-  Critical path: `rq_i` -> result mux -> requantizer DSP; L1 margin is small, so 125-150 MHz needs another pipeline stage.
+* Per layer after place and route: 298-398 LUT, 693-953 FF, 14-18 DSP, 0-2 BRAM; all four instances 68 DSP (31 %), 3.5 BRAM tiles.
+  Routed slack at 100 MHz: +3.853 (L1), +3.393, +2.913, +3.146 ns (after the 2026-10-09 register stage; before: +0.135 / +0.261 / +0.582 / +0.698); hold >= +0.09 ns; no failing endpoints (out-of-context, no I/O timing).
+  Critical path was `rq_i` -> result mux -> requantizer DSP; fixed on 2026-10-09 with one register stage after the mux (+1 cycle per run). 125-150 MHz was not tried.
 * One 70x70x128-bit activation buffer infers **32 RAMB36** (23 % of the chip), not the ~20 estimated above: plan for it in M5.
-* Cycles per 64x64 tile (simulated): L1 124,871 / L2 69,712 / L3 69,719 / L4 589,843 = 854,145; x135 tiles = about 1.15 s per 960x540 frame
+* Cycles per 64x64 tile (simulated): L1 124,872 / L2 69,713 / L3 69,720 / L4 589,844 = 854,149; x135 tiles = about 1.15 s per 960x540 frame
   at 100 MHz, compute only (simulation arithmetic, not a board measurement).
 
 ## 5. Output of this milestone
@@ -223,7 +223,7 @@ Synthesis and implementation findings (`results/utilization/m4_conv_engine.md`):
 - [x] MAC and requant units match Python on random + boundary tests (requant: Python vectors; mac_unit: independent 64-bit model).
 - [x] Conv engine output equals the integer model **exactly** for layer 1 on random and boundary inputs (and layers 2-4).
 - [x] Depthwise (`DEPTHWISE=1`) and pointwise (`K=1`) modes also match.
-- [x] Synthesizes AND routes at the target clock (100 MHz, routed slack +0.135 ns or better, out-of-context) with the expected DSP/BRAM numbers (one DSP per MAC lane + 2), and the synthesized netlist simulates bit-exact.
+- [x] Synthesizes AND routes at the target clock (100 MHz, routed slack +3.853 ns or better, out-of-context) with the expected DSP/BRAM numbers (one DSP per MAC lane + 2), and the synthesized netlist simulates bit-exact.
 
 ## 7. Common problems
 

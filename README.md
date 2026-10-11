@@ -12,7 +12,7 @@ moves image tiles with AXI DMA.
 
 | Milestone | What | Board needed | Status |
 |---|---|---|---|
-| M0 | Zynq basics: UART, AXI GPIO, own AXI-Lite IP, DMA loopback | yes | not started (waiting for board) |
+| M0 | Zynq basics: UART, AXI GPIO, own AXI-Lite IP, DMA loopback | yes | **done** 2026-10-11 (board run reported by the owner) |
 | **M1** | Bicubic baseline + metrics + datasets | no | **done** |
 | **M2** | FP32 CNN training and evaluation | no | **done** |
 | **M3** | INT8 quantization + bit-accurate integer Python model | no | **done** |
@@ -87,17 +87,17 @@ randomized layers with distinct per-channel multipliers on a non-square tile. Th
 
 | Layer | Cycles / output pixel | Cycles per 64x64 tile (simulated) | LUT | FF | DSP | BRAM36 | WNS @ 100 MHz (routed) |
 |---|---|---|---|---|---|---|---|
-| L1 conv 3->16 | 27 | 124,871 | 360 | 850 | 18 | 2 | +0.135 ns |
-| L2 depthwise 16 | 16 | 69,712 | 397 | 952 | 18 | 0 | +0.261 ns |
-| L3 pointwise 16->16 | 16 | 69,719 | 361 | 840 | 18 | 0 | +0.582 ns |
-| L4 conv 16->12 | 144 | 589,843 | 347 | 692 | 14 | 1.5 | +0.698 ns |
+| L1 conv 3->16 | 27 | 124,872 | 298 | 851 | 18 | 2 | +3.853 ns |
+| L2 depthwise 16 | 16 | 69,713 | 398 | 953 | 18 | 0 | +3.393 ns |
+| L3 pointwise 16->16 | 16 | 69,720 | 369 | 841 | 18 | 0 | +2.913 ns |
+| L4 conv 16->12 | 144 | 589,844 | 349 | 693 | 14 | 1.5 | +3.146 ns |
 
 * Vivado 2024.1 out-of-context **synthesis and place-and-route**, one engine at a time (no I/O timing, no activation RAMs): all four layers meet
-  100 MHz with no failing endpoints, but L1 has only +0.135 ns of margin. All four instances together use 68 of 220 DSPs (31 %).
+  100 MHz with no failing endpoints (margins +2.9 to +3.9 ns after the 2026-10-09 timing fix: one register stage after the requantizer-feed mux, +1 cycle per engine). All four instances together use 68 of 220 DSPs (31 %).
   The synthesized netlists were also simulated (xsim) and are bit-exact on the golden tile.
 * A plain 70x70x128-bit activation buffer infers **32 RAMB36 (23 % of the chip)**, more than the ~20 the guide assumed; M5 fixed this with a split RAM (18.5 tiles, see below).
-* 854,145 engine cycles per tile x 135 tiles = 115 M cycles = about 1.15 s per 960x540 frame at 100 MHz, **compute only and from simulation**. The chained
-  core with byte-wide I/O (M5, below) needs 926,197 cycles per tile (about 1.25 s per frame); DMA and ARM time (M6) are not included. No board measurements exist yet.
+* 854,149 engine cycles per tile x 135 tiles = 115 M cycles = about 1.15 s per 960x540 frame at 100 MHz, **compute only and from simulation**. The chained
+  core with byte-wide I/O (M5, below) needs 926,201 cycles per tile (about 1.25 s per frame); DMA and ARM time (M6) are not included. No board measurements exist yet.
 * Details, pitfalls found (a ROM initialisation that simulated fine but was ignored by Vivado) and the breakage tests:
   [`results/utilization/m4_conv_engine.md`](results/utilization/m4_conv_engine.md), [`docs/milestones/M4_conv_engine_rtl.md`](docs/milestones/M4_conv_engine_rtl.md).
 
@@ -112,10 +112,10 @@ moments leave the core quiet, and the synthesized netlist passes the same stream
 
 | Whole core (HC = 64) | Value |
 |---|---|
-| Cycles per tile (simulated, no stalls) | 926,197 (engines 854,145 + byte-wide load/output 72,052) |
+| Cycles per tile (simulated, no stalls) | 926,201 (engines 854,149 + byte-wide load/output 72,052) |
 | Frame estimate, 960x540 = 135 tiles | about 1.25 s at 100 MHz (~0.80 fps), compute + byte streams only, **not a board measurement** |
-| LUT / FF / DSP / BRAM36 tiles (after place and route) | 1,900 / 3,337 / 68 (31 %) / 70 (50 %) |
-| Routed setup slack at 100 MHz | **+0.234 ns** (thin; out-of-context, no I/O timing), hold +0.081 ns |
+| LUT / FF / DSP / BRAM36 tiles (after place and route) | 1,896 / 3,341 / 68 (31 %) / 70 (50 %) |
+| Routed setup slack at 100 MHz | **+0.723 ns** (was +0.234 ns before the 2026-10-09 timing fix; out-of-context, no I/O timing), hold +0.085 ns |
 
 * Block-RAM finding: Vivado rounds the depth of a cascaded RAM up to a power of two, so one 4624x128-bit buffer needs 32 tiles; splitting the address
   range (`tile_ram_split`) needs 18.5. Without it the five buffers would not leave room on the chip.

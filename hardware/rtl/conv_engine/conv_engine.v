@@ -13,7 +13,7 @@
 //     (depthwise: lane co uses channel co of the word; otherwise all lanes use channel ci)
 //   a new pixel starts every PERIOD = max(STEPS, C_OUT) cycles: the single shared requantizer needs C_OUT cycles per
 //   pixel and runs in the shadow of the next pixel's MAC steps (the accumulators are copied to `res` at the end).
-// Expected total: cycles ~ NPIX * PERIOD + ~(C_OUT + 12)   (reported in `cycles`, measured in the testbench).
+// Expected total: cycles ~ NPIX * PERIOD + ~(C_OUT + 13)   (reported in `cycles`, measured in the testbench).
 // Reset: synchronous; a single-cycle `rst` is enough: it stops the sequencer and clears every valid flag of the MAC and requantizer
 // pipelines, so nothing is written afterwards. `start` may be pulsed again as soon as `done` (or `busy` low) is seen; the output RAM is rewritten completely each run.
 module conv_engine #(
@@ -169,12 +169,25 @@ module conv_engine #(
         end
     end
 
+    // One register stage after the C_OUT:1 result/multiplier mux (timing: the mux used to feed the requantizer's DSP
+    // directly and was the critical path).  It adds one cycle of latency per run and nothing to the throughput.
+    reg                rq_v_r;
+    reg signed [31:0]  rq_acc_r;
+    reg [15:0]         rq_m_r;
+    reg [8:0]          rq_tag_r;
+    always @(posedge clk) begin
+        rq_v_r   <= rq_busy && !rst;
+        rq_acc_r <= res[32*rq_i +: 32];
+        rq_m_r   <= mult_mem[rq_i];
+        rq_tag_r <= {rq_i == C_OUT - 1, rq_i};
+    end
+
     wire         rq_v;
     wire [7:0]   rq_y;
     wire [8:0]   rq_tag;
     requant #(.SHIFT(SHIFT), .TW(9)) u_rq (
-        .clk(clk), .rst(rst), .v_in(rq_busy), .acc(res[32*rq_i +: 32]), .m(mult_mem[rq_i]),
-        .tag_in({rq_i == C_OUT - 1, rq_i}), .v_out(rq_v), .y(rq_y), .tag_out(rq_tag));
+        .clk(clk), .rst(rst), .v_in(rq_v_r), .acc(rq_acc_r), .m(rq_m_r),
+        .tag_in(rq_tag_r), .v_out(rq_v), .y(rq_y), .tag_out(rq_tag));
 
     // ------------------------------------------------------------------ output word assembly and write
     reg [8*C_OUT-1:0] out_word;

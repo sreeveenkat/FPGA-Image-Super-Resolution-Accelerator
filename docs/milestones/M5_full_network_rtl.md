@@ -141,7 +141,7 @@ Design decisions:
 * **One activation RAM per layer boundary** (ram0 24 bit, ram1-3 128 bit, ram4 96 bit), no ping-pong: simplest to verify. Cost: 70 of 140 BRAM tiles for
   the whole core. Ping-pong would save about one buffer (about 16 tiles, an ESTIMATE from the measured 16.5-tile buffer) but needs read/write muxes; not worth it now.
 * **Byte-wide streams** (valid/ready, `out_last`), one byte per transfer, so M6 can attach a width converter/DMA without changing the core.
-  The load (14,700 cycles) and the output (about 57,000 cycles) are not overlapped with the compute: 926,197 cycles per tile in total, 7.8 % of it I/O.
+  The load (14,700 cycles) and the output (about 57,000 cycles) are not overlapped with the compute: 926,201 cycles per tile in total, 7.8 % of it I/O.
 * **`tile_ram_split`**: Vivado rounds the cascade depth of a block-RAM array up to a power of two, so a 4624x128-bit buffer cost 32 RAMB36 (M4 finding).
   Splitting the address range into a 4096-deep part and the rest maps it to 18.5 tiles. Verified by synthesis, 3 sizes tested incl. the boundary.
 * The core's default SHIFT parameters equal the exported ones (a testbench check); `WDIR` is the directory of the exported .mem files.
@@ -166,16 +166,16 @@ Verification (`hardware/verification/run_tests.sh quick|full`, `run_postsynth.sh
   the testbench now fails on any X in the control/status outputs after reset (checked to catch the old behaviour: 10,455 violations).
 * Test totals: `quick` 29 runs (about 2 min), `full` 73 runs (about 20 min); the M1-M4 suites still pass.
 
-Synthesis and implementation (`results/utilization/m5_tile_core.md`): whole core 1,900 LUT, 3,337 FF, 68 DSP, 70 BRAM tiles after place and route;
-routed setup slack at 100 MHz only **+0.234 ns** (critical path: an engine's requantizer feed (res mux -> DSP)), hold +0.081 ns, no failing endpoints (out-of-context).
-Cycles per tile 926,197 (simulated) = about 1.25 s per 960x540 frame at 100 MHz, compute plus byte-wide I/O, no DMA/ARM (not a board measurement).
+Synthesis and implementation (`results/utilization/m5_tile_core.md`): whole core 1,896 LUT, 3,341 FF, 68 DSP, 70 BRAM tiles after place and route;
+routed setup slack at 100 MHz **+0.723 ns** (was +0.234 ns before the 2026-10-09 register stage after the requantizer-feed mux; critical path now a layer RAM -> MAC input), hold +0.085 ns, no failing endpoints (out-of-context).
+Cycles per tile 926,201 (simulated) = about 1.25 s per 960x540 frame at 100 MHz, compute plus byte-wide I/O, no DMA/ARM (not a board measurement).
 
 ## 5. Output of this milestone
 
 1. `sr_tile_core.v` and its sub-modules (table above); the sequencer is inside `sr_tile_core.v`.
 2. Testbench logs: per-layer buffer PASS, full-tile PASS, seam-test PASS (`run_tests.sh`).
 3. Synthesis and place-and-route reports: `results/utilization/m5_core_*`.
-4. Cycle count for one tile (926,197) and the predicted frame time (about 1.25 s at 100 MHz).
+4. Cycle count for one tile (926,201) and the predicted frame time (about 1.25 s at 100 MHz).
 
 For 960x540 padded to 960x576 there are 15 x 9 = 135 tiles.
 
@@ -185,7 +185,7 @@ For 960x540 padded to 960x576 there are 15 x 9 = 135 tiles.
 - [x] Pixel shuffle output matches Python exactly (output stream compared with `<tile>_out.hex`, every byte).
 - [x] Seam test passes: tiled == whole-image (20 tiles at HC=8, 4 tiles at HC=64, bit-exact).
 - [x] Border tiles work (image padded by 3): the `real_corner` tile and the border tiles of both seam tests.
-- [x] Core synthesizes and meets timing at the target clock (routed WNS +0.234 ns at 100 MHz, out-of-context); resource numbers recorded.
+- [x] Core synthesizes and meets timing at the target clock (routed WNS +0.723 ns at 100 MHz, out-of-context); resource numbers recorded.
 
 ## 7. Common problems
 

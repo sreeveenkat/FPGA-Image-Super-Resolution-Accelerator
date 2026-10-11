@@ -61,6 +61,13 @@ build core6 -P tb_sr_tile.HC=6 $CORE $TB/tb_sr_tile.v && {
     run core6 +TILE=small12b +TILE2=small12 +STALL=1
 }
 
+echo "== AXI-Stream wrapper (sr_axis_wrapper): 32-bit DMA streams around the tile core"
+AXIS="$CORE hardware/rtl/axi_wrapper/sr_axis_wrapper.v"
+build axis6 -P tb_sr_axis.HC=6 $AXIS $TB/tb_sr_axis.v && {
+    run axis6 +TILE=small12 +TILE2=small12b
+    run axis6 +TILE=small12b +TILE2=small12 +STALL=1
+}
+
 seam() {  # seam <hc> <lr_h> <lr_w> : tiled RTL output must equal the whole-image integer model
     local hc=$1 h=$2 w=$3 d=data/golden/seam
     $PY software/ai/quantization/seam_test.py gen --hc $hc --h $h --w $w > /dev/null || { fail=$((fail+1)); return; }
@@ -88,6 +95,11 @@ if [ "$MODE" = full ]; then
         run core64 +TILE=noise +STALL=1
     }
     seam 64 100 90
+    echo "== AXI-Stream wrapper at the real size (HC=64)"
+    build axis64 -P tb_sr_axis.HC=64 $AXIS $TB/tb_sr_axis.v && {
+        run axis64 +TILE=real0 +STALL=1
+        run axis64 +TILE=noise
+    }
 fi
 
 echo "== summary: $pass test runs passed, $fail failed ($MODE)"

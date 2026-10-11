@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2024 Advanced Micro Devices, Inc. All Rights Reserved.
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2024.1 (lin64) Build 5076996 Wed May 22 18:36:09 MDT 2024
-| Date         : Sun Oct  4 21:44:57 2026
+| Date         : Fri Oct  9 15:16:15 2026
 | Host         : sreevenkat-Dell-G15-5530 running 64-bit Ubuntu 24.04.5 LTS
 | Command      : report_timing_summary -file /home/sreevenkat/Desktop/venkat/sem_project_all/hardware/vivado/build/sr_tile_core_impl/timing.txt -max_paths 5
 | Design       : sr_tile_core
@@ -138,7 +138,7 @@ Table of Contents
 
     WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
     -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
-      0.850        0.000                      0                11608        0.207        0.000                      0                11608        4.020        0.000                       0                  3581  
+      2.361        0.000                      0                11680        0.207        0.000                      0                11680        4.020        0.000                       0                  3585  
 
 
 All user specified timing constraints are met.
@@ -161,7 +161,7 @@ clk    {0.000 5.000}      10.000          100.000
 
 Clock             WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
 -----             -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
-clk                 0.850        0.000                      0                11608        0.207        0.000                      0                11608        4.020        0.000                       0                  3581  
+clk                 2.361        0.000                      0                11680        0.207        0.000                      0                11680        4.020        0.000                       0                  3585  
 
 
 ------------------------------------------------------------------------------------------------
@@ -192,7 +192,7 @@ Path Group    From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing 
 From Clock:  clk
   To Clock:  clk
 
-Setup :            0  Failing Endpoints,  Worst Slack        0.850ns,  Total Violation        0.000ns
+Setup :            0  Failing Endpoints,  Worst Slack        2.361ns,  Total Violation        0.000ns
 Hold  :            0  Failing Endpoints,  Worst Slack        0.207ns,  Total Violation        0.000ns
 PW    :            0  Failing Endpoints,  Worst Slack        4.020ns,  Total Violation        0.000ns
 ---------------------------------------------------------------------------------------------------
@@ -200,16 +200,16 @@ PW    :            0  Failing Endpoints,  Worst Slack        4.020ns,  Total Vio
 
 Max Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.850ns  (required time - arrival time)
-  Source:                 e1/res_reg[240]/C
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            e1/u_rq/p1_reg/PCIN[0]
+Slack (MET) :             2.361ns  (required time - arrival time)
+  Source:                 ram2/mem_lo_reg_4/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            e3/lane[0].u_mac/acc_reg/A[0]
                             (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        7.666ns  (logic 5.394ns (70.365%)  route 2.272ns (29.635%))
-  Logic Levels:           4  (DSP48E1=1 LUT3=1 LUT6=1 MUXF7=1)
+  Data Path Delay:        5.627ns  (logic 3.123ns (55.496%)  route 2.504ns (44.504%))
+  Logic Levels:           3  (LUT6=2 MUXF7=1)
   Clock Path Skew:        -0.049ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.924ns = ( 10.924 - 10.000 ) 
     Source Clock Delay      (SCD):    0.973ns
@@ -224,47 +224,45 @@ Slack (MET) :             0.850ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.973     0.973    e1/clk
-                         FDRE                                         r  e1/res_reg[240]/C
+                         net (fo=3588, unset)         0.973     0.973    ram2/clk
+                         RAMB36E1                                     r  ram2/mem_lo_reg_4/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.518     1.491 r  e1/res_reg[240]/Q
-                         net (fo=1, unplaced)         0.965     2.456    e1/u_rq/p1_reg_i_16_0[240]
-                         LUT6 (Prop_lut6_I0_O)        0.295     2.751 r  e1/u_rq/p10_i_55/O
-                         net (fo=1, unplaced)         0.000     2.751    e1/u_rq/p10_i_55_n_0
-                         MUXF7 (Prop_muxf7_I1_O)      0.247     2.998 r  e1/u_rq/p10_i_19/O
-                         net (fo=1, unplaced)         0.452     3.450    e1/u_rq/p10_i_19_n_0
-                         LUT3 (Prop_lut3_I2_O)        0.298     3.748 r  e1/u_rq/p10_i_1/O
-                         net (fo=1, unplaced)         0.800     4.548    e1/u_rq/p10_i_1_n_0
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[0])
-                                                      4.036     8.584 r  e1/u_rq/p10/PCOUT[0]
-                         net (fo=1, unplaced)         0.055     8.639    e1/u_rq/p10_n_153
-                         DSP48E1                                      r  e1/u_rq/p1_reg/PCIN[0]
+                         RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[4])
+                                                      2.454     3.427 r  ram2/mem_lo_reg_4/DOBDO[4]
+                         net (fo=1, unplaced)         0.800     4.227    e3/q_lo[40]
+                         LUT6 (Prop_lut6_I4_O)        0.124     4.351 r  e3/acc_reg_i_88/O
+                         net (fo=1, unplaced)         0.000     4.351    e3/acc_reg_i_88_n_0
+                         MUXF7 (Prop_muxf7_I1_O)      0.247     4.598 r  e3/acc_reg_i_39/O
+                         net (fo=1, unplaced)         0.905     5.503    e3/acc_reg_i_39_n_0
+                         LUT6 (Prop_lut6_I2_O)        0.298     5.801 r  e3/acc_reg_i_15/O
+                         net (fo=16, unplaced)        0.800     6.600    e3/lane[0].u_mac/A[0]
+                         DSP48E1                                      r  e3/lane[0].u_mac/acc_reg/A[0]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=3580, unset)         0.924    10.924    e1/u_rq/clk
-                         DSP48E1                                      r  e1/u_rq/p1_reg/CLK
+                         net (fo=3588, unset)         0.924    10.924    e3/lane[0].u_mac/clk
+                         DSP48E1                                      r  e3/lane[0].u_mac/acc_reg/CLK
                          clock pessimism              0.000    10.924    
                          clock uncertainty           -0.035    10.889    
-                         DSP48E1 (Setup_dsp48e1_CLK_PCIN[0])
-                                                     -1.400     9.489    e1/u_rq/p1_reg
+                         DSP48E1 (Setup_dsp48e1_CLK_A[0])
+                                                     -1.928     8.961    e3/lane[0].u_mac/acc_reg
   -------------------------------------------------------------------
-                         required time                          9.489    
-                         arrival time                          -8.639    
+                         required time                          8.961    
+                         arrival time                          -6.600    
   -------------------------------------------------------------------
-                         slack                                  0.850    
+                         slack                                  2.361    
 
-Slack (MET) :             0.850ns  (required time - arrival time)
-  Source:                 e1/res_reg[240]/C
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            e1/u_rq/p1_reg/PCIN[10]
+Slack (MET) :             2.361ns  (required time - arrival time)
+  Source:                 ram2/mem_lo_reg_4/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            e3/lane[0].u_mac/acc_reg/A[1]
                             (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        7.666ns  (logic 5.394ns (70.365%)  route 2.272ns (29.635%))
-  Logic Levels:           4  (DSP48E1=1 LUT3=1 LUT6=1 MUXF7=1)
+  Data Path Delay:        5.627ns  (logic 3.123ns (55.496%)  route 2.504ns (44.504%))
+  Logic Levels:           3  (LUT6=2 MUXF7=1)
   Clock Path Skew:        -0.049ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.924ns = ( 10.924 - 10.000 ) 
     Source Clock Delay      (SCD):    0.973ns
@@ -279,47 +277,45 @@ Slack (MET) :             0.850ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.973     0.973    e1/clk
-                         FDRE                                         r  e1/res_reg[240]/C
+                         net (fo=3588, unset)         0.973     0.973    ram2/clk
+                         RAMB36E1                                     r  ram2/mem_lo_reg_4/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.518     1.491 r  e1/res_reg[240]/Q
-                         net (fo=1, unplaced)         0.965     2.456    e1/u_rq/p1_reg_i_16_0[240]
-                         LUT6 (Prop_lut6_I0_O)        0.295     2.751 r  e1/u_rq/p10_i_55/O
-                         net (fo=1, unplaced)         0.000     2.751    e1/u_rq/p10_i_55_n_0
-                         MUXF7 (Prop_muxf7_I1_O)      0.247     2.998 r  e1/u_rq/p10_i_19/O
-                         net (fo=1, unplaced)         0.452     3.450    e1/u_rq/p10_i_19_n_0
-                         LUT3 (Prop_lut3_I2_O)        0.298     3.748 r  e1/u_rq/p10_i_1/O
-                         net (fo=1, unplaced)         0.800     4.548    e1/u_rq/p10_i_1_n_0
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[10])
-                                                      4.036     8.584 r  e1/u_rq/p10/PCOUT[10]
-                         net (fo=1, unplaced)         0.055     8.639    e1/u_rq/p10_n_143
-                         DSP48E1                                      r  e1/u_rq/p1_reg/PCIN[10]
+                         RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[5])
+                                                      2.454     3.427 r  ram2/mem_lo_reg_4/DOBDO[5]
+                         net (fo=1, unplaced)         0.800     4.227    e3/q_lo[41]
+                         LUT6 (Prop_lut6_I4_O)        0.124     4.351 r  e3/acc_reg_i_82/O
+                         net (fo=1, unplaced)         0.000     4.351    e3/acc_reg_i_82_n_0
+                         MUXF7 (Prop_muxf7_I1_O)      0.247     4.598 r  e3/acc_reg_i_36/O
+                         net (fo=1, unplaced)         0.905     5.503    e3/acc_reg_i_36_n_0
+                         LUT6 (Prop_lut6_I2_O)        0.298     5.801 r  e3/acc_reg_i_14/O
+                         net (fo=16, unplaced)        0.800     6.600    e3/lane[0].u_mac/A[1]
+                         DSP48E1                                      r  e3/lane[0].u_mac/acc_reg/A[1]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=3580, unset)         0.924    10.924    e1/u_rq/clk
-                         DSP48E1                                      r  e1/u_rq/p1_reg/CLK
+                         net (fo=3588, unset)         0.924    10.924    e3/lane[0].u_mac/clk
+                         DSP48E1                                      r  e3/lane[0].u_mac/acc_reg/CLK
                          clock pessimism              0.000    10.924    
                          clock uncertainty           -0.035    10.889    
-                         DSP48E1 (Setup_dsp48e1_CLK_PCIN[10])
-                                                     -1.400     9.489    e1/u_rq/p1_reg
+                         DSP48E1 (Setup_dsp48e1_CLK_A[1])
+                                                     -1.928     8.961    e3/lane[0].u_mac/acc_reg
   -------------------------------------------------------------------
-                         required time                          9.489    
-                         arrival time                          -8.639    
+                         required time                          8.961    
+                         arrival time                          -6.600    
   -------------------------------------------------------------------
-                         slack                                  0.850    
+                         slack                                  2.361    
 
-Slack (MET) :             0.850ns  (required time - arrival time)
-  Source:                 e1/res_reg[240]/C
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            e1/u_rq/p1_reg/PCIN[11]
+Slack (MET) :             2.361ns  (required time - arrival time)
+  Source:                 ram2/mem_lo_reg_4/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            e3/lane[0].u_mac/acc_reg/A[2]
                             (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        7.666ns  (logic 5.394ns (70.365%)  route 2.272ns (29.635%))
-  Logic Levels:           4  (DSP48E1=1 LUT3=1 LUT6=1 MUXF7=1)
+  Data Path Delay:        5.627ns  (logic 3.123ns (55.496%)  route 2.504ns (44.504%))
+  Logic Levels:           3  (LUT6=2 MUXF7=1)
   Clock Path Skew:        -0.049ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.924ns = ( 10.924 - 10.000 ) 
     Source Clock Delay      (SCD):    0.973ns
@@ -334,47 +330,45 @@ Slack (MET) :             0.850ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.973     0.973    e1/clk
-                         FDRE                                         r  e1/res_reg[240]/C
+                         net (fo=3588, unset)         0.973     0.973    ram2/clk
+                         RAMB36E1                                     r  ram2/mem_lo_reg_4/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.518     1.491 r  e1/res_reg[240]/Q
-                         net (fo=1, unplaced)         0.965     2.456    e1/u_rq/p1_reg_i_16_0[240]
-                         LUT6 (Prop_lut6_I0_O)        0.295     2.751 r  e1/u_rq/p10_i_55/O
-                         net (fo=1, unplaced)         0.000     2.751    e1/u_rq/p10_i_55_n_0
-                         MUXF7 (Prop_muxf7_I1_O)      0.247     2.998 r  e1/u_rq/p10_i_19/O
-                         net (fo=1, unplaced)         0.452     3.450    e1/u_rq/p10_i_19_n_0
-                         LUT3 (Prop_lut3_I2_O)        0.298     3.748 r  e1/u_rq/p10_i_1/O
-                         net (fo=1, unplaced)         0.800     4.548    e1/u_rq/p10_i_1_n_0
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[11])
-                                                      4.036     8.584 r  e1/u_rq/p10/PCOUT[11]
-                         net (fo=1, unplaced)         0.055     8.639    e1/u_rq/p10_n_142
-                         DSP48E1                                      r  e1/u_rq/p1_reg/PCIN[11]
+                         RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[6])
+                                                      2.454     3.427 r  ram2/mem_lo_reg_4/DOBDO[6]
+                         net (fo=1, unplaced)         0.800     4.227    e3/q_lo[42]
+                         LUT6 (Prop_lut6_I4_O)        0.124     4.351 r  e3/acc_reg_i_76/O
+                         net (fo=1, unplaced)         0.000     4.351    e3/acc_reg_i_76_n_0
+                         MUXF7 (Prop_muxf7_I1_O)      0.247     4.598 r  e3/acc_reg_i_33/O
+                         net (fo=1, unplaced)         0.905     5.503    e3/acc_reg_i_33_n_0
+                         LUT6 (Prop_lut6_I2_O)        0.298     5.801 r  e3/acc_reg_i_13/O
+                         net (fo=16, unplaced)        0.800     6.600    e3/lane[0].u_mac/A[2]
+                         DSP48E1                                      r  e3/lane[0].u_mac/acc_reg/A[2]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=3580, unset)         0.924    10.924    e1/u_rq/clk
-                         DSP48E1                                      r  e1/u_rq/p1_reg/CLK
+                         net (fo=3588, unset)         0.924    10.924    e3/lane[0].u_mac/clk
+                         DSP48E1                                      r  e3/lane[0].u_mac/acc_reg/CLK
                          clock pessimism              0.000    10.924    
                          clock uncertainty           -0.035    10.889    
-                         DSP48E1 (Setup_dsp48e1_CLK_PCIN[11])
-                                                     -1.400     9.489    e1/u_rq/p1_reg
+                         DSP48E1 (Setup_dsp48e1_CLK_A[2])
+                                                     -1.928     8.961    e3/lane[0].u_mac/acc_reg
   -------------------------------------------------------------------
-                         required time                          9.489    
-                         arrival time                          -8.639    
+                         required time                          8.961    
+                         arrival time                          -6.600    
   -------------------------------------------------------------------
-                         slack                                  0.850    
+                         slack                                  2.361    
 
-Slack (MET) :             0.850ns  (required time - arrival time)
-  Source:                 e1/res_reg[240]/C
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            e1/u_rq/p1_reg/PCIN[12]
+Slack (MET) :             2.361ns  (required time - arrival time)
+  Source:                 ram2/mem_lo_reg_4/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            e3/lane[0].u_mac/acc_reg/A[3]
                             (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        7.666ns  (logic 5.394ns (70.365%)  route 2.272ns (29.635%))
-  Logic Levels:           4  (DSP48E1=1 LUT3=1 LUT6=1 MUXF7=1)
+  Data Path Delay:        5.627ns  (logic 3.123ns (55.496%)  route 2.504ns (44.504%))
+  Logic Levels:           3  (LUT6=2 MUXF7=1)
   Clock Path Skew:        -0.049ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.924ns = ( 10.924 - 10.000 ) 
     Source Clock Delay      (SCD):    0.973ns
@@ -389,47 +383,45 @@ Slack (MET) :             0.850ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.973     0.973    e1/clk
-                         FDRE                                         r  e1/res_reg[240]/C
+                         net (fo=3588, unset)         0.973     0.973    ram2/clk
+                         RAMB36E1                                     r  ram2/mem_lo_reg_4/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.518     1.491 r  e1/res_reg[240]/Q
-                         net (fo=1, unplaced)         0.965     2.456    e1/u_rq/p1_reg_i_16_0[240]
-                         LUT6 (Prop_lut6_I0_O)        0.295     2.751 r  e1/u_rq/p10_i_55/O
-                         net (fo=1, unplaced)         0.000     2.751    e1/u_rq/p10_i_55_n_0
-                         MUXF7 (Prop_muxf7_I1_O)      0.247     2.998 r  e1/u_rq/p10_i_19/O
-                         net (fo=1, unplaced)         0.452     3.450    e1/u_rq/p10_i_19_n_0
-                         LUT3 (Prop_lut3_I2_O)        0.298     3.748 r  e1/u_rq/p10_i_1/O
-                         net (fo=1, unplaced)         0.800     4.548    e1/u_rq/p10_i_1_n_0
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[12])
-                                                      4.036     8.584 r  e1/u_rq/p10/PCOUT[12]
-                         net (fo=1, unplaced)         0.055     8.639    e1/u_rq/p10_n_141
-                         DSP48E1                                      r  e1/u_rq/p1_reg/PCIN[12]
+                         RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[7])
+                                                      2.454     3.427 r  ram2/mem_lo_reg_4/DOBDO[7]
+                         net (fo=1, unplaced)         0.800     4.227    e3/q_lo[43]
+                         LUT6 (Prop_lut6_I4_O)        0.124     4.351 r  e3/acc_reg_i_70/O
+                         net (fo=1, unplaced)         0.000     4.351    e3/acc_reg_i_70_n_0
+                         MUXF7 (Prop_muxf7_I1_O)      0.247     4.598 r  e3/acc_reg_i_30/O
+                         net (fo=1, unplaced)         0.905     5.503    e3/acc_reg_i_30_n_0
+                         LUT6 (Prop_lut6_I2_O)        0.298     5.801 r  e3/acc_reg_i_12/O
+                         net (fo=16, unplaced)        0.800     6.600    e3/lane[0].u_mac/A[3]
+                         DSP48E1                                      r  e3/lane[0].u_mac/acc_reg/A[3]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=3580, unset)         0.924    10.924    e1/u_rq/clk
-                         DSP48E1                                      r  e1/u_rq/p1_reg/CLK
+                         net (fo=3588, unset)         0.924    10.924    e3/lane[0].u_mac/clk
+                         DSP48E1                                      r  e3/lane[0].u_mac/acc_reg/CLK
                          clock pessimism              0.000    10.924    
                          clock uncertainty           -0.035    10.889    
-                         DSP48E1 (Setup_dsp48e1_CLK_PCIN[12])
-                                                     -1.400     9.489    e1/u_rq/p1_reg
+                         DSP48E1 (Setup_dsp48e1_CLK_A[3])
+                                                     -1.928     8.961    e3/lane[0].u_mac/acc_reg
   -------------------------------------------------------------------
-                         required time                          9.489    
-                         arrival time                          -8.639    
+                         required time                          8.961    
+                         arrival time                          -6.600    
   -------------------------------------------------------------------
-                         slack                                  0.850    
+                         slack                                  2.361    
 
-Slack (MET) :             0.850ns  (required time - arrival time)
-  Source:                 e1/res_reg[240]/C
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            e1/u_rq/p1_reg/PCIN[13]
+Slack (MET) :             2.361ns  (required time - arrival time)
+  Source:                 ram2/mem_lo_reg_4/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            e3/lane[0].u_mac/acc_reg/A[4]
                             (rising edge-triggered cell DSP48E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        7.666ns  (logic 5.394ns (70.365%)  route 2.272ns (29.635%))
-  Logic Levels:           4  (DSP48E1=1 LUT3=1 LUT6=1 MUXF7=1)
+  Data Path Delay:        5.627ns  (logic 3.123ns (55.496%)  route 2.504ns (44.504%))
+  Logic Levels:           3  (LUT6=2 MUXF7=1)
   Clock Path Skew:        -0.049ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.924ns = ( 10.924 - 10.000 ) 
     Source Clock Delay      (SCD):    0.973ns
@@ -444,36 +436,34 @@ Slack (MET) :             0.850ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.973     0.973    e1/clk
-                         FDRE                                         r  e1/res_reg[240]/C
+                         net (fo=3588, unset)         0.973     0.973    ram2/clk
+                         RAMB36E1                                     r  ram2/mem_lo_reg_4/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.518     1.491 r  e1/res_reg[240]/Q
-                         net (fo=1, unplaced)         0.965     2.456    e1/u_rq/p1_reg_i_16_0[240]
-                         LUT6 (Prop_lut6_I0_O)        0.295     2.751 r  e1/u_rq/p10_i_55/O
-                         net (fo=1, unplaced)         0.000     2.751    e1/u_rq/p10_i_55_n_0
-                         MUXF7 (Prop_muxf7_I1_O)      0.247     2.998 r  e1/u_rq/p10_i_19/O
-                         net (fo=1, unplaced)         0.452     3.450    e1/u_rq/p10_i_19_n_0
-                         LUT3 (Prop_lut3_I2_O)        0.298     3.748 r  e1/u_rq/p10_i_1/O
-                         net (fo=1, unplaced)         0.800     4.548    e1/u_rq/p10_i_1_n_0
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[13])
-                                                      4.036     8.584 r  e1/u_rq/p10/PCOUT[13]
-                         net (fo=1, unplaced)         0.055     8.639    e1/u_rq/p10_n_140
-                         DSP48E1                                      r  e1/u_rq/p1_reg/PCIN[13]
+                         RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOPBDOP[0])
+                                                      2.454     3.427 r  ram2/mem_lo_reg_4/DOPBDOP[0]
+                         net (fo=1, unplaced)         0.800     4.227    e3/q_lo[44]
+                         LUT6 (Prop_lut6_I4_O)        0.124     4.351 r  e3/acc_reg_i_64/O
+                         net (fo=1, unplaced)         0.000     4.351    e3/acc_reg_i_64_n_0
+                         MUXF7 (Prop_muxf7_I1_O)      0.247     4.598 r  e3/acc_reg_i_27/O
+                         net (fo=1, unplaced)         0.905     5.503    e3/acc_reg_i_27_n_0
+                         LUT6 (Prop_lut6_I2_O)        0.298     5.801 r  e3/acc_reg_i_11/O
+                         net (fo=16, unplaced)        0.800     6.600    e3/lane[0].u_mac/A[4]
+                         DSP48E1                                      r  e3/lane[0].u_mac/acc_reg/A[4]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=3580, unset)         0.924    10.924    e1/u_rq/clk
-                         DSP48E1                                      r  e1/u_rq/p1_reg/CLK
+                         net (fo=3588, unset)         0.924    10.924    e3/lane[0].u_mac/clk
+                         DSP48E1                                      r  e3/lane[0].u_mac/acc_reg/CLK
                          clock pessimism              0.000    10.924    
                          clock uncertainty           -0.035    10.889    
-                         DSP48E1 (Setup_dsp48e1_CLK_PCIN[13])
-                                                     -1.400     9.489    e1/u_rq/p1_reg
+                         DSP48E1 (Setup_dsp48e1_CLK_A[4])
+                                                     -1.928     8.961    e3/lane[0].u_mac/acc_reg
   -------------------------------------------------------------------
-                         required time                          9.489    
-                         arrival time                          -8.639    
+                         required time                          8.961    
+                         arrival time                          -6.600    
   -------------------------------------------------------------------
-                         slack                                  0.850    
+                         slack                                  2.361    
 
 
 
@@ -500,7 +490,7 @@ Slack (MET) :             0.207ns  (arrival time - required time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.410     0.410    e1/clk
+                         net (fo=3588, unset)         0.410     0.410    e1/clk
                          FDRE                                         r  e1/base_reg[1]/C
   -------------------------------------------------------------------    -------------------
                          FDRE (Prop_fdre_C_Q)         0.164     0.574 r  e1/base_reg[1]/Q
@@ -513,7 +503,7 @@ Slack (MET) :             0.207ns  (arrival time - required time)
 
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.432     0.432    e1/clk
+                         net (fo=3588, unset)         0.432     0.432    e1/clk
                          FDRE                                         r  e1/base_reg[2]/C
                          clock pessimism              0.000     0.432    
                          FDRE (Hold_fdre_C_D)         0.134     0.566    e1/base_reg[2]
@@ -542,7 +532,7 @@ Slack (MET) :             0.207ns  (arrival time - required time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.410     0.410    e2/clk
+                         net (fo=3588, unset)         0.410     0.410    e2/clk
                          FDRE                                         r  e2/base_reg[1]/C
   -------------------------------------------------------------------    -------------------
                          FDRE (Prop_fdre_C_Q)         0.164     0.574 r  e2/base_reg[1]/Q
@@ -555,7 +545,7 @@ Slack (MET) :             0.207ns  (arrival time - required time)
 
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.432     0.432    e2/clk
+                         net (fo=3588, unset)         0.432     0.432    e2/clk
                          FDRE                                         r  e2/base_reg[2]/C
                          clock pessimism              0.000     0.432    
                          FDRE (Hold_fdre_C_D)         0.134     0.566    e2/base_reg[2]
@@ -584,7 +574,7 @@ Slack (MET) :             0.207ns  (arrival time - required time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.410     0.410    clk
+                         net (fo=3588, unset)         0.410     0.410    clk
                          FDRE                                         r  obase_reg[6]/C
   -------------------------------------------------------------------    -------------------
                          FDRE (Prop_fdre_C_Q)         0.164     0.574 r  obase_reg[6]/Q
@@ -597,7 +587,7 @@ Slack (MET) :             0.207ns  (arrival time - required time)
 
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.432     0.432    clk
+                         net (fo=3588, unset)         0.432     0.432    clk
                          FDRE                                         r  obase_reg[7]/C
                          clock pessimism              0.000     0.432    
                          FDRE (Hold_fdre_C_D)         0.134     0.566    obase_reg[7]
@@ -607,10 +597,50 @@ Slack (MET) :             0.207ns  (arrival time - required time)
   -------------------------------------------------------------------
                          slack                                  0.207    
 
-Slack (MET) :             0.229ns  (arrival time - required time)
+Slack (MET) :             0.227ns  (arrival time - required time)
   Source:                 e4/rq_i_reg[7]/C
                             (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            e4/u_rq/t2_reg[7]_srl2/D
+  Destination:            e4/u_rq/t2_reg[7]_srl3/D
+                            (rising edge-triggered cell SRL16E clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             clk
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (clk rise@0.000ns - clk rise@0.000ns)
+  Data Path Delay:        0.312ns  (logic 0.164ns (52.501%)  route 0.148ns (47.499%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.022ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    0.432ns
+    Source Clock Delay      (SCD):    0.410ns
+    Clock Pessimism Removal (CPR):    -0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=3588, unset)         0.410     0.410    e4/clk
+                         FDRE                                         r  e4/rq_i_reg[7]/C
+  -------------------------------------------------------------------    -------------------
+                         FDRE (Prop_fdre_C_Q)         0.164     0.574 r  e4/rq_i_reg[7]/Q
+                         net (fo=3, unplaced)         0.148     0.723    e4/u_rq/Q[7]
+                         SRL16E                                       r  e4/u_rq/t2_reg[7]_srl3/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=3588, unset)         0.432     0.432    e4/u_rq/clk
+                         SRL16E                                       r  e4/u_rq/t2_reg[7]_srl3/CLK
+                         clock pessimism              0.000     0.432    
+                         SRL16E (Hold_srl16e_CLK_D)
+                                                      0.064     0.496    e4/u_rq/t2_reg[7]_srl3
+  -------------------------------------------------------------------
+                         required time                         -0.496    
+                         arrival time                           0.723    
+  -------------------------------------------------------------------
+                         slack                                  0.227    
+
+Slack (MET) :             0.229ns  (arrival time - required time)
+  Source:                 e4/rq_i_reg[6]/C
+                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            e4/u_rq/t2_reg[6]_srl3/D
                             (rising edge-triggered cell SRL16E clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Hold (Min at Fast Process Corner)
@@ -626,66 +656,24 @@ Slack (MET) :             0.229ns  (arrival time - required time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.410     0.410    e4/clk
-                         FDRE                                         r  e4/rq_i_reg[7]/C
+                         net (fo=3588, unset)         0.410     0.410    e4/clk
+                         FDRE                                         r  e4/rq_i_reg[6]/C
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.164     0.574 r  e4/rq_i_reg[7]/Q
-                         net (fo=4, unplaced)         0.151     0.725    e4/u_rq/Q[7]
-                         SRL16E                                       r  e4/u_rq/t2_reg[7]_srl2/D
+                         FDRE (Prop_fdre_C_Q)         0.164     0.574 r  e4/rq_i_reg[6]/Q
+                         net (fo=4, unplaced)         0.151     0.725    e4/u_rq/Q[6]
+                         SRL16E                                       r  e4/u_rq/t2_reg[6]_srl3/D
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.432     0.432    e4/u_rq/clk
-                         SRL16E                                       r  e4/u_rq/t2_reg[7]_srl2/CLK
+                         net (fo=3588, unset)         0.432     0.432    e4/u_rq/clk
+                         SRL16E                                       r  e4/u_rq/t2_reg[6]_srl3/CLK
                          clock pessimism              0.000     0.432    
                          SRL16E (Hold_srl16e_CLK_D)
-                                                      0.064     0.496    e4/u_rq/t2_reg[7]_srl2
+                                                      0.064     0.496    e4/u_rq/t2_reg[6]_srl3
   -------------------------------------------------------------------
                          required time                         -0.496    
                          arrival time                           0.725    
-  -------------------------------------------------------------------
-                         slack                                  0.229    
-
-Slack (MET) :             0.229ns  (arrival time - required time)
-  Source:                 e1/base_reg[1]/C
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            e1/base_reg[3]/D
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Path Group:             clk
-  Path Type:              Hold (Min at Fast Process Corner)
-  Requirement:            0.000ns  (clk rise@0.000ns - clk rise@0.000ns)
-  Data Path Delay:        0.385ns  (logic 0.294ns (76.354%)  route 0.091ns (23.646%))
-  Logic Levels:           1  (CARRY4=1)
-  Clock Path Skew:        0.022ns (DCD - SCD - CPR)
-    Destination Clock Delay (DCD):    0.432ns
-    Source Clock Delay      (SCD):    0.410ns
-    Clock Pessimism Removal (CPR):    -0.000ns
-
-    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
-  -------------------------------------------------------------------    -------------------
-                         (clock clk rise edge)        0.000     0.000 r  
-                                                      0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.410     0.410    e1/clk
-                         FDRE                                         r  e1/base_reg[1]/C
-  -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.164     0.574 r  e1/base_reg[1]/Q
-                         net (fo=4, unplaced)         0.091     0.665    e1/base_reg[1]
-                         CARRY4 (Prop_carry4_DI[1]_O[3])
-                                                      0.130     0.795 r  e1/base_reg[0]_i_1/O[3]
-                         net (fo=1, unplaced)         0.000     0.795    e1/base_reg[0]_i_1_n_4
-                         FDRE                                         r  e1/base_reg[3]/D
-  -------------------------------------------------------------------    -------------------
-
-                         (clock clk rise edge)        0.000     0.000 r  
-                                                      0.000     0.000 r  clk (IN)
-                         net (fo=3580, unset)         0.432     0.432    e1/clk
-                         FDRE                                         r  e1/base_reg[3]/C
-                         clock pessimism              0.000     0.432    
-                         FDRE (Hold_fdre_C_D)         0.134     0.566    e1/base_reg[3]
-  -------------------------------------------------------------------
-                         required time                         -0.566    
-                         arrival time                           0.795    
   -------------------------------------------------------------------
                          slack                                  0.229    
 
@@ -701,21 +689,21 @@ Period(ns):         10.000
 Sources:            { clk }
 
 Check Type        Corner  Lib Pin             Reference Pin  Required(ns)  Actual(ns)  Slack(ns)  Location  Pin
+Min Period        n/a     DSP48E1/CLK         n/a            3.687         10.000      6.313                e1/u_rq/p1_reg/CLK
+Min Period        n/a     DSP48E1/CLK         n/a            3.687         10.000      6.313                e2/u_rq/p1_reg/CLK
+Min Period        n/a     DSP48E1/CLK         n/a            3.687         10.000      6.313                e3/u_rq/p1_reg/CLK
+Min Period        n/a     DSP48E1/CLK         n/a            3.687         10.000      6.313                e4/u_rq/p1_reg/CLK
 Min Period        n/a     RAMB36E1/CLKARDCLK  n/a            2.944         10.000      7.056                ram0/hi_part.mem_hi_reg/CLKARDCLK
-Min Period        n/a     RAMB36E1/CLKARDCLK  n/a            2.944         10.000      7.056                ram0/mem_lo_reg_0/CLKARDCLK
-Min Period        n/a     RAMB36E1/CLKARDCLK  n/a            2.944         10.000      7.056                ram0/mem_lo_reg_1/CLKARDCLK
-Min Period        n/a     RAMB36E1/CLKARDCLK  n/a            2.944         10.000      7.056                ram0/mem_lo_reg_2/CLKARDCLK
-Min Period        n/a     RAMB36E1/CLKARDCLK  n/a            2.944         10.000      7.056                ram1/hi_part.mem_hi_reg_0/CLKARDCLK
-Low Pulse Width   Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[0]_srl2/CLK
-Low Pulse Width   Fast    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[0]_srl2/CLK
-Low Pulse Width   Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[1]_srl2/CLK
-Low Pulse Width   Fast    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[1]_srl2/CLK
-Low Pulse Width   Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[2]_srl2/CLK
-High Pulse Width  Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[0]_srl2/CLK
-High Pulse Width  Fast    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[0]_srl2/CLK
-High Pulse Width  Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[1]_srl2/CLK
-High Pulse Width  Fast    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[1]_srl2/CLK
-High Pulse Width  Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[2]_srl2/CLK
+Low Pulse Width   Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[0]_srl3/CLK
+Low Pulse Width   Fast    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[0]_srl3/CLK
+Low Pulse Width   Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[1]_srl3/CLK
+Low Pulse Width   Fast    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[1]_srl3/CLK
+Low Pulse Width   Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[2]_srl3/CLK
+High Pulse Width  Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[0]_srl3/CLK
+High Pulse Width  Fast    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[0]_srl3/CLK
+High Pulse Width  Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[1]_srl3/CLK
+High Pulse Width  Fast    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[1]_srl3/CLK
+High Pulse Width  Slow    SRL16E/CLK          n/a            0.980         5.000       4.020                e1/u_rq/t2_reg[2]_srl3/CLK
 
 
 

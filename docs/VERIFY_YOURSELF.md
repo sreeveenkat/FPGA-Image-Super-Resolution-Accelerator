@@ -233,7 +233,7 @@ and `exit=0`. Any `FAIL` line, or an exit code other than 0, is a failure. Typic
 ```
 PASS requant SHIFT=24: 12981 vectors bit-exact
 PASS layer 1 tile small12: 100 pixels (10x10) x 16 ch bit-exact, 2723 cycles (27 per pixel, PERIOD 27), re-run + abort/recover OK
-PASS sr_tile_core HC=6 tile small12: 432 output bytes bit-exact, layer buffers exact, 10957 cycles, re-run + 2nd tile + abort sweep OK
+PASS sr_tile_core HC=6 tile small12: 432 output bytes bit-exact, layer buffers exact, 10961 cycles, re-run + 2nd tile + abort sweep OK
 [seam hc=8] 20 tiles simulated, 0 failed
 PASS seam hc=8: 20 RTL tiles assembled == whole-image integer model, 74x58 pixels bit-exact
 ```
@@ -247,8 +247,8 @@ Cycle numbers you should see, **identical for every tile** (they do not depend o
 
 | Item | Cycles |
 |---|---|
-| Layer 1 / 2 / 3 / 4, one 64×64 tile | 124,871 / 69,712 / 69,719 / 589,843 |
-| Whole core, one tile, no stalls | **926,197** |
+| Layer 1 / 2 / 3 / 4, one 64×64 tile | 124,872 / 69,713 / 69,720 / 589,844 |
+| Whole core, one tile, no stalls | **926,201** |
 
 ### 3.4 Run ONE test by hand and read the output ✅ (so you see it is real)
 ```bash
@@ -257,7 +257,7 @@ iverilog -g2012 -Wall -I . -o /tmp/core6.vvp -P tb_sr_tile.HC=6 $RTL hardware/ve
 vvp /tmp/core6.vvp +TILE=small12 +TILE2=small12b
 ```
 **Expect:** exactly one result line:
-`PASS sr_tile_core HC=6 tile small12: 432 output bytes bit-exact, layer buffers exact, 10957 cycles, re-run + 2nd tile + abort sweep OK`
+`PASS sr_tile_core HC=6 tile small12: 432 output bytes bit-exact, layer buffers exact, 10961 cycles, re-run + 2nd tile + abort sweep OK`
 (`-Wall` prints only a harmless "timescale" note.) Useful options of the testbench: `+STALL=1` (random pauses on both streams), `+TILE=<name>` (any tile in `data/golden`), `+NOEXTRA` (single run).
 HC=6 is a *small* tile (for speed); the real size is HC=64: `iverilog … -P tb_sr_tile.HC=64 …` then `vvp … +TILE=real0` (about 50 s).
 
@@ -282,7 +282,7 @@ W=hardware/vivado/build/xsim_core_demo ; rm -rf $W ; mkdir -p $W ; R=../../../rt
 xsim sim -R --xsimdir $W/xsim.dir -testplusarg TILE=small12 -testplusarg NOEXTRA
 rm -f clockInfo.txt xsim.jou xsim_*.backup.jou        # xsim leaves these in ROOT; they are git-ignored anyway
 ```
-**Expect (about 3 seconds):** `PASS sr_tile_core HC=6 tile small12: 432 output bytes bit-exact, layer buffers exact, 10957 cycles`.
+**Expect (about 3 seconds):** `PASS sr_tile_core HC=6 tile small12: 432 output bytes bit-exact, layer buffers exact, 10961 cycles`.
 The `xvlog/xelab` part runs inside `$W` (so its files land there), but `xsim` is started **from ROOT** so the testbench can find `data/golden/…`.
 
 🖱️ **Waveforms (not clicked by me):** replace the last `xsim` line by
@@ -294,7 +294,7 @@ What to look at: `dut.state` steps 1 (load) → 2,3,4,5 (layers 1–4) → 6 (ou
 ```bash
 hardware/verification/run_postsynth.sh
 ```
-**Expect:** four `[post-synthesis L1…L4] PASS …` lines, one `[post-synthesis tile core HC=6] PASS … bit-exact (netlist: internal buffers not visible, not checked), 10957 cycles …` line, and
+**Expect:** four `[post-synthesis L1…L4] PASS …` lines, one `[post-synthesis tile core HC=6] PASS … bit-exact (netlist: internal buffers not visible, not checked), 10961 cycles …` line, and
 `== post-synthesis summary: 5 passed, 0 failed`.
 This is the check that catches "works in simulation but Vivado built something different" (it once did: a ROM that RTL simulation accepted but Vivado ignored). The cycle counts must equal the RTL simulation's (2723 / 1040 / 1047 / 5203 / 10957).
 
@@ -315,9 +315,9 @@ grep -c "^ERROR" hardware/vivado/build/my_core.log        # 0
 grep -c "Synth 8-311" hardware/vivado/build/my_core.log   # 0  (0 = no "ignored initial block" problem)
 grep -c "Synth 8-327" hardware/vivado/build/my_core.log   # 0  (0 = no inferred latches)
 ```
-**Expect for the whole core:** `0.234  0.000  …  0.081` (WNS 0.234 ns, TNS 0, hold slack 0.081 ns, 0 failing endpoints), LUT 1,900, registers 3,337, **DSPs 68**, **Block RAM Tile 70**.
-Per layer (routed): L1 360 LUT / 850 FF / 18 DSP / 2 BRAM, WNS +0.135 ns · L2 397 / 952 / 18 / 0, +0.261 · L3 361 / 840 / 18 / 0, +0.582 · L4 347 / 692 / 14 / 1.5, +0.698.
-Vivado is deterministic for identical inputs: my reruns reproduced these numbers exactly. **WNS > 0 means the 100 MHz clock is met**; it is small for L1 (0.135 ns) and for the core, so the margin is thin.
+**Expect for the whole core:** `0.723  0.000  …  0.081` (WNS 0.723 ns, TNS 0, hold slack 0.085 ns, 0 failing endpoints), LUT 1,896, registers 3,341, **DSPs 68**, **Block RAM Tile 70**.
+Per layer (routed): L1 298 LUT / 851 FF / 18 DSP / 2 BRAM, WNS +3.853 ns · L2 398 / 953 / 18 / 0, +3.393 · L3 369 / 841 / 18 / 0, +2.913 · L4 349 / 693 / 14 / 1.5, +3.146.
+Vivado is deterministic for identical inputs: my reruns reproduced these numbers exactly. **WNS > 0 means the 100 MHz clock is met**; the engines have 2.9 to 3.9 ns of margin and the core 0.723 ns (all out-of-context, without I/O timing).
 
 ### 4.4 🖱️ Look at the design in the Vivado GUI (checkpoints; steps not clicked by me, files are ✅)
 The scripts save the finished design as checkpoints (`post_synth.dcp`, `routed.dcp`). Open one:
@@ -326,11 +326,11 @@ source ~/Desktop/vivado_install/Vivado/2024.1/settings64.sh
 vivado hardware/vivado/build/sr_tile_core_impl/routed.dcp &
 ```
 In the GUI (Vivado 2024.1 menus):
-1. **Reports → Timing → Report Timing Summary…** → OK. *Design Timing Summary* must show Worst Negative Slack = **0.234 ns** (green), Failing endpoints 0. Click the *Setup* worst path: you should see the requantizer path (`…/res_reg → …/u_rq/p1_reg`, one DSP48E1).
-2. **Reports → Report Utilization…** → *Summary*: **DSP 68**, **Block RAM 70**, LUT ≈ 1,900. Click *Block RAM* in the table: RAMB36 68 and RAMB18 4 (the activation buffers + weight ROMs).
+1. **Reports → Timing → Report Timing Summary…** → OK. *Design Timing Summary* must show Worst Negative Slack = **0.723 ns** (green), Failing endpoints 0. Click the *Setup* worst path: you should see a layer-RAM-to-MAC path (`ramN/mem_lo_reg → eN/lane[..].u_mac/acc_reg`, ending in a DSP48E1).
+2. **Reports → Report Utilization…** → *Summary*: **DSP 68**, **Block RAM 70**, LUT ≈ 1,900 (1,896). Click *Block RAM* in the table: RAMB36 68 and RAMB18 4 (the activation buffers + weight ROMs).
 3. **Window → Device**: the placed design on the XC7Z020 chip; **Window → Schematic** shows the hierarchy (`e1…e4` engines, `ram0…ram4`).
 4. In the **Tcl console** (bottom) you can also type (these two are ✅ on the L3 checkpoint):
-   `report_utilization` and `puts [get_property SLACK [get_timing_paths -max_paths 1 -setup]]` → `0.234` for the core.
+   `report_utilization` and `puts [get_property SLACK [get_timing_paths -max_paths 1 -setup]]` → `0.723` for the core.
 If your numbers differ by a few LUTs but WNS and DSP/BRAM agree, that is placement/tool-version noise. If **DSP ≠ 68** or **BRAM ≠ 70**, something changed in the RTL — stop and investigate.
 
 ### 4.5 🖱️ (Optional, harder) Build your own Vivado GUI project — not tested by me
@@ -348,7 +348,7 @@ Works in any project you already created (the tested one was `ray_tracing_exampl
 ```tcl
 source /home/sreevenkat/Desktop/venkat/sem_project_all/hardware/vivado/scripts/add_to_open_project.tcl
 source /home/sreevenkat/Desktop/venkat/sem_project_all/hardware/vivado/scripts/sim_helpers.tcl
-run_tb core            ;# expect: PASS sr_tile_core HC=6 tile small12 ... 10957 cycles
+run_tb core            ;# expect: PASS sr_tile_core HC=6 tile small12 ... 10961 cycles
 ```
 `add_to_open_project.tcl` adds all RTL + the weight files + all 6 testbenches and **copies** `hardware/rtl/weights` and `data/golden` into the project's simulation folder (`<project>/<name>.sim/sim_1/behav/xsim/`), because the testbenches open files like `data/golden/x.hex` relative to that folder. `data/golden` must exist first (`export_rtl.py`, `gen_unit_vectors.py`; the `real*` tiles need `data/train/HR`).
 All commands (each prints one `PASS ...` line; `FAIL` = problem):
@@ -365,7 +365,7 @@ run_tb rom 1             (1 2 3 4)                           run_tb core64 real0
 
 ### 4.6 What Part 4 proves and does not prove
 **Proves:** the design synthesizes without errors, ignored initializers or latches; uses 68 DSPs and 70 block RAMs (half the chip); meets 100 MHz after place and route (out-of-context); and the synthesized netlist behaves like the RTL.
-**Does not prove:** anything about the real board: there are no pin assignments, no AXI/DMA/ARM, no I/O timing, no power measurement, and no image has been upscaled on hardware. The frame time of ≈ 1.25 s (≈ 0.8 fps) is **simulated cycle counting** (135 tiles × 926,197 cycles ÷ 100 MHz), not a measurement.
+**Does not prove:** anything about the real board: there are no pin assignments, no AXI/DMA/ARM, no I/O timing, no power measurement, and no image has been upscaled on hardware. The frame time of ≈ 1.25 s (≈ 0.8 fps) is **simulated cycle counting** (135 tiles × 926,201 cycles ÷ 100 MHz), not a measurement.
 
 ---
 
@@ -404,10 +404,10 @@ After each experiment restore with `cp` from ROOT (or just delete `/tmp/sandbox`
 | INT8 vs FP32 | mean drop 0.18 / 0.11 / 0.08 dB, worst image 0.41 dB | 2.7 |
 | Tiled == whole image (integer model) | exactly equal | `test_integer.py`, seam test (3.2) |
 | RTL == integer model | bit-exact, all layers, 9 real tiles + random layers | 3.2 / 3.3 |
-| Cycles per tile (core) | 926,197 (engines 854,145 + byte-wide I/O ≈ 72,052) | 3.3 |
+| Cycles per tile (core) | 926,201 (engines 854,149 + byte-wide I/O ≈ 72,052) | 3.3 |
 | Frame time estimate | ≈ 1.25 s at 100 MHz (≈ 0.8 fps), **simulated** | arithmetic, section 4.6 |
-| Resources, whole core | 1,900 LUT, 3,337 FF, 68 DSP, 70 BRAM tiles | 4.3 |
-| Timing at 100 MHz (routed, out-of-context) | WNS +0.234 ns, hold +0.081 ns (thin and placement-dependent: it was +0.146 ns before a small fix) | 4.3 / 4.4 |
+| Resources, whole core | 1,896 LUT, 3,341 FF, 68 DSP, 70 BRAM tiles | 4.3 |
+| Timing at 100 MHz (routed, out-of-context) | WNS +0.723 ns, hold +0.085 ns (it was +0.234 ns before the 2026-10-09 register stage in `conv_engine`; placement noise is about 0.1 ns) | 4.3 / 4.4 |
 
 ### 6.2 What is NOT verified (be honest in any report)
 * Nothing has run on the **ZedBoard** (no board available): no UART, AXI, DMA, ARM driver, HDMI, power or real fps. Milestones M0, M6, M7 are not done.

@@ -141,11 +141,11 @@ ARM reads what the DMA wrote. Forgetting this gives "random" wrong data.
 
 ## 4. Exit checklist (all must be true)
 
-- [ ] Hello World prints after every power cycle.
-- [ ] Switches control LEDs through AXI GPIO.
-- [ ] Your own AXI-Lite IP returns the correct sum.
-- [ ] DMA loopback of 256 B, 64 KB and 1 MB is byte-exact.
-- [ ] You can explain, in your own words, AXI-Lite vs AXI4 vs AXI-Stream, and why you need `Xil_DCacheFlushRange`.
+- [x] Hello World prints after every power cycle.
+- [x] Switches control LEDs through AXI GPIO.
+- [x] Your own AXI-Lite IP returns the correct sum.
+- [x] DMA loopback of 256 B, 64 KB and 1 MB is byte-exact.
+- [x] You can explain, in your own words, AXI-Lite vs AXI4 vs AXI-Stream, and why you need `Xil_DCacheFlushRange`.
 
 ## 5. Common problems
 
