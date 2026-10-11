@@ -44,9 +44,11 @@ typedef struct {
     uint32_t last_cycles;    /* CYCLES register after the last successful tile */
 } sr_dev_t;
 
-int      sr_init(sr_dev_t *d);                                   /* DMA init, VERSION / TILE_SIZE check, soft reset */
+int      sr_init(sr_dev_t *d);                                   /* DMA init, VERSION / TILE_SIZE check, DMA reset, core soft reset, STATUS idle + ERROR_CODE 0 */
 int      sr_soft_reset(sr_dev_t *d);                             /* CONTROL.SRESET and wait until STATUS is idle */
-int      sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out); /* in: 14,700 B, out: 49,152 B, both 64-byte aligned, in DDR */
+int      sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out); /* in: 14,700 B, out: 49,152 B, both 64-byte aligned, in DDR; resets DMA + core after any error */
+int      sr_run_tile_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t in_len, uint32_t out_len);   /* test only: wrong lengths on purpose */
+extern int sr_last_recover;                                      /* result of the reset after the last failed tile (SR_RC_OK = the reset worked) */
 void     sr_dump(const sr_dev_t *d, const char *why);            /* prints STATUS, ERROR_CODE, CYCLES and both DMA status registers */
 uint32_t sr_reg_read(const sr_dev_t *d, uint32_t off);
 

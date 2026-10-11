@@ -24,7 +24,7 @@
 #include "golden_tile.h"      /* generated: software/host_tools/golden_tile_h.py */
 
 #ifndef SR_TEST
-#define SR_TEST 0             /* 0 = UART menu, 1, 2 or 3 = run that test and stop */
+#define SR_TEST 0             /* 0 = UART menu; 1, 2, 3, 5 = run that test and stop; 6-9 = stale-state programs for stale_test.sh (never finish) */
 #endif
 #ifndef SR_T3_FRAMES
 #define SR_T3_FRAMES 5
@@ -154,13 +154,15 @@ static int read_input_header(sr_geom_t *g)
 
 /* g_stats: result numbers for the host (xsdb reads them from DDR, the UART may be busy) at SR_MARK_W_STATS + i; meaning per test: software/board/README.md */
 
+static int g_marker_written;
 static void write_marker(uint32_t result, uint32_t bytes, uint32_t fnv, uint32_t tiles, uint32_t test)
 {
+    g_marker_written = 1;
     volatile uint32_t *m = (volatile uint32_t *)SR_MARK_ADDR;
     m[SR_MARK_W_MAGIC] = 0;
     m[SR_MARK_W_RESULT] = result; m[SR_MARK_W_BYTES] = bytes; m[SR_MARK_W_FNV] = fnv; m[SR_MARK_W_TILES] = tiles; m[SR_MARK_W_TEST] = test;
     for (int i = 0; i < SR_MARK_NSTATS; i++) m[SR_MARK_W_STATS + i] = g_stats[i];
-    if (result != 0) for (int i = 0; i < 6; i++) m[SR_MARK_W_STATS + 24 + i] = sr_dbg[i];   /* failure: last register dump at stat24..29 */
+    for (int i = 0; i < 6; i++) m[SR_MARK_W_STATS + 24 + i] = sr_dbg[i];   /* first register dump at stat24..29 (all 0 = no dump) */
     Xil_DCacheFlushRange((UINTPTR)SR_MARK_ADDR, SR_MARK_SIZE);
     m[SR_MARK_W_MAGIC] = SR_MARK_MAGIC;                          /* last: the host polls this word */
     Xil_DCacheFlushRange((UINTPTR)SR_MARK_ADDR, SR_MARK_SIZE);
@@ -204,7 +206,7 @@ SR_MAYBE_UNUSED static int test2(void)
 {
     sr_geom_t g;
     xil_printf("T2: full image from 0x%08x\r\n", (unsigned)SR_IN_ADDR);
-    write_marker(0, 0, 0, 0, 0); ((volatile uint32_t *)SR_MARK_ADDR)[SR_MARK_W_MAGIC] = 0; Xil_DCacheFlushRange((UINTPTR)SR_MARK_ADDR, SR_MARK_SIZE);   /* clear the marker */
+    write_marker(0, 0, 0, 0, 0); ((volatile uint32_t *)SR_MARK_ADDR)[SR_MARK_W_MAGIC] = 0; Xil_DCacheFlushRange((UINTPTR)SR_MARK_ADDR, SR_MARK_SIZE); g_marker_written = 0;   /* clear the marker */
     int rc = read_input_header(&g);
     if (rc) { write_marker((uint32_t)rc, 0, 0, 0, 2); return rc; }
     xil_printf("T2: %ux%u -> %ux%u, %u x %u = %u tiles\r\n", g.w, g.h, 2 * g.w, 2 * g.h, g.tiles_x, g.tiles_y, g.tiles_x * g.tiles_y);
@@ -264,15 +266,76 @@ SR_MAYBE_UNUSED static int test3(void)
     return finish_output(&g, tiles, 3);
 }
 
+/* ------------------------------------------------------------------ T5: error recovery (SR_TEST=5)
+ * Each bad tile must fail with an error code, the driver's reset after it must work, and the NEXT normal tile must be byte-exact again.
+ * stats: [0] number of cases, then per case i: [1+3i] rc of the bad tile, [2+3i] sr_last_recover, [3+3i] 1 if the following good tile was byte-exact */
+SR_MAYBE_UNUSED static int test5(void)
+{
+    static uint8_t out[SR_TILE_OUT_BYTES] __attribute__((aligned(64)));
+    static const struct { uint32_t in_len, out_len; const char *what; } bad[] = {
+        { 4000u,  SR_TILE_OUT_BYTES, "input too short (TLAST early)" },
+        { 16000u, SR_TILE_OUT_BYTES, "input too long (no TLAST on the last word)" },
+        { SR_TILE_IN_BYTES, 20000u,  "S2MM buffer too short (core stuck in output)" },
+        { 4000u,  20000u,            "both wrong" },
+    };
+    const int n = (int)(sizeof bad / sizeof bad[0]);
+    int fails = 0;
+    memset(out, 0xA5, SR_TILE_OUT_BYTES);
+    int rc = sr_run_tile(&dev, sr_golden_in, out);
+    if (rc != SR_RC_OK || memcmp(out, sr_golden_out, SR_TILE_OUT_BYTES) != 0) {
+        uint32_t nd = 0, first = 0xFFFFFFFFu;
+        for (uint32_t k = 0; k < SR_TILE_OUT_BYTES; k++) if (out[k] != sr_golden_out[k]) { nd++; if (first == 0xFFFFFFFFu) first = k; }
+        g_stats[20] = (uint32_t)rc; g_stats[21] = nd; g_stats[22] = first; g_stats[23] = (uint32_t)(uintptr_t)out;
+        xil_printf("T5 FAIL: first good tile (rc %d, %u bytes differ)\r\n", rc, nd); write_marker(100, 0, 0, 0, 5); return -1;
+    }
+    g_stats[0] = (uint32_t)n;
+    for (int i = 0; i < n; i++) {
+#ifdef SR_T5_ONLY
+        if (i != SR_T5_ONLY) continue;                             /* debug builds: run only one of the bad cases */
+#endif
+        sr_last_recover = -1;
+        const int rb = sr_run_tile_len(&dev, sr_golden_in, out, bad[i].in_len, bad[i].out_len);
+        const int rr = sr_last_recover;
+        memset(out, 0xA5, SR_TILE_OUT_BYTES);
+        const int rg = sr_run_tile(&dev, sr_golden_in, out);
+        const int good = (rg == SR_RC_OK) && memcmp(out, sr_golden_out, SR_TILE_OUT_BYTES) == 0;
+        xil_printf("T5 case %d (%s): bad tile rc %d, reset after it rc %d, next good tile %s\r\n", i, bad[i].what, rb, rr, good ? "byte-exact" : "WRONG");
+        g_stats[1 + 3 * i] = (uint32_t)rb; g_stats[2 + 3 * i] = (uint32_t)rr; g_stats[3 + 3 * i] = (uint32_t)good;
+        if (rb == SR_RC_OK || rr != SR_RC_OK || !good) fails++;
+    }
+    xil_printf(fails ? "T5 FAIL\r\n" : "T5 PASS\r\n");
+    write_marker(fails ? 100u : 0u, 0, 0, (uint32_t)n, 5);
+    return fails ? -1 : 0;
+}
+
 /* ------------------------------------------------------------------ main */
 int main(void)
 {
+#ifdef SR_NOCACHE
+    Xil_DCacheDisable();                                          /* debug builds only: run with the data caches off */
+#endif
     xil_printf("\r\n--- SR accelerator test (SR_BASE 0x%08x, DMA 0x%08x) ---\r\n", (unsigned)SR_BASE, (unsigned)SR_DMA_BASE);
     if (check_memory_map() != 0) return 1;
     int rc = sr_init(&dev);
     if (rc != SR_RC_OK) { xil_printf("sr_init failed: %d\r\n", rc); write_marker((uint32_t)rc, 0, 0, 0, 0); return rc; }
     xil_printf("init ok: VERSION 0x%08x, TILE_SIZE %u\r\n", sr_reg_read(&dev, SR_REG_VERSION), sr_reg_read(&dev, SR_REG_TILE_SIZE));
-#if SR_TEST == 1
+#if SR_TEST >= 6 && SR_TEST <= 9
+    /* stale-state programs for software/board/stale_test.sh: leave the DMA / core in a half-finished state, then spin (they never finish).
+     *   9 = MM2S started with the full tile, core NOT started: the DMA stays blocked in the middle of its transfer
+     *   7 = MM2S with only 4,000 of 14,700 bytes, then START: the core is stuck in the middle of its LOAD phase
+     *   6 = MM2S full, START, S2MM armed for only 20,000 of 49,152 bytes: the core is stuck in the middle of its OUTPUT phase
+     *   8 = everything started normally, not waited for (the tile completes by itself) */
+    Xil_DCacheFlushRange((UINTPTR)sr_golden_in, SR_TILE_IN_BYTES);
+    Xil_DCacheFlushRange((UINTPTR)SR_TILE_OUT_ADDR, SR_TILE_OUT_BYTES);
+    if (SR_TEST == 8) XAxiDma_SimpleTransfer(&dev.dma, (UINTPTR)SR_TILE_OUT_ADDR, SR_TILE_OUT_BYTES, XAXIDMA_DEVICE_TO_DMA);
+    if (SR_TEST == 6) XAxiDma_SimpleTransfer(&dev.dma, (UINTPTR)SR_TILE_OUT_ADDR, 20000u, XAXIDMA_DEVICE_TO_DMA);
+    XAxiDma_SimpleTransfer(&dev.dma, (UINTPTR)sr_golden_in, SR_TEST == 7 ? 4000u : SR_TILE_IN_BYTES, XAXIDMA_DMA_TO_DEVICE);
+    if (SR_TEST != 9) Xil_Out32(SR_BASE + SR_REG_CONTROL, SR_CTRL_START);
+    xil_printf("stale-state program %d: transfers started, not waiting\r\n", SR_TEST);
+    for (;;) { }
+#elif SR_TEST == 5
+    rc = test5();
+#elif SR_TEST == 1
     rc = test1();
 #elif SR_TEST == 2
     rc = test2();
@@ -280,15 +343,17 @@ int main(void)
     rc = test3();
 #else
     for (;;) {
-        xil_printf("\r\nMenu: 1 = golden tile, 2 = full image, 3 = timing  > ");
+        xil_printf("\r\nMenu: 1 = golden tile, 2 = full image, 3 = timing, 5 = error recovery  > ");
         const char c = inbyte();
         xil_printf("%c\r\n", c);
         if (c == '1') rc = test1();
         else if (c == '2') rc = test2();
         else if (c == '3') rc = test3();
+        else if (c == '5') rc = test5();
         else xil_printf("?\r\n");
     }
 #endif
+    if (!g_marker_written) write_marker(rc ? (uint32_t)(rc < 0 ? 100 : rc) : 0u, 0, 0, 0, SR_TEST);   /* every exit path tells the host */
     xil_printf("done, result %d\r\n", rc);
     for (;;) { }
     return rc;

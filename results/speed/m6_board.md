@@ -58,10 +58,80 @@ The ARM copies and the DMA are also not overlapped (the ARM waits). Both are pos
   There is no oscilloscope-grade check.
 * One image, one board, one bitstream build. The DIV2K image is a training image: speed and bit-exactness do not depend on that, quality numbers would.
 * Time per tile does not depend on the data (the core is data-independent), so other images should give the same frame time; not run.
-* **Unexplained failures.** Right after the first successful xsdb runs (T1, 128x128 T2) the first five attempts at 960x540 failed: error code 7 (core reported ERROR_CODE 1 = TLAST
-  at the wrong input word, STATUS 0x5, MM2S idle, CYCLES 14,806 or 14,824) or 6 (timeout, once), at the first tile, and the debug port then stayed stuck ("AHB AP transaction error")
-  until `rst -system`. After that reset the same program, same image and same script gave 14 correct runs in a row (3 T2, 3 T3 invocations, 5 more T2 runs without `rst -system`
-  in the script, repeated 128/960 alternation). I do not know what caused the early failures. It was a real error in the board/PL state, not a data error (the stream length is
-  data independent). If it comes back, the register dump is in `stat24..29`. The recovery path of the driver (soft reset + DMA reset after an error) was exercised only by these accidents and its
-  outcome was not checked.
-* Not yet done: power-cycle test, running from the Vitis GUI after the timer change, UART output of T2/T3 (the UART was held by another terminal and I cannot read it).
+* **Early failures** (first five 960x540 attempts, error 7 / 6 on tile 0): investigated on 2026-10-11, see section 6. Only partly explained.
+* Not yet done: running from the Vitis GUI after the timer/driver changes, UART output of T2/T3 (the UART was held by another terminal and I cannot read it).
+
+## 5. Power-cycle test (2026-10-11, BOARD-MEASURED)
+The owner switched the board off (SW8, 10 s) and on. Then, with `run_board.tcl` (old script version, `rst -system` included):
+| Run | Result |
+|---|---|
+| T1 golden tile | PASS: 20/20 repeats identical, CYCLES min/max/mean 926,217 / 926,220 / 926,219, tile time 9,520 / 9,523 / 9,521 us |
+| T2 960x540 | **byte-exact** vs the integer model, FNV-1a 0xcf947f22 (same as before the power cycle), 135 tiles, 1,311.6 ms (pad 5.9, ARM copy 26.4, DMA+compute 1,279.3 ms), CYCLES 926,217-926,241 |
+
+After the driver changes (section 6), T3 was run again: 5 frames, mean / min / max 1,312.9 / 1,311.9 / 1,314.0 ms, CYCLES per tile 926,217 / 926,220 / 926,241, output byte-exact. Same as before within 1 ms.
+
+## 6. Investigation of the early failures (2026-10-11)
+Owner's hypothesis: stale DMA / core state from an interrupted run. What was done, what was found. All on the board, all runs started with xsdb (no Vitis GUI).
+
+### 6.1 Tools added
+* `software/board/interrupt_test.tcl`: start a program, stop the CPU after N ms, print the DMA and core registers.
+* Stale-state programs (SR_TEST): 9 = MM2S started, core not started (MM2S blocked half-way); 7 = MM2S with 4,000 of 14,700 bytes then START (core stuck in its LOAD
+  phase); 6 = S2MM armed for 20,000 of 49,152 bytes (core stuck in its OUTPUT phase); 8 = a tile started and not waited for. Their state, read after the CPU was stopped,
+  confirms the intended situation (e.g. SR_TEST=7: STATUS busy+error, ERROR_CODE 1; SR_TEST=6: STATUS busy, S2MM_SR 0x5011 = halted + internal error; SR_TEST=9: MM2S_SR 0 = running).
+* `software/board/stale_test.sh [nofpga]`: each stale situation, then a FRESH 128x128 T2 run that must be byte-exact (plus a check that the program image in DDR equals the ELF).
+* SR_TEST=5 (T5): deliberate errors inside one program: input too short (TLAST early), input too long (no TLAST), S2MM buffer too short (core stuck -> timeout), both;
+  after each, the driver's reset must work and the next normal tile must be byte-exact.
+* `software/board/soak_test.sh N`: N rounds of T1 / T2 128x128 / T2 960x540 with every check.
+* Stopping the CPU (the owner's cases a and b) does NOT stop the PL: the tile in flight finishes by itself (registers read after the stop always showed DONE, CYCLES 926,220).
+  A real "stopped during the output phase" state therefore needs the SR_TEST=6 program; case c = SR_TEST=9.
+
+### 6.2 Finding 1 (proven, fixed): program reload over a running program corrupts the new program
+* Loading an ELF with `rst -processor` + `dow` (no system reset) over a previous program: dirty data-cache lines of the OLD program were written back over the NEW one.
+  Proof: after T2 -> SR_TEST=9, the new program died in its data-abort handler (DFAR 0x16100000, DFSR 0x805 = translation fault); its MMU table read back physically
+  (DAP, no cache) had 519 zero words starting exactly at the cache line of the OLD program's `__bss_start` (0x10c0a0). Reproduced 3 of 3 (T2 -> 9 crashed, 9 -> T2 failed
+  with error 7 each time).
+* Fix in `run_board.tcl` / `interrupt_test.tcl`: L2 cache off before loading and the ELF loaded twice. A/B with the soak test (T1 / T2 / T2 alternating, so the ELF changes
+  every run): loaded once: 6 OK, 3 FAILED (every T1 after a T2 hung); loaded twice: 15 of 15 OK, and 30 more OK later; every run's read-only sections checked against the ELF
+  (`verify_load.py`): always intact. I do not know which tool step does the write-back (xsdb's cache maintenance after `dow` is the likely one; not proven).
+* This alone can explain failures after switching programs (T1 ELF -> T2 ELF was exactly the situation of the first failures), but it does not explain finding 3.
+
+### 6.3 Finding 2 (fixed): reset order in the driver
+* `sr_init` and the recovery after every tile error/timeout now do: core soft reset -> AXI DMA reset (wait for ResetIsDone, ~1 s timeout) -> core soft reset -> check
+  STATUS idle and ERROR_CODE 0. Before, init did no explicit DMA reset (only the one inside `XAxiDma_CfgInitialize`) and recovery did core -> DMA.
+* With DMA -> core (my first version), T5 case "S2MM buffer too short" was followed by a WRONG next tile (seen once with per-case numbers). With core -> DMA -> core:
+  T5 passed 5 of 6 runs (each: 4 bad tiles rejected with error 7 / 7 / 6 / 7, every reset OK, every following tile byte-exact); the 6th failed already on its first NORMAL
+  tile, inside a finding-3 episode.
+* The core reset first stops the core from pushing output words into the S2MM channel while it is being reset; that is my explanation, not proven.
+
+### 6.4 Owner's cases a, b, c WITHOUT a system reset
+| Mode | Runs | Result |
+|---|---|---|
+| bitstream NOT reloaded (stale PL state really kept), 7 situations (T2 stopped at 300/517/733 ms, SR_TEST 9, 7, 6, 8) | 2 x 7 | **14 of 14 fresh runs byte-exact** |
+| bitstream reloaded by the script | 8 x 7 = 56 | 52 of 56 byte-exact; the 4 failures have the finding-3 signature (2 of them in a run where every load was preceded by `rst -system`) |
+| T2 stopped at 517 / 733 ms, then fresh run, bitstream reloaded | 8 + 8 | 16 of 16 OK |
+
+So the driver does recover from a DMA blocked half-way, a core stuck in LOAD, a core stuck in OUTPUT and a tile left running, when the PL keeps that state.
+The DMA reset finished even with the MM2S channel blocked half-way (SR_TEST=9 then fresh run with the bitstream kept).
+
+### 6.5 Finding 3 (NOT explained, open): first-tile stream errors, sometimes a lasting "bad state"
+* Signature (the same as the very first failures): first tile of a program, STATUS busy+error, ERROR_CODE 2 (input word 3,675 without TLAST = the core counted one word more
+  than the DMA sent before TLAST) or 1 (TLAST early), CYCLES about 14,850 (end of the load phase), MM2S idle; or (rarer) a timeout with the core still in LOAD and MM2S not
+  finished. When a whole tile is processed in that state its output differs in 48,385 of 49,152 bytes (twice the same number: looks like a 1-word shift).
+* Sometimes it is a single failure (the next run is fine). Sometimes the board stays in a state where EVERY new program fails, also after reloading the bitstream, also with the data caches disabled (debug build `-DSR_NOCACHE`), also with the
+  bitstream not reloaded. It survived 9 consecutive runs. A system reset (`rst -system` / `dap_reset.tcl`) cleared it every time (4 times).
+* Seen in about 4 hours: 4 single failures in 56 stale-test fresh runs (2 of them in the run set where every load was preceded by `rst -system`), and 4 lasting episodes
+  (the first failures of the day, after normal runs; on the first program after a `dap_reset.tcl` system reset; right after a T5 error-injection run;
+  after a T5 single-case run followed by one good T1). I could not make it start on purpose (4 rounds "T5 single case -> 3 x T1" started it once, in the last round, after a T5 case that had not caused it before).
+* So it lives in the PS (or in something a PL reload does not reset) and is cleared by a PS reset. Checked and ruled out: CPU data caches (still fails with the data caches off;
+  the program-image check was added later and has not yet run in a failing run), the clock structure (one clock, FCLK0 100 MHz, standard proc_sys_reset; no CDC in `report_cdc`), timing (the routed design meets
+  setup and hold; the worst hold paths, +0.023 ns, are inside the AXI DMA and the AXI interconnect, normal for these IPs). Reading the HP0 AFI registers hung the debug port.
+* Last change, NOT yet proven: `run_board.tcl` now holds the PL in reset and switches the PS-PL level shifters off before reprogramming the PL (Xilinx's procedure for PL
+  reconfiguration while the PS runs; `ps7_post_config` switches them on again). Hypothesis: without it, the PL's pins toggling during configuration can create a spurious
+  transaction on a PS AXI port (GP0 or HP0) that stays half-open until a PS reset. After this change: 15 of 15 soak runs + T5 + T3 OK, no bad state. That is too few runs to
+  call it fixed.
+* What would settle it: (1) a long soak (a few hundred program starts) with and without the isolation step; (2) debug counters in `sr_accel_top` (input words since START,
+  words accepted before START, START count) so a failure shows exactly which side added the word; (3) an ILA on s_axis. (2) and (3) need an RTL change and a new bitstream.
+
+### 6.6 State at the end of the day
+With the final scripts (PL isolation + double load + final driver), after a system reset: T5 PASS, T3 byte-exact (1.313 s per frame), soak 15 of 15. Finding 3 is
+open; the M6 checklist item "repeated runs give identical output" is therefore not closed.

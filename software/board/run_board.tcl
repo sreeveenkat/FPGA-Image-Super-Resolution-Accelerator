@@ -26,17 +26,38 @@ set need [list $BIT $PS7_INIT $ELF]
 if {$IN_RAW ne "-"} { lappend need $IN_RAW }
 foreach f $need { if {![file exists $f]} { puts "ERROR: missing file $f"; exit 2 } }
 
+# PS-PL isolation before reprogramming the PL (env SR_NO_ISOLATE=1 skips it, A/B test only): hold the PL in reset (FPGA_RST_CTRL) and switch the PS-PL level
+# shifters off (LVL_SHFTR_EN), so that the PL's outputs toggling during configuration cannot reach the PS AXI ports.  ps7_post_config switches them on again
+# and releases the PL resets.  (Xilinx's guidance for PL reconfiguration with a running PS; without it the board sometimes got into a state where every
+# tile failed until a system reset, see results/speed/m6_board.md.)
+proc sr_isolate_pl {} {
+    if {[info exists ::env(SR_NO_ISOLATE)] && $::env(SR_NO_ISOLATE) eq "1"} { return }
+    targets -set -nocase -filter {name =~ "arm*#0"}
+    configparams force-mem-accesses 1
+    mwr 0xF8000008 0xDF0D        ;# SLCR unlock
+    mwr 0xF8000240 0xF           ;# FPGA_RST_CTRL: FCLK_RESET0..3 asserted
+    mwr 0xF8000900 0x0           ;# LVL_SHFTR_EN: PS-PL level shifters off
+    configparams force-mem-accesses 0
+}
+
 connect
 puts "targets:"; puts [targets]
 
-# 0. system reset first: a previous run that hung the PS leaves the debug port unusable ("AHB AP transaction error") until the system is reset
-targets -set -nocase -filter {name =~ "APU*"}
-rst -system
-after 1500
+# 0. optional system reset
+# Optional (env SR_SYSRST=1): a system reset first.  Not needed normally; use it if the debug port is stuck ("AHB AP transaction error", core in "Vector Catch").
+if {[info exists ::env(SR_SYSRST)] && $::env(SR_SYSRST) eq "1"} {
+    targets -set -nocase -filter {name =~ "APU*"}
+    rst -system
+    after 1500
+}
 
 # 1. program the FPGA (the PL device is called xc7z020 on the JTAG chain)
-targets -set -nocase -filter {name =~ "xc7z*"}
-fpga -file $BIT
+# env SR_NOFPGA=1 skips this step (the PL keeps whatever state the previous run left: used to test stale-state recovery)
+if {![info exists ::env(SR_NOFPGA)] || $::env(SR_NOFPGA) ne "1"} {
+    sr_isolate_pl
+    targets -set -nocase -filter {name =~ "xc7z*"}
+    fpga -file $BIT
+}
 
 # 2. initialise the processing system (clocks, DDR, MIO, UART) and load the program
 targets -set -nocase -filter {name =~ "arm*#0"}
@@ -44,7 +65,19 @@ rst -processor
 source $PS7_INIT
 ps7_init
 ps7_post_config
+# The L2 cache controller (PL310) is NOT reset by "rst -processor": it still holds lines, also DIRTY ones, of the previous program.  "dow" writes DDR directly,
+# so the new program could read stale L2 lines, or a stale dirty line could be written back over the freshly loaded program or data.  Disable the L2 before
+# loading (the BSP boot code invalidates and re-enables it).  env SR_NO_L2_OFF=1 skips this (only for the A/B test of this fix).
+if {![info exists ::env(SR_NO_L2_OFF)] || $::env(SR_NO_L2_OFF) ne "1"} {
+    configparams force-mem-accesses 1
+    mwr 0xF8F02100 0            ;# L2CC control register: bit 0 = enable
+    configparams force-mem-accesses 0
+}
+# Without a system reset, dirty data-cache lines of the PREVIOUS program survive "rst -processor" and can be written back over the new program (proven on the
+# board: zeros from the old program's .bss inside the new program's MMU table -> data abort).  Loading twice (the first load flushes those lines out, the second
+# writes the image again) removed this in every test; SR_VERIFY_DUMP checks the result.  env SR_DOW2=0 = load once (only for the A/B test).
 dow $ELF
+if {![info exists ::env(SR_DOW2)] || $::env(SR_DOW2) ne "0"} { dow $ELF }
 
 # 3. input image into DDR, marker cleared
 if {$IN_RAW ne "-"} { dow -data $IN_RAW $IN_ADDR }
@@ -80,6 +113,14 @@ for {set i 0} {$i < $NSTATS} {incr i} {
 }
 puts "stats: [join $sl { }]"
 if {$STATS_F ne ""} { set fh [open $STATS_F w]; puts $fh [join $sl "\n"]; close $fh }
+# 5b. optional (env SR_VERIFY_DUMP=<file> SR_VERIFY_BYTES=<n>): physical copy of the program image (0x00100000, n bytes) read AFTER the run through the
+#     DAP (no CPU cache in the path), checked against the ELF by verify_load.py: shows whether the program in DDR was still intact.
+if {[info exists ::env(SR_VERIFY_DUMP)]} {
+    targets -set -nocase -filter {name =~ "APU*"}
+    mrd -bin -file $::env(SR_VERIFY_DUMP) 0x00100000 [expr {$::env(SR_VERIFY_BYTES) / 4}]
+    targets -set -nocase -filter {name =~ "arm*#0"}
+}
+
 if {$result != 0} { puts "ERROR: the program reported error code $result (see the UART)"; exit 1 }
 
 # 6. read the output image back (word count = bytes / 4)

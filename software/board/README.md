@@ -1,10 +1,10 @@
 # software/board - ARM program, register header and board scripts (M6)
 
-**Status: first board run 2026-10-11 (T1, T2 at 128x128 and 960x540, T3 all pass, byte-exact vs the integer model): numbers in `results/speed/m6_board.md`.**
+**Status: runs on the board since 2026-10-11 (T1, T2 at 128x128 and 960x540, T3, T5 pass, byte-exact vs the integer model, also after a power cycle; one open intermittent problem): `results/speed/m6_board.md`.**
 Before that it was tested on the PC only. PC-side checks: the register header against the Verilog
 (`test_regs.py`), the tiling code against the integer model (`test_tiling.py`, bit-exact incl. 960x540), the host tools (`../host_tools/test_host_tools.py`),
-and that the program compiles and links with the Vitis ARM compiler against the BSP of the M0 platform (`check_arm_build.sh`). Still NOT verified on the board: the
-timeout/recovery paths (never triggered), power-cycle behaviour, runs from the Vitis GUI after the timer change.
+and that the program compiles and links with the Vitis ARM compiler against the BSP of the M0 platform (`check_arm_build.sh`). Still NOT verified on the board: runs from the Vitis GUI
+after the timer/driver changes.
 
 | File | What |
 |---|---|
@@ -18,7 +18,12 @@ timeout/recovery paths (never triggered), power-cycle behaviour, runs from the V
 | `test_regs.py` | header == Verilog == docs |
 | `check_arm_build.sh` | compile + link of all four `SR_TEST` variants with the Vitis ARM gcc against the zed_platform BSP |
 | `build_elf.sh` | builds `build/sr_app_t<N>.elf` (git-ignored) against the m6_platform BSP, without touching the Vitis project |
-| `run_board.tcl` | xsdb script: system reset, program, run, push input, wait for marker, read output and the numbers (used on the board 2026-10-11) |
+| `run_board.tcl` | xsdb script: program the PL, init the PS, load the ELF (twice, L2 off), push input, run, wait for the marker, read output + numbers. Before reprogramming the PL it holds the PL in reset and switches the PS-PL level shifters off. Env: `SR_SYSRST=1` system reset first, `SR_NO_ISOLATE=1` skip the PL isolation (test only), `SR_NOFPGA=1` keep the loaded bitstream, `SR_DOW2=0` load once (test only), `SR_VERIFY_DUMP`/`SR_VERIFY_BYTES` dump the program image after the run |
+| `interrupt_test.tcl` | xsdb: start a program, stop the CPU after N ms, print DMA/core registers (stale-state tests) |
+| `stale_test.sh` | board test: leave the DMA/core half-way (stopped T2, SR_TEST=6..9 programs), then a fresh 128x128 run must be byte-exact; `nofpga` = without reloading the bitstream |
+| `soak_test.sh` | board test: N rounds of T1 / T2 128x128 / T2 960x540, every run checked (result, byte-exact, program image intact) |
+| `verify_load.py` | compares the program image read back from DDR (physically) with the ELF |
+| `dap_reset.tcl` | xsdb: system reset when the debug port is stuck ("AHB AP transaction error") |
 
 ## Memory map (DDR 0x0000_0000 - 0x1FFF_FFFF, 512 MB)
 | Region | Address | Size reserved | Used |
@@ -57,8 +62,15 @@ Image format SRIM: `software/host_tools/srim.py`. The board prints `fnv1a32=...`
 ## Things to know
 * TIMER: `XTime_GetTime()` gave 0 on the board (the first run printed "tile time 0 us"; cause not isolated). The driver now enables and reads the A9 global timer itself
   (`sr_timer_init`, `sr_now_ticks`). Its 1 s timeouts depend on it.
-* run_board.tcl does `rst -system` first. Reason: after a few failed runs the debug port was stuck ("AHB AP transaction error", core in "Vector Catch") until `rst -system`.
-  Those failed runs (error 7 / 6, see results/speed/m6_board.md) did NOT come back afterwards, also not without `rst -system`: the cause is unknown.
+* LOADING A NEW PROGRAM OVER A RUNNING ONE (no system reset): `rst -processor` does not clear the CPU caches. Dirty lines of the old program were written back
+  over the new one on the board (proven: zeros from the old program's .bss inside the new program's MMU table -> data abort; old T2 -> T9 crashed 3 of 3,
+  T9 -> T2 failed 3 of 3). run_board.tcl therefore disables the L2 cache and loads the ELF twice; with that, 0 failures in the stale and soak tests
+  (results/speed/m6_board.md). This is a measured workaround, not a documented xsdb feature. `SR_SYSRST=1` (system reset, what Vitis does) also avoids it.
+* The driver (`sr_init`, and after every tile error/timeout) resets: core soft reset -> AXI DMA reset (wait, ~1 s timeout) -> core soft reset -> check STATUS idle
+  and ERROR_CODE 0. Core first: with the DMA reset first, a tile after an "S2MM buffer too short" error came out wrong on the board.
+* If xsdb says "AHB AP transaction error" / no ARM targets: `xsdb software/board/dap_reset.tcl` (seen after interrupting programs and after reading AFI registers).
+* OPEN PROBLEM: sometimes the first tile fails with ERROR_CODE 2 or 1 (one input word too many / too few), sometimes the board then stays in that state until a system
+  reset (`dap_reset.tcl`). Not explained yet; see results/speed/m6_board.md section 6.5. If a run fails with result 7 and stat25 = 2 or 1: run `dap_reset.tcl` and repeat.
 * In this BSP `COUNTS_PER_SECOND` is `XPAR_CPU_CORE_CLOCK_FREQ_HZ/2` WITHOUT parentheses (xtimer_config.h): the sources wrap it (`TICKS_PER_SEC`). `xtime_l.h` does not exist
   in the SDT platform export; `XTime_GetTime` comes from `xiltimer.h` (the sources use `#if defined(SDT)`).
 * The driver arms S2MM first, then MM2S, then writes CONTROL.START (the core accepts no data before START). After any timeout or error it soft-resets the core and the DMA.
@@ -70,4 +82,5 @@ Words at `SR_MARK_ADDR + 32 + 4*i` (`stat<i>` in the stats file). Times in micro
 * T1: stat0..2 CYCLES min/max/mean over 21 runs, stat3..5 tile time min/max/mean, stat6 number of repeats identical to the first run (of 20).
 * T2: stat0 total, stat1 padding, stat2 ARM tile copy (cut + place), stat3 DMA + compute wait, stat4..6 CYCLES min/max/mean.
 * T3: stat0 frames, stat1..3 frame total mean/min/max, stat4 pad mean, stat5 ARM copy mean, stat6..8 DMA+compute wait mean/min/max, stat9..11 CYCLES min/max/mean.
-* On failure (result != 0): stat24..29 = last register dump: STATUS, ERROR_CODE, CYCLES, MM2S_SR, S2MM_SR, dump count.
+* T5 (error recovery, SR_TEST=5): stat0 number of cases (4), then per case i: stat(1+3i) rc of the bad tile, stat(2+3i) rc of the reset after it, stat(3+3i) 1 = next tile byte-exact.
+* stat24..29 = FIRST register dump of the run (all 0 = none): STATUS, ERROR_CODE, CYCLES, MM2S_SR, S2MM_SR, number of dumps.

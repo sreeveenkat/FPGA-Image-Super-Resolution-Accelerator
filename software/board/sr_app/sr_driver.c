@@ -48,12 +48,15 @@ static uint32_t dma_sr(const sr_dev_t *d, int dir)       /* dir: XAXIDMA_DMA_TO_
     return XAxiDma_ReadReg(d->dma.RegBase, ch + XAXIDMA_SR_OFFSET);
 }
 
-uint32_t sr_dbg[6];       /* last sr_dump(): STATUS, ERROR_CODE, CYCLES, MM2S_SR, S2MM_SR, count (main.c copies it into the DDR marker on failure) */
+uint32_t sr_dbg[6];       /* FIRST sr_dump() since start: STATUS, ERROR_CODE, CYCLES, MM2S_SR, S2MM_SR, then the number of dumps (main.c copies it into the DDR marker) */
 
 void sr_dump(const sr_dev_t *d, const char *why)
 {
-    sr_dbg[0] = reg_rd(d, SR_REG_STATUS); sr_dbg[1] = reg_rd(d, SR_REG_ERROR_CODE); sr_dbg[2] = reg_rd(d, SR_REG_CYCLES);
-    sr_dbg[3] = dma_sr(d, XAXIDMA_DMA_TO_DEVICE); sr_dbg[4] = dma_sr(d, XAXIDMA_DEVICE_TO_DMA); sr_dbg[5]++;
+    if (sr_dbg[5] == 0) {
+        sr_dbg[0] = reg_rd(d, SR_REG_STATUS); sr_dbg[1] = reg_rd(d, SR_REG_ERROR_CODE); sr_dbg[2] = reg_rd(d, SR_REG_CYCLES);
+        sr_dbg[3] = dma_sr(d, XAXIDMA_DMA_TO_DEVICE); sr_dbg[4] = dma_sr(d, XAXIDMA_DEVICE_TO_DMA);
+    }
+    sr_dbg[5]++;
     xil_printf("SR DUMP (%s): STATUS=0x%08x ERROR_CODE=%u CYCLES=%u MM2S_SR=0x%08x S2MM_SR=0x%08x\r\n", why,
                reg_rd(d, SR_REG_STATUS), reg_rd(d, SR_REG_ERROR_CODE), reg_rd(d, SR_REG_CYCLES),
                dma_sr(d, XAXIDMA_DMA_TO_DEVICE), dma_sr(d, XAXIDMA_DEVICE_TO_DMA));
@@ -79,7 +82,40 @@ int sr_soft_reset(sr_dev_t *d)
         sr_dump(d, "soft reset did not give idle STATUS");
         return SR_RC_RESET;
     }
+    if (reg_rd(d, SR_REG_ERROR_CODE) != SR_ERR_NONE) { sr_dump(d, "ERROR_CODE not 0 after soft reset"); return SR_RC_RESET; }
     return SR_RC_OK;
+}
+
+/* Reset the AXI DMA (both channels) and wait until the reset is done, about 1 s at most.  Aborts any transfer a previous program left behind
+ * (on the board this also worked with the MM2S channel blocked half-way, see results/speed/m6_board.md). */
+static int dma_reset(sr_dev_t *d)
+{
+    uint64_t t0, t;
+    XAxiDma_Reset(&d->dma);
+    t0 = sr_now_ticks();
+    do {
+        if (XAxiDma_ResetIsDone(&d->dma)) {
+            XAxiDma_IntrDisable(&d->dma, XAXIDMA_IRQ_ALL_MASK, XAXIDMA_DEVICE_TO_DMA);     /* polling only */
+            XAxiDma_IntrDisable(&d->dma, XAXIDMA_IRQ_ALL_MASK, XAXIDMA_DMA_TO_DEVICE);
+            return SR_RC_OK;
+        }
+        t = sr_now_ticks();
+    } while (t - t0 < SR_TIMEOUT_TICKS);
+    sr_dump(d, "DMA reset did not finish");
+    return SR_RC_DMA_INIT;
+}
+
+/* Clean start from ANY state (also a DMA or core left in the middle of a tile by an earlier, interrupted program):
+ *   1. core soft reset: the core stops sending output words (otherwise the S2MM channel may take some of them into its FIFO during/after its reset; on the board
+ *      a DMA-then-core order gave a WRONG next tile after a "S2MM buffer too short" error, see results/speed/m6_board.md),
+ *   2. DMA reset, wait until done: aborts both channels (also an MM2S transfer that is blocked half-way),
+ *   3. core soft reset again (anything the DMA pushed into the core before/while it was reset is dropped), then STATUS idle and ERROR_CODE 0 are checked. */
+static int reset_all(sr_dev_t *d)
+{
+    (void)sr_soft_reset(d);
+    const int rc = dma_reset(d);
+    if (rc != SR_RC_OK) return rc;
+    return sr_soft_reset(d);
 }
 
 int sr_init(sr_dev_t *d)
@@ -91,8 +127,6 @@ int sr_init(sr_dev_t *d)
     if (cfg == NULL) { xil_printf("SR: DMA config for 0x%08x not found\r\n", (unsigned)SR_DMA_BASE); return SR_RC_DMA_INIT; }
     if (XAxiDma_CfgInitialize(&d->dma, cfg) != XST_SUCCESS) { xil_printf("SR: DMA init failed\r\n"); return SR_RC_DMA_INIT; }
     if (XAxiDma_HasSg(&d->dma)) { xil_printf("SR: DMA is in scatter-gather mode, simple mode expected\r\n"); return SR_RC_DMA_INIT; }
-    XAxiDma_IntrDisable(&d->dma, XAXIDMA_IRQ_ALL_MASK, XAXIDMA_DEVICE_TO_DMA);     /* polling only */
-    XAxiDma_IntrDisable(&d->dma, XAXIDMA_IRQ_ALL_MASK, XAXIDMA_DMA_TO_DEVICE);
 
     const uint32_t ver = reg_rd(d, SR_REG_VERSION);
     if (ver != SR_VERSION) {
@@ -101,25 +135,20 @@ int sr_init(sr_dev_t *d)
     }
     const uint32_t hc = reg_rd(d, SR_REG_TILE_SIZE);
     if (hc != SR_HC) { xil_printf("SR: TILE_SIZE %u, expected %u\r\n", hc, (unsigned)SR_HC); return SR_RC_TILE_SIZE; }
-    return sr_soft_reset(d);
+    return reset_all(d);                                           /* (XAxiDma_CfgInitialize resets the DMA too, but with a loop-count timeout and before the core) */
 }
 
-/* After a timeout or an error: reset the core and the DMA so that the next tile can start from a clean state. */
-static void recover(sr_dev_t *d)
-{
-    uint64_t t0, t;
-    (void)sr_soft_reset(d);
-    XAxiDma_Reset(&d->dma);
-    t0 = sr_now_ticks();
-    do { t = sr_now_ticks(); } while (!XAxiDma_ResetIsDone(&d->dma) && t - t0 < SR_TIMEOUT_TICKS);
-    XAxiDma_IntrDisable(&d->dma, XAXIDMA_IRQ_ALL_MASK, XAXIDMA_DEVICE_TO_DMA);
-    XAxiDma_IntrDisable(&d->dma, XAXIDMA_IRQ_ALL_MASK, XAXIDMA_DMA_TO_DEVICE);
-}
+/* After a timeout or an error: reset the DMA, then the core, so that the next tile starts from a clean state.  Its result is kept for the caller (sr_last_recover). */
+int sr_last_recover = SR_RC_OK;
+static void recover(sr_dev_t *d) { sr_last_recover = reset_all(d); }
 
-int sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out)
+int sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out) { return sr_run_tile_len(d, in, out, SR_TILE_IN_BYTES, SR_TILE_OUT_BYTES); }
+
+/* in_len / out_len other than the tile sizes only for the recovery test (main.c SR_TEST=5): they make the stream or the DMA fail on purpose */
+int sr_run_tile_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t in_len, uint32_t out_len)
 {
     int rc;
-    if (reg_rd(d, SR_REG_STATUS) & SR_STATUS_BUSY) { sr_dump(d, "core busy before start"); return SR_RC_BUSY; }
+    if (reg_rd(d, SR_REG_STATUS) & SR_STATUS_BUSY) { sr_dump(d, "core busy before start"); recover(d); return SR_RC_BUSY; }
 
     /* Caches: the DMA reads/writes DDR directly.  FLUSH (clean + invalidate) the input so the DMA sees the ARM's bytes, and flush the OUTPUT buffer too, so no
      * dirty line of it can be evicted later on top of the DMA's data; invalidate it again after the DMA is done so the ARM reads DDR, not stale cache lines. */
@@ -127,8 +156,8 @@ int sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out)
     Xil_DCacheFlushRange((UINTPTR)out, SR_TILE_OUT_BYTES);
 
     /* arm the receiver first, then the sender; the core takes no data before CONTROL.START, so the order of these three steps is free except that START comes last */
-    if (XAxiDma_SimpleTransfer(&d->dma, (UINTPTR)out, SR_TILE_OUT_BYTES, XAXIDMA_DEVICE_TO_DMA) != XST_SUCCESS) { sr_dump(d, "S2MM start refused"); recover(d); return SR_RC_DMA_START; }
-    if (XAxiDma_SimpleTransfer(&d->dma, (UINTPTR)in, SR_TILE_IN_BYTES, XAXIDMA_DMA_TO_DEVICE) != XST_SUCCESS) { sr_dump(d, "MM2S start refused"); recover(d); return SR_RC_DMA_START; }
+    if (XAxiDma_SimpleTransfer(&d->dma, (UINTPTR)out, out_len, XAXIDMA_DEVICE_TO_DMA) != XST_SUCCESS) { sr_dump(d, "S2MM start refused"); recover(d); return SR_RC_DMA_START; }
+    if (XAxiDma_SimpleTransfer(&d->dma, (UINTPTR)in, in_len, XAXIDMA_DMA_TO_DEVICE) != XST_SUCCESS) { sr_dump(d, "MM2S start refused"); recover(d); return SR_RC_DMA_START; }
     reg_wr(d, SR_REG_CONTROL, SR_CTRL_START);
 
     /* wait: core DONE (or ERROR) and both DMA channels idle, one shared timeout of about 1 s */

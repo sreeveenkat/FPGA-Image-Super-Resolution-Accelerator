@@ -122,13 +122,50 @@ On the PC: a script converts PNG → raw bytes, and raw bytes → PNG for viewin
 4. A result PNG from the board, verified **bit-exact** against the integer model.
 5. First timing measurement (ARM timer or the CYCLES register).
 
+## 4b. Results achieved (2026-10-11)
+
+Everything below was run on the ZedBoard unless it says "simulation". Numbers: `results/speed/m6_board.md`, `results/utilization/m6_top.md`, `m6_system.md`.
+
+What was built:
+
+| File | Purpose |
+|---|---|
+| `hardware/rtl/axi_wrapper/sr_axis_wrapper.v` | 32-bit AXI-Stream in/out around `sr_tile_core` (little-endian bytes, TLAST on the last output word, input TLAST checks) |
+| `hardware/rtl/top/sr_accel_top.v` | Vivado module reference: AXI4-Lite registers (`docs/REGISTER_MAP.md`) + the stream wrapper |
+| `hardware/verification/tb/tb_sr_axis.v`, `tb_sr_accel_top.v` | Self-checking testbenches with DMA/ARM models, random stalls, error injection (simulation) |
+| block design `~/Desktop/venkat/vitis/m6_sr` (outside the repo, built by the owner) | PS7 + AXI DMA (simple mode) + `sr_accel_top`, 100 MHz, s_axi at 0x40000000, DMA at 0x40400000, DMA -> HP0 |
+| `software/board/sr_regs.h`, `sr_app/*` | Register header, driver (init, tile run, error recovery), tiling, T1/T2/T3/T5 tests |
+| `software/host_tools/*` | PNG <-> SRIM raw, expected output from the integer model, byte compare |
+| `software/board/build_elf.sh`, `run_board.tcl`, `stale_test.sh`, `soak_test.sh`, ... | Build and run on the board from the PC with xsdb, no Vitis GUI needed |
+
+Board results:
+* One golden tile through DMA + core: byte-exact, 20/20 repeats identical. CYCLES 926,217-926,220 per tile (simulation 926,202). Tile time 9.52 ms.
+* 128x128 -> 256x256 (4 tiles) and 960x540 -> 1920x1080 (135 tiles): **byte-exact** vs the integer model. Three runs of 960x540 identical.
+* After a power cycle: T1 and the 960x540 image byte-exact again (same checksum 0xcf947f22).
+* **1.312 s per 960x540 frame = 0.76 fps** (15 frames, spread < 2 ms); 97.5 % of it is DMA + compute (9.48 ms per tile), 2 % ARM tile copies, 0.4 % padding.
+  Prediction from simulation: 1.250 s. Resources (Vivado, whole system): 5,146 LUT, 7,605 FF, 72 BRAM, 68 DSP, timing met at 100 MHz.
+* Error paths: every wait has a ~1 s timeout; after any tile error or timeout the driver resets core -> DMA -> core and checks STATUS / ERROR_CODE. T5 injects 4 kinds of bad
+  tiles: all rejected (error 7 or 6), every following normal tile byte-exact.
+
+Problems found on the board (details in `results/speed/m6_board.md` section 6):
+* `XTime_GetTime()` of the SDT BSP returned 0: the driver reads the A9 global timer itself (the 1 s timeouts depend on it).
+* Loading a new program with xsdb over a running one (no system reset): old dirty cache lines overwrote the new program (proven, data abort). Fixed in `run_board.tcl`
+  (L2 off, ELF loaded twice).
+* Reset order: DMA reset before the core reset gave a wrong tile after an "S2MM too short" error; now core -> DMA -> core.
+* Stale DMA/core states left by interrupted programs (DMA blocked half-way, core stuck in LOAD or OUTPUT): the driver recovers, 14/14 with the PL state kept.
+* **Open:** intermittent first-tile stream errors (ERROR_CODE 2 / 1: one input word too many / too few), sometimes lasting until a system reset. Not explained. Last change
+  (PL held in reset + level shifters off before reprogramming) is not yet proven by enough runs.
+
+Not done: runs from the Vitis GUI with the new driver; interrupt-driven driver; any speed-up (M6 improvements / M7).
+
 ## 5. Exit checklist
 
-- [ ] One tile through DMA + core matches the golden tile exactly.
-- [ ] A full image (start with 128×128 → 256×256, then 960×540 → 1920×1080) matches the integer model exactly.
-- [ ] Repeated runs and power cycles give identical output.
-- [ ] Timeout/error paths exist (no infinite loops).
-- [ ] Register map document and C header agree.
+- [x] One tile through DMA + core matches the golden tile exactly. (board, 2026-10-11)
+- [x] A full image (start with 128×128 → 256×256, then 960×540 → 1920×1080) matches the integer model exactly. (board, both sizes)
+- [ ] Repeated runs and power cycles give identical output. **Not closed:** every SUCCESSFUL run gave identical output (3 + 15 frames, after a power cycle too), but runs
+      sometimes fail with the open first-tile stream error (`results/speed/m6_board.md` 6.5).
+- [x] Timeout/error paths exist (no infinite loops). (board: T5 injects 4 error kinds, all caught, recovery works; stale-state tests)
+- [x] Register map document and C header agree. (`software/board/test_regs.py`, PC test; VERSION / TILE_SIZE read correctly on the board)
 
 ## 6. Common problems
 
