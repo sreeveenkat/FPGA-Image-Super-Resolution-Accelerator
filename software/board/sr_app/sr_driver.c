@@ -10,8 +10,33 @@
 #endif
 
 /* NOTE: in this BSP COUNTS_PER_SECOND expands to "XPAR_CPU_CORE_CLOCK_FREQ_HZ/2" WITHOUT outer parentheses, so wrap it before dividing by it. */
-#define SR_TICKS_PER_SEC     ((XTime)(COUNTS_PER_SECOND))
+#define SR_TICKS_PER_SEC     ((uint64_t)(COUNTS_PER_SECOND))
 #define SR_TIMEOUT_TICKS     SR_TICKS_PER_SEC            /* about 1 second */
+
+/* Cortex-A9 global timer, read directly.  XTime_GetTime() of this SDT BSP gave 0 on the board (first run: "tile time 0 us"); the cause was not isolated (most likely the timer
+ * was never started).  Reading the global timer directly, after setting its enable bit, works (checked against CYCLES).  With a dead timer the 1 s timeouts
+ * below would never have fired either.  The timer counts at CPU_CLK/2 = COUNTS_PER_SECOND. */
+#define SR_GTMR_BASE   0xF8F00200u
+#define SR_GTMR_LO     0x00u
+#define SR_GTMR_HI     0x04u
+#define SR_GTMR_CTRL   0x08u
+
+void sr_timer_init(void)
+{
+    Xil_Out32(SR_GTMR_BASE + SR_GTMR_CTRL, Xil_In32(SR_GTMR_BASE + SR_GTMR_CTRL) | 1u);   /* bit 0 = timer enable */
+}
+
+uint64_t sr_now_ticks(void)
+{
+    uint32_t hi, lo;
+    do {
+        hi = Xil_In32(SR_GTMR_BASE + SR_GTMR_HI);
+        lo = Xil_In32(SR_GTMR_BASE + SR_GTMR_LO);
+    } while (Xil_In32(SR_GTMR_BASE + SR_GTMR_HI) != hi);
+    return ((uint64_t)hi << 32) | lo;
+}
+
+uint64_t sr_ticks_per_sec(void) { return SR_TICKS_PER_SEC; }
 
 static inline uint32_t reg_rd(const sr_dev_t *d, uint32_t off) { return Xil_In32(d->base + off); }
 static inline void reg_wr(const sr_dev_t *d, uint32_t off, uint32_t v) { Xil_Out32(d->base + off, v); }
@@ -23,8 +48,12 @@ static uint32_t dma_sr(const sr_dev_t *d, int dir)       /* dir: XAXIDMA_DMA_TO_
     return XAxiDma_ReadReg(d->dma.RegBase, ch + XAXIDMA_SR_OFFSET);
 }
 
+uint32_t sr_dbg[6];       /* last sr_dump(): STATUS, ERROR_CODE, CYCLES, MM2S_SR, S2MM_SR, count (main.c copies it into the DDR marker on failure) */
+
 void sr_dump(const sr_dev_t *d, const char *why)
 {
+    sr_dbg[0] = reg_rd(d, SR_REG_STATUS); sr_dbg[1] = reg_rd(d, SR_REG_ERROR_CODE); sr_dbg[2] = reg_rd(d, SR_REG_CYCLES);
+    sr_dbg[3] = dma_sr(d, XAXIDMA_DMA_TO_DEVICE); sr_dbg[4] = dma_sr(d, XAXIDMA_DEVICE_TO_DMA); sr_dbg[5]++;
     xil_printf("SR DUMP (%s): STATUS=0x%08x ERROR_CODE=%u CYCLES=%u MM2S_SR=0x%08x S2MM_SR=0x%08x\r\n", why,
                reg_rd(d, SR_REG_STATUS), reg_rd(d, SR_REG_ERROR_CODE), reg_rd(d, SR_REG_CYCLES),
                dma_sr(d, XAXIDMA_DMA_TO_DEVICE), dma_sr(d, XAXIDMA_DEVICE_TO_DMA));
@@ -33,11 +62,11 @@ void sr_dump(const sr_dev_t *d, const char *why)
 /* wait until (STATUS & mask) == value, at most about 1 s */
 static int wait_status(const sr_dev_t *d, uint32_t mask, uint32_t value)
 {
-    XTime t0, t;
-    XTime_GetTime(&t0);
+    uint64_t t0, t;
+    t0 = sr_now_ticks();
     do {
         if ((reg_rd(d, SR_REG_STATUS) & mask) == value) return 0;
-        XTime_GetTime(&t);
+        t = sr_now_ticks();
     } while (t - t0 < SR_TIMEOUT_TICKS);
     return -1;
 }
@@ -55,6 +84,7 @@ int sr_soft_reset(sr_dev_t *d)
 
 int sr_init(sr_dev_t *d)
 {
+    sr_timer_init();
     d->base = SR_BASE;
     d->last_cycles = 0;
     XAxiDma_Config *cfg = XAxiDma_LookupConfig(SR_DMA_BASE);       /* SDT flow: takes the BASE ADDRESS, not a device id */
@@ -77,11 +107,11 @@ int sr_init(sr_dev_t *d)
 /* After a timeout or an error: reset the core and the DMA so that the next tile can start from a clean state. */
 static void recover(sr_dev_t *d)
 {
-    XTime t0, t;
+    uint64_t t0, t;
     (void)sr_soft_reset(d);
     XAxiDma_Reset(&d->dma);
-    XTime_GetTime(&t0);
-    do { XTime_GetTime(&t); } while (!XAxiDma_ResetIsDone(&d->dma) && t - t0 < SR_TIMEOUT_TICKS);
+    t0 = sr_now_ticks();
+    do { t = sr_now_ticks(); } while (!XAxiDma_ResetIsDone(&d->dma) && t - t0 < SR_TIMEOUT_TICKS);
     XAxiDma_IntrDisable(&d->dma, XAXIDMA_IRQ_ALL_MASK, XAXIDMA_DEVICE_TO_DMA);
     XAxiDma_IntrDisable(&d->dma, XAXIDMA_IRQ_ALL_MASK, XAXIDMA_DMA_TO_DEVICE);
 }
@@ -102,13 +132,13 @@ int sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out)
     reg_wr(d, SR_REG_CONTROL, SR_CTRL_START);
 
     /* wait: core DONE (or ERROR) and both DMA channels idle, one shared timeout of about 1 s */
-    XTime t0, t;
-    XTime_GetTime(&t0);
+    uint64_t t0, t;
+    t0 = sr_now_ticks();
     for (;;) {
         const uint32_t st = reg_rd(d, SR_REG_STATUS);
         const int dma_busy = XAxiDma_Busy(&d->dma, XAXIDMA_DMA_TO_DEVICE) || XAxiDma_Busy(&d->dma, XAXIDMA_DEVICE_TO_DMA);
         if ((st & SR_STATUS_ERROR) || ((st & SR_STATUS_DONE) && !dma_busy)) break;
-        XTime_GetTime(&t);
+        t = sr_now_ticks();
         if (t - t0 > SR_TIMEOUT_TICKS) { sr_dump(d, "TIMEOUT"); recover(d); return SR_RC_TIMEOUT; }
     }
 

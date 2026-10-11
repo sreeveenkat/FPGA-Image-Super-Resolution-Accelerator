@@ -24,7 +24,7 @@
 #define SR_OUT_ADDR         0x12000000u
 #define SR_OUT_SIZE         0x01000000u
 #define SR_MARK_ADDR        0x13000000u
-#define SR_MARK_SIZE        0x00000040u
+#define SR_MARK_SIZE        0x00000100u
 #define SR_PAD_ADDR         0x14000000u
 #define SR_PAD_SIZE         0x02000000u
 #define SR_TILE_IN_ADDR     0x16000000u
@@ -39,6 +39,8 @@
 #define SR_MARK_W_BYTES     2                /* size of the output file in bytes (16 + 12wh) */
 #define SR_MARK_W_FNV       3                /* FNV-1a 32 of the output payload */
 #define SR_MARK_W_TILES     4
+#define SR_MARK_W_STATS     8                /* SR_MARK_NSTATS result numbers of the test (timing in us, CYCLES, ...) */
+#define SR_MARK_NSTATS      32
 #define SR_MARK_W_TEST      5                /* which test wrote it (1, 2 or 3) */
 
 #define SR_REGION_OK(base, size) ((base) >= SR_PROGRAM_START && (base) + (size) <= SR_DDR_END && ((base) & 63u) == 0u)

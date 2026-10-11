@@ -7,6 +7,12 @@
 #include "xaxidma.h"
 #include "sr_regs.h"
 
+/* A9 global timer (see sr_driver.c); sr_init() enables it */
+extern uint32_t sr_dbg[6];
+void     sr_timer_init(void);
+uint64_t sr_now_ticks(void);
+uint64_t sr_ticks_per_sec(void);
+
 /* Base address of sr_accel_top/s_axi: from the Vivado Address Editor of the block design (project m6_sr), 4K range.  Override with -DSR_BASE=... if the design changes.
  * A wrong value is dangerous: reading an address nobody decodes can hang the AXI bus or raise a data abort on the Zynq; sr_init() reads VERSION first for that reason. */
 #ifndef SR_BASE

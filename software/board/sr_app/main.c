@@ -34,9 +34,9 @@
 char inbyte(void);            /* from the BSP (blocking UART read) */
 extern char _stack __attribute__((weak)); /* top of the stack = highest address of the program image in lscript.ld (this script has no _end symbol) */
 
-#define TICKS_PER_SEC ((XTime)(COUNTS_PER_SECOND))   /* the BSP macro has no outer parentheses */
+#define TICKS_PER_SEC sr_ticks_per_sec()
 static uint32_t ticks_to_us(uint64_t t) { return (uint32_t)((t * 1000000ull) / TICKS_PER_SEC); }
-static uint64_t now_ticks(void) { XTime t; XTime_GetTime(&t); return t; }
+static uint64_t now_ticks(void) { return sr_now_ticks(); }
 
 static sr_dev_t dev;
 
@@ -53,6 +53,9 @@ static int check_memory_map(void)
     if (prog_end != 0 && prog_end >= SR_IN_ADDR) { xil_printf("ERROR: the program (end 0x%08x) overlaps the input buffer\r\n", (unsigned)prog_end); return -1; }
     return 0;
 }
+
+static void write_marker(uint32_t result, uint32_t bytes, uint32_t fnv, uint32_t tiles, uint32_t test);
+static uint32_t g_stats[SR_MARK_NSTATS];
 
 /* ------------------------------------------------------------------ T1 */
 static int compare_tile(const uint8_t *got, const uint8_t *exp, uint32_t n, const char *what)
@@ -84,18 +87,33 @@ SR_MAYBE_UNUSED static int test1(void)
     xil_printf("T1: first run: all %u bytes identical to the golden output\r\n", (unsigned)SR_TILE_OUT_BYTES);
     memcpy(first, out, SR_TILE_OUT_BYTES);
 
-    int identical = 0, cyc_changed = 0;
-    const uint32_t cyc0 = dev.last_cycles;
+    int identical = 0;
+    uint32_t cmin = dev.last_cycles, cmax = dev.last_cycles;
+    uint64_t csum = dev.last_cycles, tmin = t1 - t0, tmax = t1 - t0, tsum = t1 - t0;
     for (int run = 1; run <= 20; run++) {
         memset(out, 0xA5, SR_TILE_OUT_BYTES);
+        const uint64_t r0 = now_ticks();
         rc = sr_run_tile(&dev, sr_golden_in, out);
+        const uint64_t r1 = now_ticks();
         if (rc != SR_RC_OK) { xil_printf("T1 FAIL: run %d returned %d\r\n", run, rc); return rc; }
         if (compare_tile(out, first, SR_TILE_OUT_BYTES, "repeat") == 0) identical++;
-        if (dev.last_cycles != cyc0) cyc_changed++;
+        const uint32_t c = dev.last_cycles;
+        if (c < cmin) cmin = c;
+        if (c > cmax) cmax = c;
+        csum += c;
+        if (r1 - r0 < tmin) tmin = r1 - r0;
+        if (r1 - r0 > tmax) tmax = r1 - r0;
+        tsum += r1 - r0;
     }
-    xil_printf("T1: %d of 20 repeated runs identical to the first (CYCLES changed in %d runs)\r\n", identical, cyc_changed);
-    if (identical != 20) { xil_printf("T1 FAIL\r\n"); return -1; }
+    xil_printf("T1: %d of 20 repeated runs identical to the first\r\n", identical);
+    xil_printf("T1: CYCLES over 21 runs: min %u, max %u, mean %u (simulation: 926202)\r\n", cmin, cmax, (uint32_t)(csum / 21u));
+    xil_printf("T1: tile time over 21 runs (DMA + compute + cache ops): min %u us, max %u us, mean %u us\r\n",
+               ticks_to_us(tmin), ticks_to_us(tmax), ticks_to_us(tsum / 21u));
+    g_stats[0] = cmin; g_stats[1] = cmax; g_stats[2] = (uint32_t)(csum / 21u);
+    g_stats[3] = ticks_to_us(tmin); g_stats[4] = ticks_to_us(tmax); g_stats[5] = ticks_to_us(tsum / 21u); g_stats[6] = (uint32_t)identical;
+    if (identical != 20) { xil_printf("T1 FAIL\r\n"); write_marker(100, 0, 0, 1, 1); return -1; }
     xil_printf("T1 PASS\r\n");
+    write_marker(0, 0, 0, 1, 1);
     return 0;
 }
 
@@ -134,11 +152,15 @@ static int read_input_header(sr_geom_t *g)
     return SR_RC_OK;
 }
 
+/* g_stats: result numbers for the host (xsdb reads them from DDR, the UART may be busy) at SR_MARK_W_STATS + i; meaning per test: software/board/README.md */
+
 static void write_marker(uint32_t result, uint32_t bytes, uint32_t fnv, uint32_t tiles, uint32_t test)
 {
     volatile uint32_t *m = (volatile uint32_t *)SR_MARK_ADDR;
     m[SR_MARK_W_MAGIC] = 0;
     m[SR_MARK_W_RESULT] = result; m[SR_MARK_W_BYTES] = bytes; m[SR_MARK_W_FNV] = fnv; m[SR_MARK_W_TILES] = tiles; m[SR_MARK_W_TEST] = test;
+    for (int i = 0; i < SR_MARK_NSTATS; i++) m[SR_MARK_W_STATS + i] = g_stats[i];
+    if (result != 0) for (int i = 0; i < 6; i++) m[SR_MARK_W_STATS + 24 + i] = sr_dbg[i];   /* failure: last register dump at stat24..29 */
     Xil_DCacheFlushRange((UINTPTR)SR_MARK_ADDR, SR_MARK_SIZE);
     m[SR_MARK_W_MAGIC] = SR_MARK_MAGIC;                          /* last: the host polls this word */
     Xil_DCacheFlushRange((UINTPTR)SR_MARK_ADDR, SR_MARK_SIZE);
@@ -192,6 +214,8 @@ SR_MAYBE_UNUSED static int test2(void)
     rc = process_frame(&g, &tc, &tp, &tm, &tt);
     if (rc) { xil_printf("T2 FAIL: tile %u returned %d\r\n", tm.tiles, rc); write_marker((uint32_t)rc, 0, 0, tm.tiles, 2); return rc; }
     xil_printf("T2: %u tiles done in %u ms, CYCLES per tile min/max %u/%u\r\n", tm.tiles, ticks_to_us(tt) / 1000u, tc.cyc_min, tc.cyc_max);
+    g_stats[0] = ticks_to_us(tt); g_stats[1] = ticks_to_us(tp); g_stats[2] = ticks_to_us(tm.t_cut + tm.t_place); g_stats[3] = ticks_to_us(tm.t_run);
+    g_stats[4] = tc.cyc_min; g_stats[5] = tc.cyc_max; g_stats[6] = tc.n ? (uint32_t)(tc.cyc_sum / tc.n) : 0u;
     return finish_output(&g, tm.tiles, 2);
 }
 
@@ -234,6 +258,9 @@ SR_MAYBE_UNUSED static int test3(void)
     xil_printf("T3: CYCLES per tile min %u, max %u, mean %u (%u tiles x %d frames); all frames gave the same output: %s\r\n", cyc_min, cyc_max,
                cyc_n ? (uint32_t)(cyc_sum / cyc_n) : 0u, tiles, SR_T3_FRAMES, same ? "yes" : "NO");
     if (!same) { xil_printf("T3 FAIL: outputs differ between frames\r\n"); write_marker(100, 0, 0, tiles, 3); return -1; }
+    g_stats[0] = SR_T3_FRAMES; g_stats[1] = mean_us; g_stats[2] = tot_min; g_stats[3] = tot_max;
+    g_stats[4] = (uint32_t)(pad_sum / SR_T3_FRAMES); g_stats[5] = (uint32_t)(copy_sum / SR_T3_FRAMES); g_stats[6] = (uint32_t)(run_sum / SR_T3_FRAMES);
+    g_stats[7] = run_min; g_stats[8] = run_max; g_stats[9] = cyc_min; g_stats[10] = cyc_max; g_stats[11] = cyc_n ? (uint32_t)(cyc_sum / cyc_n) : 0u;
     return finish_output(&g, tiles, 3);
 }
 
