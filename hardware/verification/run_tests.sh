@@ -75,6 +75,16 @@ build top6 -P tb_sr_accel_top.HC=6 $TOP $TB/tb_sr_accel_top.v && {
     run top6 +TILE=small12b +TILE2=small12 +STALL=1
 }
 
+echo "== board software (no board): register header vs Verilog, host tools, C tiling code"
+[ -f data/board/set14_baboon_lr_128x128.raw ] || $PY software/host_tools/make_test_images.py > /dev/null || fail=$((fail+1))
+runpy() {  # runpy <cmd...> : one run, PASS when the output has a PASS line and no FAIL line
+    out="$("$@" 2>&1)"; echo "$out" | tail -4
+    if echo "$out" | grep -q '^FAIL' || ! echo "$out" | grep -q '^PASS'; then fail=$((fail+1)); else pass=$((pass+1)); fi
+}
+runpy python3 software/board/test_regs.py
+runpy $PY software/host_tools/test_host_tools.py
+runpy $PY software/board/test_tiling.py --quick
+
 seam() {  # seam <hc> <lr_h> <lr_w> : tiled RTL output must equal the whole-image integer model
     local hc=$1 h=$2 w=$3 d=data/golden/seam
     $PY software/ai/quantization/seam_test.py gen --hc $hc --h $h --w $w > /dev/null || { fail=$((fail+1)); return; }
@@ -102,6 +112,11 @@ if [ "$MODE" = full ]; then
         run core64 +TILE=noise +STALL=1
     }
     seam 64 100 90
+    echo "== C tiling code on the 960x540 test image (cut + integer model per tile + assemble == whole-image integer model)"
+    runpy $PY software/board/test_tiling.py
+    echo "== board program: compile + link with the Vitis ARM toolchain against the M0 platform BSP (skipped when the toolchain is not installed)"
+    out="$(software/board/check_arm_build.sh 2>&1)"; echo "$out"
+    if echo "$out" | grep -q '^SKIP'; then :; elif echo "$out" | grep -q '^PASS'; then pass=$((pass+1)); else fail=$((fail+1)); fi
     echo "== AXI-Stream wrapper at the real size (HC=64)"
     build axis64 -P tb_sr_axis.HC=64 $AXIS $TB/tb_sr_axis.v && {
         run axis64 +TILE=real0 +STALL=1

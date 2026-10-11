@@ -26,3 +26,9 @@ docs/resources/papers/
 
 # Owner-made Vivado GUI projects (generated)
 ray_tracing_example/
+
+# Board test images and generated driver data
+data/board/*
+!data/board/README.md
+software/board/sr_app/golden_tile.h
+software/board/build/
