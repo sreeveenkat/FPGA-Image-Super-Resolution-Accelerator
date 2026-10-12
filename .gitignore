@@ -32,3 +32,4 @@ data/board/*
 !data/board/README.md
 software/board/sr_app/golden_tile.h
 software/board/build/
+hardware/verification/build/
