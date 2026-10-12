@@ -7,7 +7,9 @@
 # UART may be held by another terminal.
 #
 set VITIS_WS   /home/sreevenkat/Desktop/venkat/vitis_workspace
-set BIT        $VITIS_WS/sr_app/_ide/bitstream/design_1_wrapper.bit        ;# bitstream of the design with sr_accel_top
+# bitstream of the design with sr_accel_top: the build in the Vivado project m6_sr (2026-10-12: restored from backup = VERSION 0x53520601, the demo
+# bitstream; the 0602 rebuild lives in m6_sr_0602).  env SR_BIT=<file> overrides it (e.g. SR_BIT=.../m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit).
+set BIT        [expr {[info exists ::env(SR_BIT)] ? $::env(SR_BIT) : "/home/sreevenkat/Desktop/venkat/vitis/m6_sr/m6_sr.runs/impl_1/design_1_wrapper.bit"}]
 set PS7_INIT   $VITIS_WS/sr_app/_ide/psinit/ps7_init.tcl                   ;# NOT adder_ip.tcl / any custom-IP script (trap from M0)
 # ---- memory map: must equal software/board/sr_app/sr_memmap.h ------------------------------------------------------------------------------------------
 set IN_ADDR    0x10000000
@@ -111,6 +113,12 @@ set sl [list "result=$result" "bytes=$nbytes" "tiles=$tiles" [format "fnv1a32=0x
 for {set i 0} {$i < $NSTATS} {incr i} {
     lappend sl "stat$i=[mrd -value [expr {$MARK_ADDR + 32 + 4 * $i}]]"
 }
+# VERSION register of sr_accel_top (the PL is configured and the PS-PL interface is enabled at this point): shows which bitstream really ran.
+# xsdb blocks PL addresses ("not added to the memory map") unless memory accesses are forced; 0 = read failed.
+configparams force-mem-accesses 1
+if {[catch {set ver [mrd -value 0x40000014]}]} { set ver 0 }
+configparams force-mem-accesses 0
+lappend sl [format "version=0x%08x" $ver]
 puts "stats: [join $sl { }]"
 if {$STATS_F ne ""} { set fh [open $STATS_F w]; puts $fh [join $sl "\n"]; close $fh }
 # 5b. optional (env SR_VERIFY_DUMP=<file> SR_VERIFY_BYTES=<n>): physical copy of the program image (0x00100000, n bytes) read AFTER the run through the

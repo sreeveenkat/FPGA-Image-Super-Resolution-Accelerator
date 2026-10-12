@@ -2,7 +2,7 @@
 #   xsdb software/board/interrupt_test.tcl <elf> <input.raw|-> <delay_ms>
 # Same programming sequence as run_board.tcl (env SR_NOFPGA=1 skips the bitstream, SR_SYSRST=1 system reset first).  Run run_board.tcl afterwards WITHOUT SR_SYSRST to see whether a fresh run recovers.
 set VITIS_WS /home/sreevenkat/Desktop/venkat/vitis_workspace
-set BIT $VITIS_WS/sr_app/_ide/bitstream/design_1_wrapper.bit
+set BIT [expr {[info exists ::env(SR_BIT)] ? $::env(SR_BIT) : "/home/sreevenkat/Desktop/venkat/vitis/m6_sr/m6_sr.runs/impl_1/design_1_wrapper.bit"}]   ;# same default as run_board.tcl
 set PS7_INIT $VITIS_WS/sr_app/_ide/psinit/ps7_init.tcl
 if {$argc != 3} { puts "usage: xsdb interrupt_test.tcl <elf> <input.raw|-> <delay_ms>"; exit 2 }
 lassign $argv ELF IN_RAW DELAY
