@@ -1,4 +1,4 @@
-"""SRNet x2: the hardware-friendly network (see docs/milestones/M2).
+"""SRNet x2: the hardware-friendly network (see README.md, "The network").
 
 Conv3x3(3->C)+ReLU -> Depthwise3x3(C)+ReLU -> Conv1x1(C->C)+ReLU -> Conv3x3(C->12) -> PixelShuffle(2)
 

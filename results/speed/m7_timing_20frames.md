@@ -37,4 +37,4 @@ load / compute / output, not a faster ARM loop.
 
 **Prediction check:** `tiles x cycles / f` = 135 x 926,220 / 100 MHz = 1,250.4 ms; measured 1,311.9 ms (+4.9 %, the ARM copies, padding and DMA handshakes).
 
-Agrees with the earlier board runs (15 frames on 0601, 3 x 5 frames on 0602: 1,311.4-1,313.3 ms; `m6_board.md`, `docs/OVERNIGHT_LOG.md`).
+Agrees with the earlier board runs (15 frames on 0601, 3 x 5 frames on 0602: 1,311.4-1,313.3 ms; `m6_board.md`, `../utilization/m6_system_0602.md`).

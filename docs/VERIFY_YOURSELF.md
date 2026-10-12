@@ -415,7 +415,6 @@ After each experiment restore with `cp` from ROOT (or just delete `/tmp/sandbox`
 * Timing numbers are **out-of-context** (no I/O constraints) and the margin is thin.
 * Near-duplicate images between train and test are not machine-checked.
 * Training is not bit-reproducible; the committed checkpoint is the frozen artifact.
-* The early estimates in `docs/PROJECT_PLAN.md` (e.g. ~6 fps) are superseded by the measured/simulated values above.
 
 ### 6.3 Troubleshooting
 | Symptom | Likely cause / fix |
@@ -435,5 +434,5 @@ After each experiment restore with `cp` from ROOT (or just delete `/tmp/sandbox`
 | Stray `clockInfo.txt`, `xsim*.jou` in ROOT | created by xsim; safe to delete (git-ignored) |
 
 ### 6.4 Where things are
-`README.md` (overview) · `CLAUDE.md` (running log, all measured numbers) · `HANDOFF.md` (state, environment, next steps) · `docs/milestones/M0…M8.md` (explanations + results sections) ·
-`results/quality/` (accuracy tables) · `results/utilization/` (Vivado reports, cycle counts) · `CLAUDE_AUTONOMOUS.md` (the exact verified commands in short form).
+`README.md` (overview, results, reproduce-from-scratch commands) · `results/quality/` (accuracy tables) · `results/speed/` (board timing) ·
+`results/utilization/` (Vivado reports, cycle counts, power) · `docs/REGISTER_MAP.md` · `docs/DEMO.md`.

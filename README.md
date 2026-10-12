@@ -11,7 +11,7 @@ with AXI DMA.
 
 > **Scope change:** this repository started as a *sparse ray tracing + AI 4K reconstruction* idea. On a Zynq-7020 (220 DSP slices) native 4K
 > reconstruction is not realistic, so the project is a **low-resolution super-resolution accelerator (≤ 1080p output)**. The ray-traced
-> front end is kept as an optional extension. The original notes are in [`docs/resources/`](docs/resources/).
+> front end is kept as an optional extension.
 
 ## Status
 
@@ -27,7 +27,7 @@ with AXI DMA.
 | M7 | Benchmark, resource/timing/power report, reproducible build | yes | **mostly done**: tables A-D measured, build reproduced from a clean clone; report in progress |
 | M8 | Optional: HDMI, ×4, luma-only, ray-traced input, custom multiplier | — | not started |
 
-Step-by-step guides for every milestone are in [`docs/milestones/`](docs/milestones/README.md). Checking everything yourself:
+Checking everything yourself:
 [`docs/VERIFY_YOURSELF.md`](docs/VERIFY_YOURSELF.md). Demo script for a review: [`docs/DEMO.md`](docs/DEMO.md).
 
 ## Results on the board (M6/M7)
@@ -39,7 +39,7 @@ Step-by-step guides for every milestone are in [`docs/milestones/`](docs/milesto
 | C resources | whole system (PS7 + DMA + accelerator), routed | 5,296 LUT (10 %), 7,831 FF (7 %), 72 BRAM (51 %), 68 DSP (31 %); timing met at 100 MHz, WNS +0.503 ns, WHS +0.016 ns | [`m6_system_0602.md`](results/utilization/m6_system_0602.md) |
 | D power | Vivado **estimate** (confidence Low, not measured) | 1.91 W chip (PS7 1.56 W, accelerator 0.18 W); ~2.5 J per frame (accelerator alone ~0.23 J) | [`m7_power.md`](results/utilization/m7_power.md) |
 
-Robustness on the board: 2 × 1,000 tiles without an error, 50 fresh program loads, error recovery 10/10 (`docs/OVERNIGHT_LOG.md`).
+Robustness on the board: 2 × 1,000 tiles without an error, 50 fresh program loads, error recovery 10/10 ([`m6_system_0602.md`](results/utilization/m6_system_0602.md)).
 Demo figures (test images run on the board): [`docs/demo/`](docs/demo/).
 
 ## The network
@@ -111,11 +111,11 @@ randomized layers with distinct per-channel multipliers on a non-square tile. Th
 * Vivado 2024.1 out-of-context **synthesis and place-and-route**, one engine at a time (no I/O timing, no activation RAMs): all four layers meet
   100 MHz with no failing endpoints (margins +2.9 to +3.9 ns after the 2026-10-09 timing fix: one register stage after the requantizer-feed mux, +1 cycle per engine). All four instances together use 68 of 220 DSPs (31 %).
   The synthesized netlists were also simulated (xsim) and are bit-exact on the golden tile.
-* A plain 70x70x128-bit activation buffer infers **32 RAMB36 (23 % of the chip)**, more than the ~20 the guide assumed; M5 fixed this with a split RAM (18.5 tiles, see below).
+* A plain 70x70x128-bit activation buffer infers **32 RAMB36 (23 % of the chip)**, more than the ~20 first planned; M5 fixed this with a split RAM (18.5 tiles, see below).
 * 854,149 engine cycles per tile x 135 tiles = 115 M cycles = about 1.15 s per 960x540 frame at 100 MHz, **compute only and from simulation**. The chained
   core with byte-wide I/O (M5, below) needs 926,201 cycles per tile (about 1.25 s per frame); DMA and ARM time are not included (board: 1.312 s per frame, see above).
 * Details, pitfalls found (a ROM initialisation that simulated fine but was ignored by Vivado) and the breakage tests:
-  [`results/utilization/m4_conv_engine.md`](results/utilization/m4_conv_engine.md), [`docs/milestones/M4_conv_engine_rtl.md`](docs/milestones/M4_conv_engine_rtl.md).
+  [`results/utilization/m4_conv_engine.md`](results/utilization/m4_conv_engine.md).
 
 ## Full tile core in RTL (M5, simulated + synthesized)
 
@@ -135,8 +135,7 @@ moments leave the core quiet, and the synthesized netlist passes the same stream
 
 * Block-RAM finding: Vivado rounds the depth of a cascaded RAM up to a power of two, so one 4624x128-bit buffer needs 32 tiles; splitting the address
   range (`tile_ram_split`) needs 18.5. Without it the five buffers would not leave room on the chip.
-* Details, design decisions and the breakage checks: [`results/utilization/m5_tile_core.md`](results/utilization/m5_tile_core.md),
-  [`docs/milestones/M5_full_network_rtl.md`](docs/milestones/M5_full_network_rtl.md).
+* Details, design decisions and the breakage checks: [`results/utilization/m5_tile_core.md`](results/utilization/m5_tile_core.md).
 
 
 ## System on the board (M6)
@@ -149,12 +148,12 @@ ARM Cortex-A9 (bare-metal C, software/board/sr_app)          FPGA fabric, 100 MH
 * `hardware/rtl/top/sr_accel_top.v`: AXI-Lite registers ([`docs/REGISTER_MAP.md`](docs/REGISTER_MAP.md)) + AXI-Stream wrapper around the M5 core. VERSION 0x53520602.
 * `software/board/`: driver (DMA, timeouts, reset/recovery), tiling, tests T1 golden tile, T2 whole image, T3 timing, T5 error recovery, T6 stress;
   `run_board.tcl` (xsdb) programs the FPGA safely (PL held in reset and PS-PL level shifters off while it is reprogrammed), loads the program and
-  moves images in and out over JTAG. Details: [`software/board/README.md`](software/board/README.md), [`docs/milestones/M6_axi_dma_arm_driver.md`](docs/milestones/M6_axi_dma_arm_driver.md).
+  moves images in and out over JTAG. Details: [`software/board/README.md`](software/board/README.md).
 
 ## Repository layout
 
 ```
-docs/          plan, milestone guides, demo script, register map, step log (OVERNIGHT_LOG.md)
+docs/          demo script (DEMO.md), demo figures, register map, verification guide, report
 software/ai/   dataset, models, training, quantization, evaluation (Python)
 software/board/   ARM program (sr_app/), board scripts (xsdb, bash), platform + ELF build
 software/host_tools/   PC helpers: png <-> raw, expected output, compare, figures
@@ -163,7 +162,6 @@ hardware/verification/   testbenches (tb/), run_tests.sh, run_postsynth.sh, demo
 hardware/vivado/   scripts/ (synthesis, system build, power), bd/ (block design as Tcl), ip_repo/ (M0 adder IP)
 data/          datasets, golden vectors, board files (git-ignored, see data/README.md)
 results/       measured numbers: quality/ speed/ utilization/
-CLAUDE.md      running project log: decisions, status, measured numbers
 ```
 
 ## Reproduce from scratch

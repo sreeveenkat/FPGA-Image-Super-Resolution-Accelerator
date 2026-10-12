@@ -3,7 +3,7 @@
 Vivado 2024.1 project `/home/sreevenkat/Desktop/venkat/vitis/m6_sr_0602` = a copy of `m6_sr` (same block design: PS7 + AXI DMA + `sr_accel_top_0`,
 `FCLK_CLK0` = 100 MHz), rebuilt 2026-10-12 with `hardware/vivado/scripts/rebuild_m6_bitstream.tcl ... 2` from the repo RTL (VERSION 0x53520602, adds the
 7 debug registers). **Vivado post-implementation numbers, read by Claude from the reports** (copies: `m6_system_0602_utilization.txt`,
-`m6_system_0602_timing_summary.txt`). The board results of this bitstream are in `docs/OVERNIGHT_LOG.md` (STEP C) and `results/speed/m6_board.md`.
+`m6_system_0602_timing_summary.txt`). The board regression of this bitstream is summarised below; timing: `results/speed/m7_timing_20frames.md`.
 
 ## Results
 | Item | 0602 (`m6_sr_0602`, this build) | 0601 (`m6_sr`, `m6_system.md`) |
@@ -23,6 +23,23 @@ Vivado 2024.1 project `/home/sreevenkat/Desktop/venkat/vitis/m6_sr_0602` = a cop
 
 Differences 0602 - 0601: +150 LUT, +226 FF (the debug registers and the wider read mux), same BRAM/DSP. WNS is better (+0.503 vs +0.239 ns), WHS 7 ps
 lower; both are placement-dependent (+/- 0.1 ns seen before), not an RTL improvement.
+
+## Board regression of this bitstream (2026-10-12, 15:21-15:29)
+Run with `run_board.tcl` default safe loading (PL held in reset + level shifters off while programming, ELF loaded twice), all **board-measured**:
+
+| Test | Result |
+|---|---|
+| VERSION register | 0x53520602 |
+| T1 golden tile + 20 repeats | PASS 20/20, CYCLES 926,217-926,220 |
+| T2 128x128 (Set14 baboon crop) | byte-exact vs the integer model (fnv 0x91a4506d) |
+| T2 960x540 -> 1920x1080, 3 runs | byte-exact, fnv 0xcf947f22, 1,311.4-1,311.5 ms |
+| T5 error recovery, 10 runs | 10/10 PASS (each bad tile fails with an error code, reset works, next tile exact) |
+| T6 stress, both driver orders | 1,000/1,000 + 1,000/1,000 tiles, 0 errors |
+| Fresh program loads | 50/50 OK, VERSION 0602 every time |
+| T3 timing, 3 x 5 frames | mean 1,311.7-1,311.9 ms, byte-exact |
+
+A first attempt at 15:20 was cut short by a power loss after T1 ("no targets found" = board unreachable, not a test failure) and was rerun from the start.
+Later the same day: all 119 test images byte-exact (`results/quality/table_a_x2.md`) and a 20-frame timing run (`results/speed/m7_timing_20frames.md`).
 
 ## The 12 "read successfully" lines (sr_accel_top OOC synthesis, `design_1_sr_accel_top_0_0_synth_1/runme.log`)
 ```
