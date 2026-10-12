@@ -5,7 +5,7 @@ reproducibility, docs, final report). Update after EVERY finished step; commit t
 Number labels: **sim** = simulation, **est** = Vivado estimate, **board** = measured on the ZedBoard.
 
 ## Current position
-- 2026-10-12 afternoon: owner's recovery plan after the crash. STEP A (restore working 0601 system) running.
+- 2026-10-12 afternoon: owner's recovery plan after the crash. STEP A DONE (0601 restored + board-verified). STEP B DONE (0602 built in m6_sr_0602, checks pass). STEP C (board regression on 0602) running.
 - Then STEP B (rebuild 0602 in a COPY m6_sr_0602, -jobs 2), STEP C (board regression on 0602). Phases 4-8 paused until the owner asks.
 - Demo (review) 2026-10-13 15:00: a working demo comes first.
 
@@ -33,6 +33,9 @@ Number labels: **sim** = simulation, **est** = Vivado estimate, **board** = meas
 |---|---|---|---|
 | A.1-A.3 restore 0601 project | DONE | `vitis/m6_sr` -> `m6_sr_broken_crash_20261012` (kept); `cp -a m6_sr_backup_20261012_112709 m6_sr` (backup kept). `impl_1/design_1_wrapper.bit` md5 8b5fe08f... == Vitis `sr_app/_ide/bitstream` copy; XSA 2026-10-11 18:25 | - |
 | A.4 board check 0601 | DONE | **board**: VERSION 0x53520601 (TILE_SIZE 64). T1 golden tile + 20 repeats PASS, CYCLES 926,217-926,225, 9,521-9,523 us. T2 DIV2K img0193 960x540 byte-exact, fnv 0xcf947f22, 135 tiles, 1,313.1 ms. Default run_board.tcl (isolation on, ELF loaded twice). Found + fixed: run_board.tcl VERSION read returned 0 (xsdb blocks PL addresses: "not added to the memory map") -> read with force-mem-accesses; re-verified in the T2 run (version=0x53520601) | see A.5 |
+| B.1 rebuild script default -jobs 2 | DONE | commit fa587a5 | fa587a5 |
+| B.2/B.3 rebuild 0602 in copy `vitis/m6_sr_0602` | DONE 15:11-15:19 (8 min), Vivado exit 0 | before start: `free -h` total 15 Gi, used 5.0 Gi, available 10 Gi, swap 4 Gi free; `nproc` 16. `cp -a m6_sr m6_sr_0602`; `vivado -mode batch -source rebuild_m6_bitstream.tcl -tclargs m6_sr_0602/m6_sr.xpr 2` (nice 10). Nothing else running. Memory watchdog (20 s samples, kill below 1 GB): lowest available 6.5 GB, never triggered | - |
+| B.4 checks 0602 build | PASS | **est** (Vivado, routed): WNS +0.503 ns, WHS +0.016 ns, 23,943 endpoints, 0 failing; 5,296 LUT, 7,831 FF, 72 BRAM, 68 DSP; 12/12 .mem "read successfully" (bias/mult/wrom L1-4); 0 CRITICAL WARNING, 0 ERROR in all run logs; impl_1 "write_bitstream Complete". Bitstream `m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit` 15:18, XSA `m6_sr_0602/design_1_wrapper.xsa` 15:19; reports `m6_sr_0602/reports_final/`. m6_sr (0601) untouched | - |
 | A.5 commit pending files | DONE | 4 commits (board scripts, rebuild script, M7 table A, report) + this log | see git log |
 
 ## Open problems
