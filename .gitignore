@@ -37,8 +37,6 @@ docs/REPORT/papers/
 docs/REPORT.zip
 
 # Process notes and milestone guides: kept locally, not published (owner decision 2026-10-12)
-/CLAUDE.md
-/CLAUDE_AUTONOMOUS.md
 /RUN_PROMPT.md
 /HANDOFF.md
 docs/OVERNIGHT_LOG.md

@@ -2,7 +2,7 @@
 
 Vivado 2024.1 project `/home/sreevenkat/Desktop/venkat/vitis/m6_sr_0602` = a copy of `m6_sr` (same block design: PS7 + AXI DMA + `sr_accel_top_0`,
 `FCLK_CLK0` = 100 MHz), rebuilt 2026-10-12 with `hardware/vivado/scripts/rebuild_m6_bitstream.tcl ... 2` from the repo RTL (VERSION 0x53520602, adds the
-7 debug registers). **Vivado post-implementation numbers, read by Claude from the reports** (copies: `m6_system_0602_utilization.txt`,
+7 debug registers). **Vivado post-implementation numbers, read from the reports** (copies: `m6_system_0602_utilization.txt`,
 `m6_system_0602_timing_summary.txt`). The board regression of this bitstream is summarised below; timing: `results/speed/m7_timing_20frames.md`.
 
 ## Results

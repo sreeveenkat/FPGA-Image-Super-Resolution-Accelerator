@@ -2,7 +2,7 @@
 
 Vivado project `/home/sreevenkat/Desktop/venkat/vitis/m6_sr`, block design with the Zynq PS7, AXI DMA and `sr_accel_top_0`, `FCLK_CLK0` = 100 MHz.
 `sr_accel_top_0/s_axi` is at 0x4000_0000 (4K); full address map in `docs/REGISTER_MAP.md`.
-**These are Vivado post-implementation numbers as reported by the owner (the reports were not re-read by Claude). Nothing here was measured on a board.**
+**These are Vivado post-implementation numbers as reported by the owner. Nothing here was measured on a board.**
 
 ## Results of the in-system build
 | Item | Value |
