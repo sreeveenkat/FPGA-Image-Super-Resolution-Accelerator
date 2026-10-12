@@ -5,7 +5,7 @@
 # Reports go to <project dir>/reports_final/.
 if {[llength $argv] < 1} { error "usage: -tclargs <m6_sr.xpr> [jobs]" }
 set xpr  [file normalize [lindex $argv 0]]
-set jobs [expr {[llength $argv] > 1 ? [lindex $argv 1] : 8}]
+set jobs [expr {[llength $argv] > 1 ? [lindex $argv 1] : 2}]   ;# default 2: -jobs 8 (8 IP synth runs at once) froze this 15 GB PC on 2026-10-12
 set pdir [file dirname $xpr]
 open_project $xpr
 
