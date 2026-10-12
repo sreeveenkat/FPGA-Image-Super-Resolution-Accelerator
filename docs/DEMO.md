@@ -44,6 +44,18 @@ The script prints one line per step and a big PASS/FAIL at the end. The full log
   .venv/bin/python software/host_tools/make_demo_figure.py Set14 zebra data/board/demo/zebra_board.raw docs/demo/compare_zebra.png
   ```
 
+**Bigger zooms for slides** (the difference is easiest to see here). All of these images were run on the board with 0602 on 2026-10-12 and are byte-exact with the integer model:
+
+| Figure | Image | PSNR-Y bicubic -> FPGA |
+|---|---|---|
+| `docs/demo/zoom_ppt3.png` | Set14 ppt3: text "Create effective multimedia presentations", 5x zoom. **Clearest one** | 26.80 -> 28.06 dB |
+| `docs/demo/zoom_butterfly.png` | Set5 butterfly: wing edges and spots, 5x zoom | 27.44 -> 29.22 dB |
+| `docs/demo/compare_{butterfly,monarch,ppt3,302008}.png` | full panels + 2 crops, like zebra | butterfly 27.44 -> 29.22, monarch 32.95 -> 34.58, ppt3 26.80 -> 28.06, BSD100 302008 34.51 -> 36.79 dB |
+
+Regenerate one: run the image's `data/board/testsets/<set>/<name>_lr.raw` with `sr_app_t2.elf` (as above), then
+`.venv/bin/python software/host_tools/make_zoom_figure.py Set14 ppt3 data/board/demo/ppt3_board.raw docs/demo/zoom_ppt3.png 244 28 92 150 5`
+(the arguments after the output file are y x h w zoom, in ground-truth pixels).
+
 ## 3. Simulation demo (no board needed, about 3 min)
 ```
 hardware/verification/demo_sim.sh          # RTL regression (36 runs) + one small tile with a waveform; --wave = waveform only (1 s)
