@@ -5,7 +5,7 @@ reproducibility, docs, final report). Update after EVERY finished step; commit t
 Number labels: **sim** = simulation, **est** = Vivado estimate, **board** = measured on the ZedBoard.
 
 ## Current position
-- 2026-10-12 afternoon: owner's recovery plan after the crash. STEP A DONE (0601 restored + board-verified). STEP B DONE (0602 built in m6_sr_0602, checks pass). STEP C (board regression on 0602) running.
+- 2026-10-12 afternoon: owner's recovery plan after the crash. STEP A DONE (0601 restored + board-verified). STEP B DONE (0602 built in m6_sr_0602, checks pass). STEP C INTERRUPTED by a power loss at 15:20 (only C1 done) -> redo STEP C from C1. Demo bitstream until then: 0601 (m6_sr).
 - Then STEP B (rebuild 0602 in a COPY m6_sr_0602, -jobs 2), STEP C (board regression on 0602). Phases 4-8 paused until the owner asks.
 - Demo (review) 2026-10-13 15:00: a working demo comes first.
 
@@ -36,6 +36,7 @@ Number labels: **sim** = simulation, **est** = Vivado estimate, **board** = meas
 | B.1 rebuild script default -jobs 2 | DONE | commit fa587a5 | fa587a5 |
 | B.2/B.3 rebuild 0602 in copy `vitis/m6_sr_0602` | DONE 15:11-15:19 (8 min), Vivado exit 0 | before start: `free -h` total 15 Gi, used 5.0 Gi, available 10 Gi, swap 4 Gi free; `nproc` 16. `cp -a m6_sr m6_sr_0602`; `vivado -mode batch -source rebuild_m6_bitstream.tcl -tclargs m6_sr_0602/m6_sr.xpr 2` (nice 10). Nothing else running. Memory watchdog (20 s samples, kill below 1 GB): lowest available 6.5 GB, never triggered | - |
 | B.4 checks 0602 build | PASS | **est** (Vivado, routed): WNS +0.503 ns, WHS +0.016 ns, 23,943 endpoints, 0 failing; 5,296 LUT, 7,831 FF, 72 BRAM, 68 DSP; 12/12 .mem "read successfully" (bias/mult/wrom L1-4); 0 CRITICAL WARNING, 0 ERROR in all run logs; impl_1 "write_bitstream Complete". Bitstream `m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit` 15:18, XSA `m6_sr_0602/design_1_wrapper.xsa` 15:19; reports `m6_sr_0602/reports_final/`. m6_sr (0601) untouched | - |
+| C (board regression 0602) | INTERRUPTED 15:20 | runner `data/board/stepC/run_stepC.sh` (SR_BIT = m6_sr_0602 bitstream). **board** C1 PASS: VERSION 0x53520602, T1 20/20, CYCLES 926,217-926,231, 9,520-9,523 us. Then power was lost (owner) during C2: C2..C4 lines show 'no targets found' = board unreachable, NOT test failures. Runner + xsdb stopped by hand. STEP C must be redone from C1 after power is back | - |
 | A.5 commit pending files | DONE | 4 commits (board scripts, rebuild script, M7 table A, report) + this log | see git log |
 
 ## Open problems
