@@ -83,6 +83,7 @@ hardware/verification/demo_sim.sh          # RTL regression (36 runs) + one smal
 | Hardware == software | Board output byte-identical to the integer model: golden tile, 128x128, 960x540, and **all 119 test images** (Set5 + Set14 + BSD100, 2026-10-12) |
 | Speed (**board**) | 9.52 ms per 64x64 tile (926,220 cycles at 100 MHz). 960x540 -> 1920x1080 in 1.312 s (0.76 fps), of which DMA + compute 1.279 s |
 | Resources (Vivado estimate, 0602 system) | 5,296 LUT (10 %), 7,831 FF (7 %), 72 BRAM (51 %), **68 DSP (31 %)**. Timing met at 100 MHz (WNS +0.503 ns, WHS +0.016 ns) |
+| Power (Vivado **estimate**, confidence Low) | 1.91 W whole chip, of which the ARM side (PS7) 1.56 W and the accelerator 0.18 W. About 2.5 J per frame (0.23 J for the accelerator alone). Not measured on the board |
 | Robustness (**board**, 2026-10-12) | T6: 2 x 1000 tiles, 0 errors. 50 fresh program loads, 50 OK. Error recovery 10/10 |
 
 **Honest limits** (say them before you are asked):
