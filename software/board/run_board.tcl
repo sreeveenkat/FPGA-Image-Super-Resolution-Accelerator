@@ -7,9 +7,10 @@
 # UART may be held by another terminal.
 #
 set VITIS_WS   /home/sreevenkat/Desktop/venkat/vitis_workspace
-# bitstream of the design with sr_accel_top: the build in the Vivado project m6_sr (2026-10-12: restored from backup = VERSION 0x53520601, the demo
-# bitstream; the 0602 rebuild lives in m6_sr_0602).  env SR_BIT=<file> overrides it (e.g. SR_BIT=.../m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit).
-set BIT        [expr {[info exists ::env(SR_BIT)] ? $::env(SR_BIT) : "/home/sreevenkat/Desktop/venkat/vitis/m6_sr/m6_sr.runs/impl_1/design_1_wrapper.bit"}]
+# bitstream of the design with sr_accel_top.  DEFAULT = VERSION 0x53520602, Vivado project m6_sr_0602 (rebuilt 2026-10-12, full board regression passed,
+# results/utilization/m6_system_0602.md).  FALLBACK 0601 (project m6_sr, board-verified 2026-10-11/12), via env SR_BIT:
+#   SR_BIT=/home/sreevenkat/Desktop/venkat/vitis/m6_sr/m6_sr.runs/impl_1/design_1_wrapper.bit xsdb software/board/run_board.tcl ...
+set BIT        [expr {[info exists ::env(SR_BIT)] ? $::env(SR_BIT) : "/home/sreevenkat/Desktop/venkat/vitis/m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit"}]
 set PS7_INIT   $VITIS_WS/sr_app/_ide/psinit/ps7_init.tcl                   ;# NOT adder_ip.tcl / any custom-IP script (trap from M0)
 # ---- memory map: must equal software/board/sr_app/sr_memmap.h ------------------------------------------------------------------------------------------
 set IN_ADDR    0x10000000
