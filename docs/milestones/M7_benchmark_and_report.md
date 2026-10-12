@@ -92,7 +92,7 @@ raw speed; the FPGA's selling points are determinism, power and integration.
 ## 6. Exit checklist
 
 - [ ] All three tables filled with measured values.
-- [ ] FPGA output bit-exact with the integer model on all test images.
+- [x] FPGA output bit-exact with the integer model on all test images. (2026-10-12: 119/119 on the board, bitstream 0602, `results/quality/m7_board_testsets_run.log`; table A FPGA row == INT8 row.)
 - [ ] Timing met (WNS ≥ 0) at the frequency you report.
 - [ ] README reproduces the build from scratch (try it on a clean folder).
 - [ ] No claim without a number behind it.

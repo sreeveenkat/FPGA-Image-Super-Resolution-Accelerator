@@ -80,7 +80,7 @@ hardware/verification/demo_sim.sh          # RTL regression (36 runs) + one smal
 |---|---|
 | Network | 4 layers + pixel shuffle, 2,620 parameters, INT8 (uint8 activations, int8 weights) |
 | Quality (INT8, mean PSNR-Y over the test sets) | Set5 35.02, Set14 31.40, BSD100 30.53 dB. Bicubic: 33.67 / 30.32 / 29.56. Beats bicubic on 119/119 images. INT8 loses 0.08-0.18 dB vs FP32 |
-| Hardware == software | Board output byte-identical to the integer model: golden tile, 128x128, 960x540, Set14 zebra |
+| Hardware == software | Board output byte-identical to the integer model: golden tile, 128x128, 960x540, and **all 119 test images** (Set5 + Set14 + BSD100, 2026-10-12) |
 | Speed (**board**) | 9.52 ms per 64x64 tile (926,220 cycles at 100 MHz). 960x540 -> 1920x1080 in 1.312 s (0.76 fps), of which DMA + compute 1.279 s |
 | Resources (Vivado estimate, 0602 system) | 5,296 LUT (10 %), 7,831 FF (7 %), 72 BRAM (51 %), **68 DSP (31 %)**. Timing met at 100 MHz (WNS +0.503 ns, WHS +0.016 ns) |
 | Robustness (**board**, 2026-10-12) | T6: 2 x 1000 tiles, 0 errors. 50 fresh program loads, 50 OK. Error recovery 10/10 |
