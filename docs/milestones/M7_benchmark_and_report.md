@@ -94,7 +94,7 @@ raw speed; the FPGA's selling points are determinism, power and integration.
 - [x] All three tables filled with measured values. (2026-10-12: A `results/quality/table_a_x2.md` incl. FPGA row; B `results/speed/m7_timing_20frames.md`, board, 20 frames; C `results/utilization/m6_system_0602.md`; D power estimate `results/utilization/m7_power.md`.)
 - [x] FPGA output bit-exact with the integer model on all test images. (2026-10-12: 119/119 on the board, bitstream 0602, `results/quality/m7_board_testsets_run.log`; table A FPGA row == INT8 row.)
 - [x] Timing met (WNS ≥ 0) at the frequency you report. (0602 at 100 MHz: WNS +0.503 ns, WHS +0.016 ns, 0 failing endpoints.)
-- [ ] README reproduces the build from scratch (try it on a clean folder).
+- [x] README reproduces the build from scratch (try it on a clean folder). (2026-10-12: fresh clone, all README steps incl. bitstream, platform, ELFs and 119 board images; `results/utilization/m7_clean_clone_build.md`. Not covered: downloads, training, demo.sh.)
 - [ ] No claim without a number behind it.
 
 ## 7. Example "honest" summary sentence

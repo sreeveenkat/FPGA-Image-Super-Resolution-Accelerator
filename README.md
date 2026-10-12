@@ -1,30 +1,46 @@
 # FPGA Image Super-Resolution Accelerator (ZedBoard / Zynq-7020)
 
-A small **INT8 convolutional neural network** that upscales images **2×** (target: 960×540 → 1920×1080), trained in PyTorch and
-being built as a tile-based accelerator on the **Zynq XC7Z020** (Digilent ZedBoard). The ARM core controls the FPGA over AXI-Lite and
-moves image tiles with AXI DMA.
+A small **INT8 convolutional neural network** that upscales images **2×** (960×540 → 1920×1080), trained in PyTorch and run by a tile-based
+accelerator in the fabric of a **Zynq XC7Z020** (Digilent ZedBoard). The ARM core controls the accelerator over AXI-Lite and moves image tiles
+with AXI DMA.
+
+**Headline (measured on the board, 2026-10-12):** a 960×540 frame is upscaled to 1920×1080 in **1.312 s (0.76 fps)** at 100 MHz, and the output is
+**byte-identical to the software integer model** on all **119** test images (Set5, Set14, BSD100). Quality: **+1.0 to +1.4 dB PSNR-Y over bicubic**
+(Set5 35.02 / Set14 31.40 / BSD100 30.53 dB vs 33.67 / 30.32 / 29.56), better than bicubic on 119 of 119 images. The design uses 68 DSPs (31 %) and
+72 BRAM tiles (51 %); the power is **estimated** by Vivado at 1.91 W for the whole chip, 0.18 W of it the accelerator.
 
 > **Scope change:** this repository started as a *sparse ray tracing + AI 4K reconstruction* idea. On a Zynq-7020 (220 DSP slices) native 4K
-> reconstruction is not realistic, so the project is now a **low-resolution super-resolution accelerator (≤ 1080p output)**. The ray-traced
+> reconstruction is not realistic, so the project is a **low-resolution super-resolution accelerator (≤ 1080p output)**. The ray-traced
 > front end is kept as an optional extension. The original notes are in [`docs/resources/`](docs/resources/).
 
 ## Status
 
 | Milestone | What | Board needed | Status |
 |---|---|---|---|
-| M0 | Zynq basics: UART, AXI GPIO, own AXI-Lite IP, DMA loopback | yes | **done** 2026-10-11 (board run reported by the owner) |
-| **M1** | Bicubic baseline + metrics + datasets | no | **done** |
-| **M2** | FP32 CNN training and evaluation | no | **done** |
-| **M3** | INT8 quantization + bit-accurate integer Python model | no | **done** |
-| **M4** | Convolution engine in Verilog, bit-exact with the integer model | simulation | **done** |
-| **M5** | Full network RTL, pixel shuffle, tiling with halo | simulation | **done** |
-| M6 | AXI wrapper, DMA, ARM driver | yes | planned |
-| M7 | Benchmark, resource/timing/power report | yes | planned |
-| M8 | Optional: HDMI, ×4, luma-only, ray-traced input, custom multiplier | — | optional |
+| M0 | Zynq basics: UART, AXI GPIO, own AXI-Lite IP, DMA loopback | yes | **done** 2026-10-11 |
+| M1 | Bicubic baseline + metrics + datasets | no | **done** |
+| M2 | FP32 CNN training and evaluation | no | **done** |
+| M3 | INT8 quantization + bit-accurate integer Python model | no | **done** |
+| M4 | Convolution engine in Verilog, bit-exact with the integer model | simulation | **done** |
+| M5 | Full network RTL, pixel shuffle, tiling with halo | simulation | **done** |
+| M6 | AXI wrapper, DMA, ARM driver, running on the board | yes | **done** 2026-10-11 (0602 build 2026-10-12) |
+| M7 | Benchmark, resource/timing/power report, reproducible build | yes | **mostly done**: tables A-D measured, build reproduced from a clean clone; report in progress |
+| M8 | Optional: HDMI, ×4, luma-only, ray-traced input, custom multiplier | — | not started |
 
-Step-by-step guides for every milestone are in [`docs/milestones/`](docs/milestones/README.md).
+Step-by-step guides for every milestone are in [`docs/milestones/`](docs/milestones/README.md). Checking everything yourself:
+[`docs/VERIFY_YOURSELF.md`](docs/VERIFY_YOURSELF.md). Demo script for a review: [`docs/DEMO.md`](docs/DEMO.md).
 
-**Want to check everything yourself?** Follow [`docs/VERIFY_YOURSELF.md`](docs/VERIFY_YOURSELF.md): software in VS Code, RTL in Vivado, with the expected output of every step.
+## Results on the board (M6/M7)
+
+| Table | What | Value | Record |
+|---|---|---|---|
+| A quality | PSNR-Y / SSIM-Y, FPGA output (= INT8 model) | Set5 35.02 / 0.9420, Set14 31.40 / 0.8948, BSD100 30.53 / 0.8756; all 119 board outputs byte-exact | [`table_a_x2.md`](results/quality/table_a_x2.md) |
+| B speed | 960×540 → 1920×1080, mean of 20 frames | **1,311.9 ms = 0.762 fps** (spread 1.7 ms); 95 % of it is the accelerator computing (926,220 cycles per 64×64 tile, 135 tiles); ARM copies 2 %, DMA overhead 2 % | [`m7_timing_20frames.md`](results/speed/m7_timing_20frames.md), [`m6_board.md`](results/speed/m6_board.md) |
+| C resources | whole system (PS7 + DMA + accelerator), routed | 5,296 LUT (10 %), 7,831 FF (7 %), 72 BRAM (51 %), 68 DSP (31 %); timing met at 100 MHz, WNS +0.503 ns, WHS +0.016 ns | [`m6_system_0602.md`](results/utilization/m6_system_0602.md) |
+| D power | Vivado **estimate** (confidence Low, not measured) | 1.91 W chip (PS7 1.56 W, accelerator 0.18 W); ~2.5 J per frame (accelerator alone ~0.23 J) | [`m7_power.md`](results/utilization/m7_power.md) |
+
+Robustness on the board: 2 × 1,000 tiles without an error, 50 fresh program loads, error recovery 10/10 (`docs/OVERNIGHT_LOG.md`).
+Demo figures (test images run on the board): [`docs/demo/`](docs/demo/).
 
 ## The network
 
@@ -34,10 +50,11 @@ RGB (+3 px halo) → Conv3×3 (3→16) + ReLU → Depthwise 3×3 (16) + ReLU →
 
 * 2,620 parameters, 2,560 multiply-accumulates per input pixel (≈ 1.3 GMAC for a 960×540 frame).
 * All convolutions are **valid** (no padding): the input carries a 3-pixel border, so processing an image in tiles gives the same result as
-  processing it whole. This is exactly how the FPGA tile engine will work.
+  processing it whole. This is exactly how the FPGA tile engine works.
 * Chosen to be hardware friendly: ReLU only, no residual connections, pixel shuffle is pure re-addressing.
 
-## Results so far (×2, measured)
+
+## FP32 model quality (M2, measured)
 
 Bicubic uses the same low-resolution protocol as the standard benchmarks (Pillow bicubic; bit-exact with the official LR files for
 even-sized images). PSNR is on the Y channel with a 2-pixel border shaved; SSIM is the Gaussian 11×11 definition.
@@ -53,7 +70,6 @@ even-sized images). PSNR is on the Y channel with a 2-pixel border shaved; SSIM 
 * Verified at the target size: 960×540 → 1920×1080 runs in ~0.1 s on a CPU, and 135 tiles (64×64 core + 3 px halo) reproduce the
   whole-image output to 6.6e-7.
 * Limits: fine random texture (gravel, fur, fabric weave) is not recovered; that is expected for a 2.6 K-parameter network.
-* All hardware numbers (resources, timing, fps) are **not measured yet**.
 
 Details, ablations (SSIM loss, 24 channels, edge windows: all within noise) and the reproducibility notes:
 [`results/quality/m2_training_summary.md`](results/quality/m2_training_summary.md).
@@ -77,7 +93,7 @@ per-layer weight scale) were chosen on 12 *validation* images, never on the test
 * The sweep over quantization settings is in [`results/quality/m3_ptq_sweep.md`](results/quality/m3_ptq_sweep.md), full tables in
   [`results/quality/model_int8_x2.md`](results/quality/model_int8_x2.md).
 
-## Convolution engine in RTL (M4, simulated + synthesized, not on a board)
+## Convolution engine in RTL (M4, simulated + synthesized)
 
 `hardware/rtl/conv_engine/conv_engine.v` is a folded convolution engine for one layer (one instance per layer): one MAC lane per output
 channel (DSP48), a shared requantizer that overlaps with the next pixel, and a step-major weight ROM. Every layer reproduces the golden
@@ -97,11 +113,11 @@ randomized layers with distinct per-channel multipliers on a non-square tile. Th
   The synthesized netlists were also simulated (xsim) and are bit-exact on the golden tile.
 * A plain 70x70x128-bit activation buffer infers **32 RAMB36 (23 % of the chip)**, more than the ~20 the guide assumed; M5 fixed this with a split RAM (18.5 tiles, see below).
 * 854,149 engine cycles per tile x 135 tiles = 115 M cycles = about 1.15 s per 960x540 frame at 100 MHz, **compute only and from simulation**. The chained
-  core with byte-wide I/O (M5, below) needs 926,201 cycles per tile (about 1.25 s per frame); DMA and ARM time (M6) are not included. No board measurements exist yet.
+  core with byte-wide I/O (M5, below) needs 926,201 cycles per tile (about 1.25 s per frame); DMA and ARM time are not included (board: 1.312 s per frame, see above).
 * Details, pitfalls found (a ROM initialisation that simulated fine but was ignored by Vivado) and the breakage tests:
   [`results/utilization/m4_conv_engine.md`](results/utilization/m4_conv_engine.md), [`docs/milestones/M4_conv_engine_rtl.md`](docs/milestones/M4_conv_engine_rtl.md).
 
-## Full tile core in RTL (M5, simulated + synthesized, not on a board)
+## Full tile core in RTL (M5, simulated + synthesized)
 
 `hardware/rtl/sr_core/sr_tile_core.v` takes one tile as a byte stream (70x70 RGB with a 3 px halo), runs the four conv engines one after the other
 through five activation RAMs, applies the pixel shuffle and streams the 128x128 RGB result out (valid/ready handshakes, `out_last`).
@@ -113,66 +129,137 @@ moments leave the core quiet, and the synthesized netlist passes the same stream
 | Whole core (HC = 64) | Value |
 |---|---|
 | Cycles per tile (simulated, no stalls) | 926,201 (engines 854,149 + byte-wide load/output 72,052) |
-| Frame estimate, 960x540 = 135 tiles | about 1.25 s at 100 MHz (~0.80 fps), compute + byte streams only, **not a board measurement** |
+| Frame estimate, 960x540 = 135 tiles | about 1.25 s at 100 MHz (~0.80 fps), compute + byte streams only, simulation (board: 1.312 s) |
 | LUT / FF / DSP / BRAM36 tiles (after place and route) | 1,896 / 3,341 / 68 (31 %) / 70 (50 %) |
 | Routed setup slack at 100 MHz | **+0.723 ns** (was +0.234 ns before the 2026-10-09 timing fix; out-of-context, no I/O timing), hold +0.085 ns |
 
 * Block-RAM finding: Vivado rounds the depth of a cascaded RAM up to a power of two, so one 4624x128-bit buffer needs 32 tiles; splitting the address
   range (`tile_ram_split`) needs 18.5. Without it the five buffers would not leave room on the chip.
 * Details, design decisions and the breakage checks: [`results/utilization/m5_tile_core.md`](results/utilization/m5_tile_core.md),
-  [`docs/milestones/M5_full_network_rtl.md`](docs/milestones/M5_full_network_rtl.md). Not done: AXI/DMA wrapper and ARM driver (M6), any board measurement.
+  [`docs/milestones/M5_full_network_rtl.md`](docs/milestones/M5_full_network_rtl.md).
+
+
+## System on the board (M6)
+
+```
+ARM Cortex-A9 (bare-metal C, software/board/sr_app)          FPGA fabric, 100 MHz
+  pad image, cut 70×70 tiles, place 128×128 results    ──AXI-Lite (GP0, 0x4000_0000)──▶ sr_accel_top: CONTROL/STATUS/CYCLES/ERROR/VERSION
+  DDR ◀──── HP0 ────▶ AXI DMA (0x4040_0000) ──AXI-Stream 32 bit──▶ sr_axis_wrapper ──▶ sr_tile_core (L1→L2→L3→L4 → pixel shuffle) ──▶ back to the DMA
+```
+* `hardware/rtl/top/sr_accel_top.v`: AXI-Lite registers ([`docs/REGISTER_MAP.md`](docs/REGISTER_MAP.md)) + AXI-Stream wrapper around the M5 core. VERSION 0x53520602.
+* `software/board/`: driver (DMA, timeouts, reset/recovery), tiling, tests T1 golden tile, T2 whole image, T3 timing, T5 error recovery, T6 stress;
+  `run_board.tcl` (xsdb) programs the FPGA safely (PL held in reset and PS-PL level shifters off while it is reprogrammed), loads the program and
+  moves images in and out over JTAG. Details: [`software/board/README.md`](software/board/README.md), [`docs/milestones/M6_axi_dma_arm_driver.md`](docs/milestones/M6_axi_dma_arm_driver.md).
 
 ## Repository layout
 
 ```
-docs/          plan, milestone guides, original notes
+docs/          plan, milestone guides, demo script, register map, step log (OVERNIGHT_LOG.md)
 software/ai/   dataset, models, training, quantization, evaluation (Python)
-software/arm_driver/, software/host_tools/   ARM C driver and PC helpers (later milestones)
-hardware/      rtl/ (Verilog: common, conv_engine, sr_core; rtl/weights = exported network parameters), verification/ (tb/ testbenches, run_tests.sh), vivado/ (scripts, constraints)
-data/          datasets and golden vectors (git-ignored, see data/README.md)
-results/       measured quality tables and plots
+software/board/   ARM program (sr_app/), board scripts (xsdb, bash), platform + ELF build
+software/host_tools/   PC helpers: png <-> raw, expected output, compare, figures
+hardware/rtl/  Verilog: common, conv_engine, sr_core, axi_wrapper, top; rtl/weights = exported network parameters
+hardware/verification/   testbenches (tb/), run_tests.sh, run_postsynth.sh, demo_sim.sh
+hardware/vivado/   scripts/ (synthesis, system build, power), bd/ (block design as Tcl), ip_repo/ (M0 adder IP)
+data/          datasets, golden vectors, board files (git-ignored, see data/README.md)
+results/       measured numbers: quality/ speed/ utilization/
 CLAUDE.md      running project log: decisions, status, measured numbers
 ```
 
-## Reproduce the software results
+## Reproduce from scratch
+
+**Tested on 2026-10-12 in a fresh `git clone` in an empty folder** (commit `e12c898`), on the machine below. Every step ran there and gave the
+results listed under "Check"; the bitstream built from the clone has the same utilization, timing and power as the board-tested 0602 build, and
+on the board it gave byte-identical results, including all 119 test images (record: [`m7_clean_clone_build.md`](results/utilization/m7_clean_clone_build.md)). Not re-run in that test: the dataset downloads (copied from the main folder) and the 33-minute
+training (the trained checkpoint is committed; training is not bit-reproducible, see below).
+
+**Needs:** Ubuntu 24.04 (tested), Python 3.12 with PyTorch 2.x, NumPy, OpenCV and Pillow (system packages here), Icarus Verilog 12,
+Vivado + Vitis **2024.1** with the Digilent ZedBoard board files, a ZedBoard on the PROG/JTAG USB port (J17), boot jumpers on JTAG.
+About 1 GB of disk for the data and 1 GB for the build.
 
 ```bash
-python3 -m venv --system-site-packages .venv && .venv/bin/pip install -r requirements.txt   # PyTorch 2.x is also required
-software/ai/scripts/fetch_div2k_subset.sh 192          # training images (DIV2K subset from a Hugging Face mirror)
-# Set5 / Set14 / BSD100 HR + official x2 LR: see data/README.md for the sources and folder layout
+# 0. checkout + Python environment
+git clone https://github.com/sreeveenkat/FPGA-Image-Super-Resolution-Accelerator.git sr && cd sr
+python3 -m venv --system-site-packages .venv && .venv/bin/pip install -r requirements.txt   # pip may time out on a slow network: just re-run it
+source <Xilinx install>/Vitis/2024.1/settings64.sh                                       # vivado, vitis, xsdb on the PATH
 
-.venv/bin/python software/ai/dataset/check_dataset.py           # data sanity + no train/test overlap
-.venv/bin/python software/ai/dataset/check_lr_protocol.py       # LR protocol matches the official files
-.venv/bin/python software/ai/evaluation/eval_baseline.py        # bicubic / nearest baselines
-.venv/bin/python software/ai/training/train.py --epochs 100 --steps 500 --images 192 --val 12 --threads 4 \
-                 --out software/ai/checkpoints/srnet_fp32.pt    # ≈ 10–35 min on a CPU
-.venv/bin/python software/ai/evaluation/eval_model.py           # model vs bicubic on all test sets
-.venv/bin/python software/ai/evaluation/check_target_res.py     # 960×540 → 1080p and tiled == whole image
-.venv/bin/python -W error software/ai/evaluation/test_baseline.py
-.venv/bin/python -W error software/ai/evaluation/test_model.py
+# 1. data (git-ignored)
+software/ai/scripts/fetch_div2k_subset.sh 192             # DIV2K training images -> data/train/HR
+# Set5 / Set14 / BSD100 HR + official x2 LR -> data/test/HR, data/test/LR_official: sources in data/README.md
+.venv/bin/python software/ai/evaluation/eval_baseline.py   # FIRST: makes data/test/LR + the bicubic/nearest baselines
+.venv/bin/python software/ai/dataset/check_dataset.py      # Check: "OK: all files decode, no duplicates, no train/test overlap, all test LR present"
 
-# M3: INT8 (needs the checkpoint above; qparams.npz and hardware/rtl/weights/ are committed)
-.venv/bin/python software/ai/evaluation/eval_int8.py --sweep    # choose settings on validation images (~4 min)
-.venv/bin/python software/ai/quantization/quantize.py           # -> software/ai/quantization/qparams.npz
-.venv/bin/python software/ai/quantization/export_rtl.py         # -> hardware/rtl/weights/*.mem + data/golden/*
-.venv/bin/python software/ai/evaluation/eval_int8.py            # INT8 vs FP32 vs bicubic on the test sets
-.venv/bin/python -W error software/ai/quantization/test_integer.py
-.venv/bin/python -W error software/ai/quantization/test_export.py
+# 2. model (M2-M3). Training is optional: software/ai/checkpoints/srnet_fp32.pt is committed.
+# .venv/bin/python software/ai/training/train.py --epochs 100 --steps 500 --images 192 --val 12 --threads 4 --out software/ai/checkpoints/srnet_fp32.pt
+.venv/bin/python software/ai/quantization/quantize.py      # -> qparams.npz
+.venv/bin/python software/ai/quantization/export_rtl.py    # -> hardware/rtl/weights/*.mem + data/golden/
+.venv/bin/python software/ai/quantization/gen_unit_vectors.py
+git status --short                                         # Check: empty (all regenerated files byte-identical to the committed ones)
+.venv/bin/python -W error software/ai/quantization/test_integer.py && .venv/bin/python -W error software/ai/quantization/test_export.py
+.venv/bin/python software/ai/evaluation/run_all.py --no-fpga   # Check: "max |recomputed - published| over all metrics: 0" (~30 s)
 
-# M4: RTL (needs iverilog; Vivado only for the synthesis line)
-.venv/bin/python software/ai/quantization/gen_unit_vectors.py                  # requant vectors + randomized layers
-hardware/verification/run_tests.sh quick                                       # ~2 min (engine + tile core + seam test); `full` = all golden tiles at the real size, ~20 min
-vivado -mode batch -source hardware/vivado/scripts/synth_conv_engine.tcl -tclargs 1 10.0 impl   # layer 1..4 synth + place&route
-vivado -mode batch -source hardware/vivado/scripts/synth_sr_tile_core.tcl -tclargs 10.0 impl      # whole core
-hardware/verification/run_postsynth.sh                                         # xsim on the synthesized netlists: 4 layers + the tile core (~2.5 min)
+# 3. RTL simulation (M4-M5)
+hardware/verification/run_tests.sh quick                   # Check: "36 test runs passed, 0 failed" (~3 min)
+
+# 4. bitstream (M6): new Vivado project from the repo, ~7 min. Keep 2 jobs: 8 froze a 15 GB PC.
+vivado -mode batch -nojournal -log ../m6_build.log -source hardware/vivado/scripts/build_m6_system.tcl -tclargs $PWD/../m6_build 2
+# Check: "WNS 0.503  WHS 0.016" and "BUILD_OK"; the log says 12 x "<this checkout>/hardware/rtl/weights/... is read successfully"
+
+# 5. ARM program: Vitis platform (BSP) from the new XSA, then the test programs
+vitis -s software/board/create_platform.py $PWD/../m6_build/design_1_wrapper.xsa $PWD/../m6_ws        # Check: "PLATFORM_OK" (~30 s)
+export SR_BSP=$PWD/../m6_ws/m6_platform/export/m6_platform/sw/standalone_ps7_cortexa9_0 SR_LSCRIPT=$PWD/software/board/sr_app/lscript.ld
+.venv/bin/python software/host_tools/golden_tile_h.py      # golden tile header for T1
+for n in 1 2 3; do software/board/build_elf.sh $n; done    # -> software/board/build/sr_app_t{1,2,3}.elf
+
+# 6. on the board (power on, fresh or not)
+export SR_BIT=$PWD/../m6_build/m6_sr.runs/impl_1/design_1_wrapper.bit
+.venv/bin/python software/host_tools/make_test_images.py
+.venv/bin/python software/host_tools/expected_output.py data/board/div2k_img0193_lr_960x540.raw data/board/div2k_img0193_expected_1920x1080
+xsdb software/board/run_board.tcl software/board/build/sr_app_t1.elf - - t1.txt
+# Check t1.txt: result=0, version=0x53520602, stat6=20 (20 repeats identical), stat0/1 = CYCLES ~926,217-926,241
+xsdb software/board/run_board.tcl software/board/build/sr_app_t2.elf data/board/div2k_img0193_lr_960x540.raw out.raw t2.txt
+.venv/bin/python software/host_tools/compare_raw.py out.raw data/board/div2k_img0193_expected_1920x1080.raw   # Check: "BYTE-EXACT: yes", fnv1a32 0xcf947f22
+xsdb software/board/run_board.tcl software/board/build/sr_app_t3.elf data/board/div2k_img0193_lr_960x540.raw t3.raw t3.txt
+# Check t3.txt: stat1 = mean frame time in us (~1,311,900)
+
+# 7. table A with the FPGA row (all 119 test images on the board, ~11 min)
+.venv/bin/python software/host_tools/board_testsets.py prep
+software/board/run_testsets.sh                              # Check: "119 byte-exact, 0 failed of 119"
+.venv/bin/python software/ai/evaluation/run_all.py          # -> results/quality/table_a_x2.md (FPGA row == INT8 row)
 ```
 
-Training is statistically but not bit-for-bit reproducible (thread count changes floating-point summation order); the trained
-checkpoints (14 KB each) are therefore committed in `software/ai/checkpoints/`.
+Notes:
+* `build_elf.sh`, `run_board.tcl` and `demo.sh` default to the paths of the original PC (`~/Desktop/venkat/...`); the `SR_BSP`, `SR_LSCRIPT`
+  and `SR_BIT` variables above override them. `demo.sh` has no override yet: on another PC use the commands of step 6.
+* `hardware/vivado/bd/design_1_m6.tcl` is `write_bd_tcl` of the board-tested block design. It still contains the two GPIOs and the
+  `adder_ip` from M0 (in `hardware/vivado/ip_repo/`) so that the address map and the BSP stay identical to the tested system.
+* Steps 1-3 run without the Xilinx tools; step 3 needs only Icarus Verilog. More checks (full regression ~20 min, netlist simulation, breakage
+  tests): [`docs/VERIFY_YOURSELF.md`](docs/VERIFY_YOURSELF.md).
+* Training is statistically but not bit-for-bit reproducible (thread count changes the floating-point summation order: about 0.02 dB); that is
+  why the checkpoint (14 KB) is committed and everything after it is checked byte for byte.
 
-## Planned verification chain
+## Verification chain
 
-`PyTorch FP32` → `NumPy integer model (golden)` → `RTL`. The RTL will be compared bit-for-bit with the integer model, never with PyTorch.
+`PyTorch FP32` → `NumPy integer model (golden)` → `RTL (Icarus, xsim, synthesized netlists)` → `board`. The RTL and the board are compared
+**bit for bit** with the integer model, never with PyTorch: per layer and per tile in simulation, the seam test for tiling, and on the board the
+golden tile, whole frames and all 119 test images.
+
+## Limitations (honest list)
+
+* **0.76 fps, not real time.** The four layer engines run one after another and are folded (L4 alone is 64 % of the cycles); tile load, compute and
+  output are not overlapped. A faster version needs more parallel MACs in L4 and tile-level double buffering.
+* **Power is a Vivado estimate** (confidence Low); nothing was measured with an instrument. 82 % of the estimate is the ARM side (PS7).
+* **2 single first-tile failures** seen on 2026-10-11 are still unexplained (`results/speed/m6_board.md`); none happened in the thousands of tiles after
+  the PL-isolation fix in the loading script.
+* Images are moved in and out over JTAG (debugger memory access), not from an SD card or a video input: fine for measuring, not a product.
+* The INT8 model loses 0.08-0.18 dB against FP32; fine random texture (gravel, fur, fabric) is not recovered by a 2,620-parameter network.
+* No comparison of speed with a CPU/GPU implementation was made.
+
+## Future work
+
+* Speed: parallelize L4, overlap load/compute/output, wider stream (target ~5-10 fps from the plan).
+* SAIF-based power estimate and a measured board power figure.
+* M8 options: HDMI output, ×4, luma-only network, ray-traced input.
 
 ## References
 
