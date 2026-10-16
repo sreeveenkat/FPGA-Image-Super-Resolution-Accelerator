@@ -5,13 +5,14 @@
 # SR_LSCRIPT=<linker script> (sr_app/lscript.ld in this repo is a copy of the Vitis sr_app one). Output always goes to software/board/build of THIS checkout.
 set -eu
 cd "$(dirname "$0")/../.."
-N="${1:?usage: build_elf.sh <SR_TEST 0..3> [extra flags]}"; shift || true
+N="${1:?usage: build_elf.sh <SR_TEST 0..3, 5, 10, 11> [extra flags]}"; shift || true
 P="${SR_BSP:-$HOME/Desktop/venkat/vitis_workspace/m6_platform/export/m6_platform/sw/standalone_ps7_cortexa9_0}"
 LS="${SR_LSCRIPT:-$HOME/Desktop/venkat/vitis_workspace/sr_app/src/lscript.ld}"
 BIN="$HOME/Desktop/vivado_install/Vitis/2024.1/gnu/aarch32/lin/gcc-arm-none-eabi/bin"
 mkdir -p software/board/build
+EXTRA=""; [ "$N" = 11 ] && EXTRA="software/board/sr_app/sr_swmodel.c"   # T7 ARM-only baseline (needs sr_weights.h: software/host_tools/weights_h.py)
 CF="-O2 -DSDT -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -g -Wall -Wextra -Werror=implicit-function-declaration -fno-tree-loop-distribute-patterns -specs=$P/Xilinx.spec -I$P/include -Isoftware/board -Isoftware/board/sr_app -DSR_TEST=$N $*"
 "$BIN/arm-none-eabi-gcc" $CF -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -specs="$P/Xilinx.spec" -Wl,-T -Wl,"$LS" -L"$P/lib" \
-    software/board/sr_app/main.c software/board/sr_app/sr_driver.c software/board/sr_app/sr_tiling.c \
+    software/board/sr_app/main.c software/board/sr_app/sr_driver.c software/board/sr_app/sr_tiling.c $EXTRA \
     -Wl,--start-group,-lxilstandalone,-lxiltimer,-lxil,-lgcc,-lc,--end-group -o software/board/build/sr_app_t$N.elf 2> software/board/build/link_t$N.log || { grep -E "error|undefined" software/board/build/link_t$N.log; exit 1; }
 ls -l software/board/build/sr_app_t$N.elf

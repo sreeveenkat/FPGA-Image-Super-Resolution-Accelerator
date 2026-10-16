@@ -44,3 +44,4 @@ docs/milestones/
 docs/resources/
 docs/PROJECT_PLAN.md
 software/arm_driver/
+software/board/sr_app/sr_weights.h

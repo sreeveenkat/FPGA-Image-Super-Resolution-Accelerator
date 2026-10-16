@@ -12,7 +12,9 @@ after the timer/driver changes.
 | `sr_app/sr_tiling.c/.h` | pad / cut / place / checksum / tile loop - portable C, no Xilinx headers |
 | `sr_app/sr_driver.c/.h` | DMA + register driver: `sr_init`, `sr_soft_reset`, `sr_run_tile`, timeouts, `sr_dump` |
 | `sr_app/sr_memmap.h` | DDR memory map (static asserts) |
-| `sr_app/main.c` | T1 golden tile, T2 full image, T3 timing (UART menu or `-DSR_TEST=n`) |
+| `sr_app/main.c` | T1 golden tile, T2 full image, T3 timing, T7 ARM-only baseline (UART menu or `-DSR_TEST=n`) |
+| `sr_app/sr_swmodel.{c,h}` | T7: the integer model in plain C, one tile on the Cortex-A9 (same tile loop as the FPGA path); weights from the generated `sr_weights.h` (`software/host_tools/weights_h.py`) |
+| `test_swmodel.sh`, `pc_test/swmodel_tool.c` | PC check of `sr_swmodel.c`: 960x540 and 128x128 byte-exact vs the integer model (ASan/UBSan and -O2 builds) |
 | `sr_app/golden_tile.h` | GENERATED (git-ignored): `python software/host_tools/golden_tile_h.py` |
 | `pc_test/tiling_tool.c`, `test_tiling.py` | PC proof of the tiling code |
 | `test_regs.py` | header == Verilog == docs |
@@ -74,6 +76,10 @@ Image format SRIM: `software/host_tools/srim.py`. The board prints `fnv1a32=...`
   switching the PS-PL level shifters off first, broke the board after exactly 16 such reloads (every tile then fails, until `rst -system` / `dap_reset.tcl`).
   `run_board.tcl` and `interrupt_test.tcl` do this isolation by default (`SR_NO_ISOLATE=1` only for tests). Vitis' Run does a system reset first, which also avoids it.
   If a run fails with result 7 and stat25 = 2 or 1, or with wrong data: `xsdb software/board/dap_reset.tcl`, then repeat.
+* T7 ARM-only baseline (`build_elf.sh 11`, run `weights_h.py` first; `-DSR_T7_FRAMES=n`, default 1): the Cortex-A9 computes every tile in C, the FPGA is not used.
+  `xsdb software/board/run_board.tcl software/board/build/sr_app_t11.elf data/board/div2k_img0193_lr_960x540.raw t7.raw t7.txt`, then
+  `compare_raw.py t7.raw data/board/div2k_img0193_expected_1920x1080.raw` (fnv1a32 must be 0xcf947f22). Checked on the PC (`test_swmodel.sh`, byte-exact; 0.9 s per frame
+  on the PC at -O2); builds and links for the board (2026-10-16); **NOT run on the board yet**. Plain scalar C at -O2, no NEON: a straightforward, not a tuned, ARM baseline.
 * T6 (`build_elf.sh 10`): 1000 x (init reset + one golden tile) for both driver orders; every failure is counted by kind (stats in main.c).
 * VERSION 0x53520602 (board bitstream since 2026-10-12, `results/utilization/m6_system_0602.md`) adds debug registers; the driver reads them into its first error dump (stat32..38) when present.
 * In this BSP `COUNTS_PER_SECOND` is `XPAR_CPU_CORE_CLOCK_FREQ_HZ/2` WITHOUT parentheses (xtimer_config.h): the sources wrap it (`TICKS_PER_SEC`). `xtime_l.h` does not exist
@@ -87,5 +93,6 @@ Words at `SR_MARK_ADDR + 32 + 4*i` (`stat<i>` in the stats file). Times in micro
 * T1: stat0..2 CYCLES min/max/mean over 21 runs, stat3..5 tile time min/max/mean, stat6 number of repeats identical to the first run (of 20).
 * T2: stat0 total, stat1 padding, stat2 ARM tile copy (cut + place), stat3 DMA + compute wait, stat4..6 CYCLES min/max/mean.
 * T3: stat0 frames, stat1..3 frame total mean/min/max, stat4 pad mean, stat5 ARM copy mean, stat6..8 DMA+compute wait mean/min/max, stat9..11 CYCLES min/max/mean.
+* T7 (ARM only, SR_TEST=11): stat0 frames, stat1..3 frame total mean/min/max, stat4 pad mean, stat5 ARM tile copy mean, stat6 ARM compute mean.
 * T5 (error recovery, SR_TEST=5): stat0 number of cases (4), then per case i: stat(1+3i) rc of the bad tile, stat(2+3i) rc of the reset after it, stat(3+3i) 1 = next tile byte-exact.
 * stat24..29 = FIRST register dump of the run (all 0 = none): STATUS, ERROR_CODE, CYCLES, MM2S_SR, S2MM_SR, number of dumps.
