@@ -16,7 +16,7 @@ Project folder on this machine: `/home/sreevenkat/Desktop/venkat/sem_project_all
 |---|---|---|---|
 | 1 | Setup and sanity checks | 10 min | VS Code terminal |
 | 2 | Software M1 – M3 (data, baseline, FP32 model, INT8 model) | 25 min (+35 min if you retrain) | VS Code terminal |
-| 3 | RTL M4 – M5 in simulation (Icarus Verilog) | 3 min quick / ~25 min full | VS Code terminal |
+| 3 | RTL M4 – M6 in simulation (Icarus Verilog): engines, tile core, AXI wrapper, AXI top, board-software checks | 3 min quick / ~25 min full | VS Code terminal |
 | 4 | RTL in Vivado: simulation with waveforms, synthesis, place and route, GUI reports | 40 min | Vivado |
 | 5 | "Try to break it" exercises (proves the tests can fail) | 20 min | VS Code terminal |
 | 6 | Master table of expected numbers, limits, troubleshooting | reference | — |
@@ -220,14 +220,14 @@ git status --short hardware/rtl/weights        # must print nothing (the exporte
 
 The **reference** for every test is the Python integer model (Part 2.7): its outputs were written to `data/golden/*.hex`. The testbenches (`hardware/verification/tb/*.v`) feed the golden input into the RTL and compare **every output byte** with the golden output. A pass means "bit for bit identical", not "close".
 
-### 3.2 The quick regression ✅ (about 2 minutes)
+### 3.2 The quick regression ✅ (about 3 minutes; re-run 2026-10-16)
 ```bash
 hardware/verification/run_tests.sh quick
 echo "exit=$?"
 ```
-**Expect:** a list of `PASS …` lines in sections *unit tests / conv engine / randomized parameters / tile_ram_split / full tile core / seam* and the last line
+**Expect:** a list of `PASS …` lines in sections *unit tests / conv engine / randomized parameters / tile_ram_split / full tile core / AXI-Stream wrapper / accelerator top / board software (no board)* (the seam test is part of the tile-core section) and the last line
 ```
-== summary: 29 test runs passed, 0 failed (quick)
+== summary: 36 test runs passed, 0 failed (quick)
 ```
 and `exit=0`. Any `FAIL` line, or an exit code other than 0, is a failure. Typical lines:
 ```
@@ -236,13 +236,14 @@ PASS layer 1 tile small12: 100 pixels (10x10) x 16 ch bit-exact, 2723 cycles (27
 PASS sr_tile_core HC=6 tile small12: 432 output bytes bit-exact, layer buffers exact, 10961 cycles, re-run + 2nd tile + abort sweep OK
 [seam hc=8] 20 tiles simulated, 0 failed
 PASS seam hc=8: 20 RTL tiles assembled == whole-image integer model, 74x58 pixels bit-exact
+PASS sr_accel_top HC=6 tile small12: 108 output beats bit-exact via AXI-Lite + AXI-Stream, CYCLES=10962, 2nd tile back to back, start-while-busy + error codes + soft-reset sweep OK
 ```
 
-### 3.3 The full regression ✅ (about 20–25 minutes — start it and do something else)
+### 3.3 The full regression ✅ (about 25–30 minutes — start it and do something else; re-run 2026-10-16)
 ```bash
 hardware/verification/run_tests.sh full
 ```
-**Expect:** `== summary: 73 test runs passed, 0 failed (full)`. In addition to quick it runs all four layers on all 9 real-size tiles, the whole core at the real size (70×70 → 128×128, including two runs with random stalls) and the real-size seam test (4 tiles → 200×180 pixels).
+**Expect:** `== summary: 88 test runs passed, 0 failed (full)`. In addition to quick it runs all four layers on all 9 real-size tiles, the whole core at the real size (70×70 → 128×128, including two runs with random stalls), the real-size seam test (4 tiles → 200×180 pixels), the AXI-Stream wrapper and the AXI top at the real size (CYCLES 926,202 without stalls), the START-vs-first-beat offset sweep, the C tiling code on the 960x540 test image, and a compile + link of the board program with the Vitis ARM toolchain (skipped if Vitis is not installed).
 Cycle numbers you should see, **identical for every tile** (they do not depend on the data):
 
 | Item | Cycles |
@@ -263,7 +264,7 @@ HC=6 is a *small* tile (for speed); the real size is HC=64: `iverilog … -P tb_
 
 ### 3.5 What the simulation tests prove and do not prove
 **Prove:** the RTL computes exactly the integer model, for the golden tiles, for randomized weights (different multiplier per channel), non-square tiles, with stalls on the streams, after re-runs and after one-cycle resets at 60 different moments; and a whole image cut into tiles gives the same result as the whole image (seam test).
-**Do not prove:** behaviour on a board (clocks, DMA, ARM, real AXI), or timing of the full system. There is no AXI/DMA wrapper yet.
+**Do not prove:** behaviour on a board (the real DMA, ARM caches, the PS7 AXI ports) or timing of the full system: the AXI side is driven by testbench models. The board results are in Part 6.1 and `results/speed/`, `results/quality/table_a_x2.md`.
 
 ---
 
@@ -365,7 +366,7 @@ run_tb rom 1             (1 2 3 4)                           run_tb core64 real0
 
 ### 4.6 What Part 4 proves and does not prove
 **Proves:** the design synthesizes without errors, ignored initializers or latches; uses 68 DSPs and 70 block RAMs (half the chip); meets 100 MHz after place and route (out-of-context); and the synthesized netlist behaves like the RTL.
-**Does not prove:** anything about the real board: there are no pin assignments, no AXI/DMA/ARM, no I/O timing, no power measurement, and no image has been upscaled on hardware. The frame time of ≈ 1.25 s (≈ 0.8 fps) is **simulated cycle counting** (135 tiles × 926,201 cycles ÷ 100 MHz), not a measurement.
+**Does not prove:** anything about the real board (the scripts here build the core out-of-context, without the PS7 and DMA). The frame time of ≈ 1.25 s (≈ 0.8 fps) here is **simulated cycle counting** (135 tiles × 926,201 cycles ÷ 100 MHz); the board-measured value is 1.312 s (Part 6.1). The whole-system build is `hardware/vivado/scripts/build_m6_system.tcl` (README, "Reproduce from scratch").
 
 ---
 
@@ -408,11 +409,15 @@ After each experiment restore with `cp` from ROOT (or just delete `/tmp/sandbox`
 | Frame time estimate | ≈ 1.25 s at 100 MHz (≈ 0.8 fps), **simulated** | arithmetic, section 4.6 |
 | Resources, whole core | 1,896 LUT, 3,341 FF, 68 DSP, 70 BRAM tiles | 4.3 |
 | Timing at 100 MHz (routed, out-of-context) | WNS +0.723 ns, hold +0.085 ns (it was +0.234 ns before the 2026-10-09 register stage in `conv_engine`; placement noise is about 0.1 ns) | 4.3 / 4.4 |
+| Whole system on the board (0602 build) | 5,296 LUT, 7,831 FF, 72 BRAM, 68 DSP; WNS +0.503 ns, WHS +0.016 ns at 100 MHz | `results/utilization/m6_system_0602.md` |
+| **Board:** frame time 960x540 → 1920x1080 | 1,311.9 ms = 0.762 fps (mean of 20 frames), CYCLES 926,217-926,241 per tile | `results/speed/m7_timing_20frames.md` |
+| **Board:** correctness | 119/119 test images byte-exact vs the integer model | `results/quality/table_a_x2.md`, `m7_board_testsets_run.log` |
+| Power (estimate, not measured) | 1.913 W chip, 0.176 W accelerator (Vivado, confidence Low) | `results/utilization/m7_power.md` |
 
 ### 6.2 What is NOT verified (be honest in any report)
-* Nothing has run on the **ZedBoard** (no board available): no UART, AXI, DMA, ARM driver, HDMI, power or real fps. Milestones M0, M6, M7 are not done.
+* Board results (M6/M7) cannot be re-checked with this guide alone: they need a ZedBoard and the commands in the README ("Reproduce from scratch", steps 4-7). Power is a Vivado estimate, never measured; there is no HDMI output.
 * The post-synthesis simulation covers only the small 12×12 tile, and for the core only the stream interface.
-* Timing numbers are **out-of-context** (no I/O constraints) and the margin is thin.
+* The timing numbers in Part 4 are **out-of-context** (no I/O constraints); the whole-system timing (WNS +0.503 ns) comes from the board build.
 * Near-duplicate images between train and test are not machine-checked.
 * Training is not bit-reproducible; the committed checkpoint is the frozen artifact.
 
