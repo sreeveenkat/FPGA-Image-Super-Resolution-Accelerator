@@ -177,7 +177,7 @@ Reading of this (measured facts, then my interpretation):
 position of the first TLAST, START -> first beat cycles (+ tvalid-at-start flag), beats accepted outside a tile, accepted / ignored STARTs, and the beat count and CYCLES
 latched at the first error. `tb_sr_accel_top.v` checks all of them after every tile (normal, every error kind, start-while-busy, stalls, offset sweep). Out-of-context:
 2,114 LUT, 3,705 FF, 70 BRAM, 68 DSP, WNS +0.305 / WHS +0.081 ns (`results/utilization/m6_top.md`). The driver accepts both 0x53520601 and 0x53520602 and puts the
-debug registers into its error dump (marker stat32..38). Since B + the A/B explain the failure, a rebuild is NOT needed for M6; it is ready if the problem returns.
+debug registers into its error dump (marker stat32..38). Since B + the A/B explain the failure, a rebuild is NOT needed for M6; it is ready if the problem returns. (Update 2026-10-12: the 0602 bitstream was built and passed the board regression, `../utilization/m6_system_0602.md`.)
 
 **Driver honesty rule.** No test retries a failed tile: T2/T3 stop at the first error and report it in the marker; T5/T6 count every failure by kind; the benchmark
 numbers in sections 2-3 contain only complete, byte-exact frames, and no failed run was dropped silently (all failures are listed in this file).

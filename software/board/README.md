@@ -75,7 +75,7 @@ Image format SRIM: `software/host_tools/srim.py`. The board prints `fnv1a32=...`
   `run_board.tcl` and `interrupt_test.tcl` do this isolation by default (`SR_NO_ISOLATE=1` only for tests). Vitis' Run does a system reset first, which also avoids it.
   If a run fails with result 7 and stat25 = 2 or 1, or with wrong data: `xsdb software/board/dap_reset.tcl`, then repeat.
 * T6 (`build_elf.sh 10`): 1000 x (init reset + one golden tile) for both driver orders; every failure is counted by kind (stats in main.c).
-* VERSION 0x53520602 (not yet in a bitstream) adds debug registers; the driver reads them into its first error dump (stat32..38) when present.
+* VERSION 0x53520602 (board bitstream since 2026-10-12, `results/utilization/m6_system_0602.md`) adds debug registers; the driver reads them into its first error dump (stat32..38) when present.
 * In this BSP `COUNTS_PER_SECOND` is `XPAR_CPU_CORE_CLOCK_FREQ_HZ/2` WITHOUT parentheses (xtimer_config.h): the sources wrap it (`TICKS_PER_SEC`). `xtime_l.h` does not exist
   in the SDT platform export; `XTime_GetTime` comes from `xiltimer.h` (the sources use `#if defined(SDT)`).
 * The driver arms S2MM first, then MM2S, then writes CONTROL.START (the core accepts no data before START). After any timeout or error it soft-resets the core and the DMA.

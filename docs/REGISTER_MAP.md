@@ -2,7 +2,7 @@
 
 Source of truth: `hardware/rtl/top/sr_accel_top.v` (header comment + code). C view: `software/board/sr_regs.h`.
 `software/board/test_regs.py` (part of `hardware/verification/run_tests.sh quick`) fails when the header and the Verilog disagree.
-Status: offsets 0x00-0x14 (VERSION 0x53520601) **run on the ZedBoard since 2026-10-11**; the debug registers 0x18-0x30 (VERSION 0x53520602) are simulated and synthesized only, not yet in a bitstream. The AXI base address of the block comes from the Vivado Address Editor (see "Address map of the block design" below; `SR_BASE` in `software/board/sr_app/sr_driver.h`).
+Status: offsets 0x00-0x14 (VERSION 0x53520601) **run on the ZedBoard since 2026-10-11**; the debug registers 0x18-0x30 (VERSION 0x53520602) **run on the ZedBoard since 2026-10-12** (bitstream 0602, `results/utilization/m6_system_0602.md`). The AXI base address of the block comes from the Vivado Address Editor (see "Address map of the block design" below; `SR_BASE` in `software/board/sr_app/sr_driver.h`).
 
 32-bit registers, 6-bit byte address (64-byte window). Reads of other addresses return 0; writes to read-only or unmapped addresses are accepted
 (response OKAY) and ignored. AW and W may arrive in any order. A write needs the matching `wstrb`.

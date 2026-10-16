@@ -35,7 +35,7 @@ A module reference of `sr_accel_top` in a fresh Vivado project showed: interface
 Out-of-context: no I/O constraints, no PS, no DMA. The absolute `WDIR` ties the synthesis to this machine. The AXI-Lite and stream timing with the
 real PS7 and DMA is not covered. Power is a tool estimate.
 
-## Version 0x53520602: with the debug registers (2026-10-11, out-of-context, same script, NOT yet in a bitstream)
+## Version 0x53520602: with the debug registers (2026-10-11, out-of-context, same script, NOT yet in a bitstream on that date; built into the board bitstream 0602 on 2026-10-12, see `m6_system_0602.md`)
 `hardware/rtl/top/sr_accel_top.v` with the 7 read-only debug registers (0x18-0x30, `docs/REGISTER_MAP.md`). Reports: `m6_top_dbg_utilization_routed.txt`, `m6_top_dbg_timing_routed.txt`.
 
 | Item | 0x53520601 (above, in the board bitstream) | 0x53520602 (debug registers) |
