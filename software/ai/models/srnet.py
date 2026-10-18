@@ -15,9 +15,9 @@ HALO = 3
 
 
 class SRNet(nn.Module):
-    def __init__(self, scale: int = 2, ch: int = 16):
+    def __init__(self, scale: int = 2, ch: int = 16, anchor: bool = False):
         super().__init__()
-        self.scale, self.ch = scale, ch
+        self.scale, self.ch, self.anchor = scale, ch, anchor
         self.conv1 = nn.Conv2d(3, ch, 3)
         self.dw = nn.Conv2d(ch, ch, 3, groups=ch)
         self.pw = nn.Conv2d(ch, ch, 1)
@@ -25,10 +25,22 @@ class SRNet(nn.Module):
         self.shuffle = nn.PixelShuffle(scale)
 
     def forward(self, x):
+        inp = x
         x = F.relu(self.conv1(x))
         x = F.relu(self.dw(x))
         x = F.relu(self.pw(x))
-        return self.shuffle(self.conv4(x))
+        out = self.conv4(x)
+        if self.anchor:  # ABPN-style anchor: the centre input pixel (nearest-neighbour upscaling) is added to its scale^2 output channels
+            out = out + inp[:, :, HALO:-HALO, HALO:-HALO].repeat_interleave(self.scale * self.scale, dim=1)
+        return self.shuffle(out)
+
+
+def _layer_wb(self):
+    return [(self.conv1.weight, self.conv1.bias, 1), (self.dw.weight, self.dw.bias, self.ch),
+            (self.pw.weight, self.pw.bias, 1), (self.conv4.weight, self.conv4.bias, 1)]
+
+
+SRNet.layer_wb = _layer_wb
 
 
 def count_params(model: nn.Module) -> int:

@@ -36,7 +36,7 @@ CALIB_CROP = 256  # LR crop size used for calibration (keeps it fast; 100 crops 
 
 def load_fp32(path=CKPT):
     ck = torch.load(path, map_location="cpu")
-    m = SRNet(ck["scale"], ck["ch"])
+    m = SRNet(ck["scale"], ck["ch"], ck.get("anchor", False))
     m.load_state_dict(ck["state"])
     return m.eval()
 
@@ -78,10 +78,14 @@ def choose_multiplier(real, bits=16):
     return m, shift
 
 
-def quantize(model, crops, percentile=99.9, per_channel=False):
-    """Returns (dict of arrays for np.savez, info dict)."""
-    acts = collect_activations(model, crops)
-    act_max = [float(np.percentile(a, percentile)) for a in acts]  # L1, L2, L3 output ranges (real units)
+def quantize(model, crops, percentile=99.9, per_channel=False, act_max=None):
+    """Returns (dict of arrays for np.savez, info dict).  act_max (3 floats, real units) overrides the calibrated ranges (used after QAT)."""
+    if act_max is None:
+        acts = collect_activations(model, crops)
+        act_max = [float(np.percentile(a, percentile)) for a in acts]  # L1, L2, L3 output ranges (real units)
+    else:
+        act_max = [float(v) for v in act_max]
+        assert len(act_max) == 3
     s_out = [m / 255.0 for m in act_max] + [1.0 / 255.0]
     s_in = [1.0 / 255.0] + s_out[:3]
     float_layers = (model.conv1, model.dw, model.pw, model.conv4)
@@ -104,6 +108,8 @@ def quantize(model, crops, percentile=99.9, per_channel=False):
                        f"{name}_s_w": sw})
         info.append(dict(layer=name, act_max=(act_max + [1.0])[len(info)], shift=shift, m_min=int(m.min()), m_max=int(m.max()),
                          max_rel_err=rel_err))
+    if getattr(model, "anchor", False):
+        arrays["meta_anchor"] = np.bool_(True)  # only written for anchor networks, so default qparams files stay byte-identical
     return arrays, info
 
 
@@ -117,12 +123,15 @@ def main():
     ap.add_argument("--per-channel", action="store_true")
     ap.add_argument("--calib", type=int, default=100)
     ap.add_argument("--out", default=str(OUT))
+    ap.add_argument("--ckpt", default=str(CKPT), help="merged FP32 checkpoint (default: the tracked final model)")
+    ap.add_argument("--act-max", default="", help="a1,a2,a3: use these activation ranges instead of calibrating (QAT result)")
     args = ap.parse_args()
-    model = load_fp32()
-    arrays, info = quantize(model, calibration_crops(args.calib), args.percentile, args.per_channel)
+    model = load_fp32(args.ckpt)
+    act_max = [float(v) for v in args.act_max.split(",")] if args.act_max else None
+    arrays, info = quantize(model, calibration_crops(args.calib), args.percentile, args.per_channel, act_max)
     arrays["meta_percentile"] = np.float64(args.percentile)
     arrays["meta_per_channel"] = np.bool_(args.per_channel)
-    arrays["meta_ckpt_sha256_prefix"] = np.array(checkpoint_sha()[:16])
+    arrays["meta_ckpt_sha256_prefix"] = np.array(checkpoint_sha(args.ckpt)[:16])
     np.savez(args.out, **arrays)
     print(f"wrote {args.out} (percentile {args.percentile}, {'per-channel' if args.per_channel else 'per-layer'} weights, "
           f"{args.calib} calibration crops)")

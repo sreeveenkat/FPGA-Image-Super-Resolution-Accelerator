@@ -29,7 +29,7 @@ def qnet_from_arrays(arrays):
     from quantization.integer_reference import LAYER_SPEC
     layers = [dict(name=n, w=arrays[f"{n}_w"], b=arrays[f"{n}_b"], m=arrays[f"{n}_m"].astype(np.int64),
                    shift=int(arrays[f"{n}_shift"]), depthwise=dw) for n, _ci, _co, _k, dw in LAYER_SPEC]
-    return QNet(layers)
+    return QNet(layers, anchor=bool(arrays.get("meta_anchor", False)))
 
 
 def sweep():

@@ -27,7 +27,8 @@ ACC_BITS = 32  # the accumulator must fit signed 32 bit (checked in tests); the 
 class QNet:
     """Integer parameters of the network: per layer int8 weights, int32 bias, uint16 M (per out channel), SHIFT."""
 
-    def __init__(self, layers):
+    def __init__(self, layers, anchor=False):
+        self.anchor = anchor  # ABPN-style anchor: last layer is a SIGNED residual (clamp -255..255) added to the centre input pixel
         self.layers = layers  # list of dicts: name, w (int8), b (int32), m (int64 array), shift (int), depthwise (bool)
         for L in layers:
             assert L["w"].dtype == np.int8 and L["b"].dtype == np.int32
@@ -37,16 +38,17 @@ class QNet:
     @classmethod
     def load(cls, path):
         z = np.load(path)
+        anchor = bool(z["meta_anchor"]) if "meta_anchor" in z.files else False
         layers = []
         for name, cin, cout, k, dw in LAYER_SPEC:
             layers.append(dict(name=name, w=z[f"{name}_w"], b=z[f"{name}_b"], m=z[f"{name}_m"].astype(np.int64),
                                shift=int(z[f"{name}_shift"]), depthwise=dw))
             assert layers[-1]["w"].shape == ((cout, 1, k, k) if dw else (cout, cin, k, k)), name
-        return cls(layers)
+        return cls(layers, anchor)
 
 
-def conv_requant(x, w, b, m, shift, depthwise=False):
-    """VALID convolution + requantize + clamp [0,255].  x: (C_in,H,W) integer array -> (C_out,H-k+1,W-k+1) int32."""
+def conv_requant(x, w, b, m, shift, depthwise=False, lo=0):
+    """VALID convolution + requantize + clamp [lo,255] (lo = -255 for the signed anchor residual).  x: (C_in,H,W) integer array -> (C_out,H-k+1,W-k+1) int32."""
     k = w.shape[2]
     c_out = w.shape[0]
     h, wd = x.shape[1] - k + 1, x.shape[2] - k + 1
@@ -60,13 +62,13 @@ def conv_requant(x, w, b, m, shift, depthwise=False):
                 acc += win * tap[:, 0][:, None, None]
             else:
                 acc += np.einsum("oc,chw->ohw", tap, win)
-    return requant(acc, m, shift)
+    return requant(acc, m, shift, lo)
 
 
-def requant(acc, m, shift):
+def requant(acc, m, shift, lo=0):
     """acc: int64 (C,H,W) -> uint8-range int32.  Round half up, arithmetic shift, clamp [0,255]."""
     y = (acc * m.astype(np.int64)[:, None, None] + (1 << (shift - 1))) >> shift
-    return np.clip(y, 0, 255).astype(np.int32)
+    return np.clip(y, lo, 255).astype(np.int32)
 
 
 def pixel_shuffle(x):
@@ -81,9 +83,13 @@ def forward_layers(net: QNet, x_chw):
     """x_chw: (3,H+6,W+6) uint8 (halo already attached).  Returns [L1, L2, L3, L4 outputs, shuffled] as int32 arrays."""
     assert x_chw.ndim == 3 and x_chw.shape[0] == 3 and x_chw.dtype == np.uint8
     outs, cur = [], x_chw
-    for L in net.layers:
-        cur = conv_requant(cur, L["w"], L["b"], L["m"], L["shift"], L["depthwise"])
+    for i, L in enumerate(net.layers):
+        last = i == len(net.layers) - 1
+        cur = conv_requant(cur, L["w"], L["b"], L["m"], L["shift"], L["depthwise"], lo=-255 if (net.anchor and last) else 0)
         outs.append(cur)
+    if net.anchor:  # out[4c+j] = clamp(residual[4c+j] + centre pixel of colour c, 0, 255)
+        centre = x_chw[:, HALO:-HALO, HALO:-HALO].astype(np.int32)
+        cur = np.clip(cur + np.repeat(centre, 4, axis=0), 0, 255)
     outs.append(pixel_shuffle(cur))
     return outs
 
