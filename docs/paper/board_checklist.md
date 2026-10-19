@@ -1,6 +1,6 @@
 # Board checklist: T1/T2 re-run, T7 ARM baseline, R2q, power, and later R3q
 
-Prepared 2026-10-19. **Nothing below has been run on the board.** Everything on the PC side (simulation, builds, byte-exact C model) is done and listed in
+Prepared 2026-10-19, updated for the per-design VERSION values. **Nothing below has been run on the board.** Everything on the PC side (simulation, builds, byte-exact C model) is done and listed in
 `results/utilization/m6_system_R2q.md` (branch `r2q`) and `results/utilization/m6_system_R3q.md` (branch `r3q`).
 Board on the PROG/JTAG USB (J17), boot jumpers on JTAG. Run every `xsdb` command from the project root of the tree named in the heading.
 
@@ -12,11 +12,17 @@ Board on the PROG/JTAG USB (J17), boot jumpers on JTAG. Run every `xsdb` command
 | **R2q** (re-param + QAT, SHIFT 22/22/21/22) | branch `r2q` | `~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit` | `~/Desktop/venkat/sandbox_R2q` | 0x2afbc9ae | 0x272bafbb |
 | **R3q** (plain + anchor + QAT, SHIFT 22/22/21/25, RTL change) | branch `r3q` | `~/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.bit` | `~/Desktop/venkat/sandbox_R3q` | 0x45dd4e2d | 0xa1d2f75c |
 
-**The VERSION register is 0x53520602 in all three**, so the register cannot tell them apart. Tell them apart by the golden tile (T1) and the checksum of the 960x540
-output (T2): each tree has its own `golden_tile.h`, `sr_weights.h` and `data/board/*expected*` made from its own weights. As a **negative control**, the first R2q
-run should also be compared against the R0 expected file: `compare_raw.py` must say `BYTE-EXACT: no` (a match would mean the old bitstream is still loaded).
+**Each design has its own VERSION register value** (read by the ARM driver and printed as `version=` in the stats of every run):
 
-Select the bitstream with `SR_BIT=<path> xsdb software/board/run_board.tcl ...` (the script reprograms the PL every run, with PS-PL isolation).
+| Design | VERSION |
+|---|---|
+| R0 / 0602 | `0x53520602` |
+| R2q | `0x53522201` |
+| R3q | `0x53523201` |
+
+Each tree's driver accepts only its own family (`VERSION & 0xFFFFFF00`), so an ELF built in the R2q tree **refuses** to run on any other bitstream (`SR: VERSION 0x..., expected 0x53522201`, result != 0): a loud, free negative control. `run_board.tcl`, `demo.sh`, `run_testsets.sh` and `fresh_load_soak.sh` of the R2q/R3q trees default to their own bitstream and VERSION (override with `SR_BIT` / `SR_EXPECT_VERSION`). The golden tile (T1) and the checksum of the 960x540 output (T2) still prove the weights: each tree has its own `golden_tile.h`, `sr_weights.h` and `data/board/*expected*` made from its own weights. As a second negative control, the first R2q T2 output should also be compared against the R0 expected file: `compare_raw.py` must say `BYTE-EXACT: no`.
+
+`SR_BIT=<path> xsdb software/board/run_board.tcl ...` selects another bitstream (the script reprograms the PL every run, with PS-PL isolation).
 
 ## 1. On the PC, before connecting (the ELFs are already built; rebuild only if a source changes)
 ```bash
@@ -37,13 +43,14 @@ Input files `data/board/div2k_img0193_lr_960x540.raw` (R2q/R3q trees have it; ex
 | T2 | `xsdb software/board/run_board.tcl software/board/build/sr_app_t2.elf data/board/div2k_img0193_lr_960x540.raw t2_r0.raw t2_r0.txt` then `.venv/bin/python software/host_tools/compare_raw.py t2_r0.raw data/board/div2k_img0193_expected_1920x1080.raw` | `BYTE-EXACT: yes`, fnv1a32 0xcf947f22, stat0 about 1,311,000 us |
 | T7, 1 frame (never run before) | `xsdb software/board/run_board.tcl software/board/build/sr_app_t11.elf data/board/div2k_img0193_lr_960x540.raw t7_r0.raw t7_r0.txt` then the same `compare_raw.py` with `t7_r0.raw` | `result=0`, `BYTE-EXACT: yes`; record stat1 (time per frame), stat4 pad, stat5 ARM copy, stat6 ARM compute. Expect seconds per frame (scalar C -O2, no NEON, 650 MHz Cortex-A9; not predicted). The PC runs the same C code in 0.9 s. If it exceeds the 900 s timeout of `run_board.tcl`, raise `TIMEOUT_S`. |
 
-## 3. R2q, from `~/Desktop/venkat/sandbox_R2q` (`export SR_BIT=~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit`)
+## 3. R2q, from `~/Desktop/venkat/sandbox_R2q` (bitstream `~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit`, VERSION 0x53522201; this is the tree's default, no `SR_BIT` needed)
 
 | Step | Command | Pass when |
 |---|---|---|
-| T1 | `xsdb software/board/run_board.tcl software/board/build/sr_app_t1.elf - - t1_r2q.txt` | `result=0`, version 0x53520602, stat6 = 20 (as for R0; the golden tile is the R2q one), CYCLES 926,217-926,241 (same as R0: only constants changed) |
+| T1 | `xsdb software/board/run_board.tcl software/board/build/sr_app_t1.elf - - t1_r2q.txt` | `result=0`, **`version=0x53522201`**, stat6 = 20 (as for R0; the golden tile is the R2q one), CYCLES 926,217-926,241 (same as R0: only constants changed) |
 | T2 (byte-exact) | `xsdb software/board/run_board.tcl software/board/build/sr_app_t2.elf data/board/div2k_img0193_lr_960x540.raw t2_r2q.raw t2_r2q.txt`, then `compare_raw.py t2_r2q.raw data/board/div2k_img0193_expected_1920x1080.raw` | `BYTE-EXACT: yes`, fnv1a32 **0x2afbc9ae**, stat0 about 1,311,000 us |
-| negative control | `compare_raw.py t2_r2q.raw ~/Desktop/venkat/sem_project_all/data/board/div2k_img0193_expected_1920x1080.raw` | `BYTE-EXACT: no` (R2q output differs from R0, as it must) |
+| negative control (VERSION) | run `sr_app_t1.elf` of the R2q tree once with `SR_BIT=~/Desktop/venkat/vitis/m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit` | the driver prints `SR: VERSION 0x53520602, expected 0x53522201`, `result` != 0, then run T1 normally again (reprograms the right bitstream) |
+| negative control (output) | `compare_raw.py t2_r2q.raw ~/Desktop/venkat/sem_project_all/data/board/div2k_img0193_expected_1920x1080.raw` | `BYTE-EXACT: no` (R2q output differs from R0, as it must) |
 | frame time | `xsdb software/board/run_board.tcl software/board/build/sr_app_t3_20f.elf data/board/div2k_img0193_lr_960x540.raw t3_r2q.raw t3_r2q.txt` | mean frame time within 1 ms of R0's 1,311.9 ms (identical cycle count: 926,201 per tile in simulation); output byte-exact (fnv 0x2afbc9ae) |
 | 119 test images (optional, 11 min) | first `.venv/bin/python software/host_tools/board_testsets.py prep` in the R2q tree (writes the R2q expected outputs, a few minutes on the PC), then `software/board/run_testsets.sh` (M7 script; `SR_BIT` as above, results in `data/board/testsets/`), then `board_testsets.py eval` | 119/119 byte-exact against the R2q integer model |
 | T7 | T7 with the R2q tree's `sr_app_t11.elf` | `BYTE-EXACT: yes`, fnv 0x2afbc9ae (the C model has the R2q weights compiled in) |
@@ -86,12 +93,12 @@ apart from constants, so P2a and P2b should agree within the meter's accuracy: i
 PC side for the same table: `sudo .venv/bin/python software/analysis/cpu_baseline.py --md docs/paper/cpu_baseline.md` adds CPU package energy (RAPL); the GPU row
 (nvidia-smi) is already measured: 0.55 J per frame, GPU power only.
 
-## 5. Later: R3q (anchor), from `~/Desktop/venkat/sandbox_R3q` (`export SR_BIT=~/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.bit`)
+## 5. Later: R3q (anchor), from `~/Desktop/venkat/sandbox_R3q` (bitstream `~/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.bit`, VERSION 0x53523201; the tree's default)
 Only after R2q passed section 3. Same steps as section 3 with the R3q tree's ELFs and files; expected values:
 
 | Step | Pass when |
 |---|---|
-| T1 | `result=0`, stat6 = 20 (as for R0; the golden tile is the R3q one and includes the anchor path), CYCLES 926,217-926,241 (the anchor adds **no** cycles: simulated 926,201 per tile as before) |
+| T1 | `result=0`, **`version=0x53523201`**, stat6 = 20 (as for R0; the golden tile is the R3q one and includes the anchor path), CYCLES 926,217-926,241 (the anchor adds **no** cycles: simulated 926,201 per tile as before) |
 | T2 | `BYTE-EXACT: yes`, fnv1a32 **0x45dd4e2d** |
 | negative controls | the R3q output compared with the R2q expected file and with the R0 expected file: `BYTE-EXACT: no` for both |
 | frame time | 20-frame mean within 1 ms of 1,311.9 ms |
