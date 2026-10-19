@@ -101,7 +101,7 @@ def random_layers():
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     net = QNet.load(ROOT / "software/ai/quantization/qparams.npz")
-    shifts = sorted({L["shift"] for L in net.layers} | {1, 2, 3, 8})
+    shifts = sorted({L["shift"] for L in net.layers} | {1, 2, 3, 8, 21, 22, 23, 24, 25})
     for s in shifts:
         rng = np.random.default_rng(1000 + s)
         acc, m = vectors(s, rng)

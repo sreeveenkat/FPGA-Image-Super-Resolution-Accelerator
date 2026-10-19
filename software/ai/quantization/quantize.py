@@ -127,7 +127,9 @@ def main():
     ap.add_argument("--act-max", default="", help="a1,a2,a3: use these activation ranges instead of calibrating (QAT result)")
     args = ap.parse_args()
     model = load_fp32(args.ckpt)
-    act_max = [float(v) for v in args.act_max.split(",")] if args.act_max else None
+    ck = torch.load(args.ckpt, map_location="cpu")
+    act_max = [float(v) for v in args.act_max.split(",")] if args.act_max else ck.get("act_max")  # a QAT checkpoint carries its own ranges
+    args.per_channel = args.per_channel or bool(ck.get("per_channel", False))
     arrays, info = quantize(model, calibration_crops(args.calib), args.percentile, args.per_channel, act_max)
     arrays["meta_percentile"] = np.float64(args.percentile)
     arrays["meta_per_channel"] = np.bool_(args.per_channel)

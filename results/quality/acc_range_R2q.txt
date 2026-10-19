@@ -1,0 +1,24 @@
+parameter set: /home/sreevenkat/Desktop/venkat/sandbox_R2q/software/ai/quantization/qparams.npz  (anchor network: False)
+
+PER LAYER: theoretical worst case vs observed (6 images: validation + Set5 + Set14, full size)
+  theory A = max over channels of  sum|w| x 255 + |bias|      (symmetric bound, every input 255 and every sign adversarial)
+  theory B = sign-aware exact worst case  [bias - 255 sum|w-|,  bias + 255 sum w+]  (inputs 0..255, independent)
+  layer     theory A bits  theory B min  theory B max bits  observed min  observed max bits  headroom vs 32
+  L1          85,619   18       -35,099        50,939   17       -31,077        22,757   16          15 bits
+  L2          61,558   17       -25,417        38,402   17        -4,330        15,945   15          15 bits
+  L3         156,999   19       -66,984       113,716   18       -15,217        12,781   15          14 bits
+  L4         450,650   20      -203,045       246,010   19        -5,060        34,535   17          13 bits
+
+REQUANTIZER (signed 49-bit product acc x M + 2^(SHIFT-1);  limit 281,474,976,710,655)
+  layer   worst |acc*M|+rnd (B)               (A) bits  M range        SHIFT   checks
+  L1              2,503,762,381     4,206,931,861   33  49111..49111       22   OK
+  L2              2,494,463,756     3,997,334,468   33  64902..64902       22   OK
+  L3              4,601,315,640     6,352,286,122   34  40454..40454       21   OK
+  L4              8,815,159,392    16,146,182,752   35  35824..35824       22   OK
+  checks: bound fits int32 (A and B), A*M fits 49 bit, M < 2^16 (4 hex digits in mult_Ln.mem), 1 <= SHIFT <= 40, |bias| fits int32
+  observed L1: output == 255 in 0.000 % of values
+  observed L2: output == 255 in 0.000 % of values
+  observed L3: output == 255 in 0.000 % of values
+  observed L4: output == 255 in 0.907 % of values
+
+RESULT: ALL CHECKS PASS

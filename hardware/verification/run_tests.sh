@@ -29,7 +29,7 @@ build() {  # build <name> <iverilog-args...>
 }
 
 echo "== unit tests"
-for s in 1 2 3 8 21 23 24; do build rq$s -P tb_requant.SHIFT=$s hardware/rtl/common/requant.v $TB/tb_requant.v && run rq$s; done
+for s in 1 2 3 8 21 22 23 24 25; do build rq$s -P tb_requant.SHIFT=$s hardware/rtl/common/requant.v $TB/tb_requant.v && run rq$s; done
 build mac hardware/rtl/common/mac_unit.v $TB/tb_mac_unit.v && run mac
 build ram hardware/rtl/common/tile_ram.v $TB/tb_tile_ram.v && run ram
 for L in 1 2 3 4; do build wr$L -P tb_weight_rom.LAYER=$L hardware/rtl/common/weight_rom.v $TB/tb_weight_rom.v && run wr$L; done

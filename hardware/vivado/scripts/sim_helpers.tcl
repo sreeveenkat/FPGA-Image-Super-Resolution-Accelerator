@@ -5,7 +5,7 @@
 #   run_tb core64 real0         ;# tile core at real size (HC=64), tile real0 (slow: minutes)
 #   run_tb conv 1 small12       ;# conv engine layer 1 (1..4), HC=6
 #   run_tb conv_rand 3          ;# randomized layer 3
-#   run_tb requant 8            ;# requantizer test for SHIFT 8 (1,2,3,8,21,23,24)
+#   run_tb requant 8            ;# requantizer test for SHIFT 8 (1,2,3,8,21,22,23,24,25)
 #   run_tb mac | ram | splitram | rom 2
 proc _go {top generics plusargs} {
     catch {close_sim -force}

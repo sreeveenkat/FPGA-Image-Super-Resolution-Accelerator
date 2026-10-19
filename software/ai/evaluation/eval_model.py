@@ -36,7 +36,8 @@ def main():
     ap.add_argument("--tag", default="fp32")
     args = ap.parse_args()
     model, ck = load_model(args.ckpt)
-    print(f"checkpoint epoch {ck['epoch']} (val PSNR-Y {ck['val_psnr_y']:.3f})")
+    ck_id = f"epoch {ck['epoch']}" if "epoch" in ck else f"QAT step {ck.get('step', '?')} (weights tuned for INT8: the FP32 forward is not their optimum)"
+    print(f"checkpoint {ck_id}")
     out_dir, img_dir = ROOT / "results" / "quality", ROOT / "results" / "images"
 
     rows = []
@@ -58,7 +59,7 @@ def main():
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
-    lines = [f"# Model '{args.tag}' vs bicubic, x2 (checkpoint epoch {ck['epoch']})", "",
+    lines = [f"# Model '{args.tag}' vs bicubic, x2 (checkpoint {ck_id})", "",
              "| Set | Method | PSNR RGB | SSIM RGB | PSNR Y | SSIM Y | images better than bicubic (PSNR Y) |", "|---|---|---|---|---|---|---|"]
     for s in SETS:
         bic = {r["image"]: float(r["psnr_y"]) for r in rows if r["set"] == s and r["method"] == "bicubic"}

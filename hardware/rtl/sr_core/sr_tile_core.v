@@ -17,10 +17,10 @@
 // hardware/rtl/weights/network_params.vh (the testbench checks this).  WDIR is the directory of the exported *.mem files.
 module sr_tile_core #(
     parameter HC     = 64,
-    parameter SHIFT1 = 24,
-    parameter SHIFT2 = 23,
+    parameter SHIFT1 = 22,
+    parameter SHIFT2 = 22,
     parameter SHIFT3 = 21,
-    parameter SHIFT4 = 24,
+    parameter SHIFT4 = 22,
     parameter WDIR   = "hardware/rtl/weights/",
     // derived sizes (do not override)
     parameter IW1 = HC + 6,           // L1 input  (tile with halo)
