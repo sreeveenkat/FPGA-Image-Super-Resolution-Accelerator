@@ -20,7 +20,8 @@ module sr_tile_core #(
     parameter SHIFT1 = 22,
     parameter SHIFT2 = 22,
     parameter SHIFT3 = 21,
-    parameter SHIFT4 = 22,
+    parameter SHIFT4 = 25,
+    parameter ANCHOR = 1,             // 1: anchor network (R3q): layer 4 adds the centre input pixel (read from ram0) before ram4
     parameter WDIR   = "hardware/rtl/weights/",
     // derived sizes (do not override)
     parameter IW1 = HC + 6,           // L1 input  (tile with halo)
@@ -62,7 +63,7 @@ module sr_tile_core #(
 
     // ------------------------------------------------------------------ memories
     wire             r0_we;
-    wire [A0-1:0]    r0_waddr, r0_raddr;
+    wire [A0-1:0]    r0_waddr, r0_raddr, r0_raddr_e1, anc_raddr;
     wire [23:0]      r0_wdata, r0_rdata;
     wire             r1_we, r2_we, r3_we, r4_we;
     wire [A1-1:0]    r1_waddr, r1_raddr;
@@ -101,6 +102,9 @@ module sr_tile_core #(
         end
     end
 
+    // ram0 (the input tile) stays valid after layer 1; during layer 4 its read port serves the anchor (centre pixel of each output pixel)
+    assign r0_raddr = (ANCHOR != 0 && state == S_L4) ? anc_raddr : r0_raddr_e1;
+
     // ------------------------------------------------------------------ the four layer engines
     wire s1 = entry && (state == S_L1), s2 = entry && (state == S_L2), s3 = entry && (state == S_L3), s4 = entry && (state == S_L4);
     wire d1, d2, d3, d4, bz1, bz2, bz3, bz4;
@@ -108,20 +112,21 @@ module sr_tile_core #(
 
     conv_engine #(.C_IN(3),  .C_OUT(16), .K(3), .DEPTHWISE(0), .IN_W(IW1), .IN_H(IW1), .SHIFT(SHIFT1),
                   .W_FILE({WDIR, "wrom_L1.mem"}), .B_FILE({WDIR, "bias_L1.mem"}), .M_FILE({WDIR, "mult_L1.mem"})) e1 (
-        .clk(clk), .rst(rst), .start(s1), .busy(bz1), .done(d1), .in_addr(r0_raddr), .in_data(r0_rdata),
-        .out_we(r1_we), .out_addr(r1_waddr), .out_data(r1_wdata), .cycles(cy1));
+        .clk(clk), .rst(rst), .start(s1), .busy(bz1), .done(d1), .in_addr(r0_raddr_e1), .in_data(r0_rdata),
+        .out_we(r1_we), .out_addr(r1_waddr), .out_data(r1_wdata), .cycles(cy1), .anc_addr(), .anc_data(24'd0));
     conv_engine #(.C_IN(16), .C_OUT(16), .K(3), .DEPTHWISE(1), .IN_W(IW2), .IN_H(IW2), .SHIFT(SHIFT2),
                   .W_FILE({WDIR, "wrom_L2.mem"}), .B_FILE({WDIR, "bias_L2.mem"}), .M_FILE({WDIR, "mult_L2.mem"})) e2 (
         .clk(clk), .rst(rst), .start(s2), .busy(bz2), .done(d2), .in_addr(r1_raddr), .in_data(r1_rdata),
-        .out_we(r2_we), .out_addr(r2_waddr), .out_data(r2_wdata), .cycles(cy2));
+        .out_we(r2_we), .out_addr(r2_waddr), .out_data(r2_wdata), .cycles(cy2), .anc_addr(), .anc_data(24'd0));
     conv_engine #(.C_IN(16), .C_OUT(16), .K(1), .DEPTHWISE(0), .IN_W(IW3), .IN_H(IW3), .SHIFT(SHIFT3),
                   .W_FILE({WDIR, "wrom_L3.mem"}), .B_FILE({WDIR, "bias_L3.mem"}), .M_FILE({WDIR, "mult_L3.mem"})) e3 (
         .clk(clk), .rst(rst), .start(s3), .busy(bz3), .done(d3), .in_addr(r2_raddr), .in_data(r2_rdata),
-        .out_we(r3_we), .out_addr(r3_waddr), .out_data(r3_wdata), .cycles(cy3));
+        .out_we(r3_we), .out_addr(r3_waddr), .out_data(r3_wdata), .cycles(cy3), .anc_addr(), .anc_data(24'd0));
     conv_engine #(.C_IN(16), .C_OUT(12), .K(3), .DEPTHWISE(0), .IN_W(IW4), .IN_H(IW4), .SHIFT(SHIFT4),
+                  .ANCHOR(ANCHOR), .ANC_W(IW1), .ANC_OFF(3), .AWA(A0),
                   .W_FILE({WDIR, "wrom_L4.mem"}), .B_FILE({WDIR, "bias_L4.mem"}), .M_FILE({WDIR, "mult_L4.mem"})) e4 (
         .clk(clk), .rst(rst), .start(s4), .busy(bz4), .done(d4), .in_addr(r3_raddr), .in_data(r3_rdata),
-        .out_we(r4_we), .out_addr(r4_waddr), .out_data(r4_wdata), .cycles(cy4));
+        .out_we(r4_we), .out_addr(r4_waddr), .out_data(r4_wdata), .cycles(cy4), .anc_addr(anc_raddr), .anc_data(r0_rdata));
 
     // ------------------------------------------------------------------ pixel shuffle + output packer (reads ram4)
     localparam OWID = 2 * HC;                 // output tile width/height in pixels

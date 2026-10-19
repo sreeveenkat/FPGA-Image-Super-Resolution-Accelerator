@@ -95,10 +95,16 @@ def test_golden_hex_matches_model():
     for name in tiles():
         z = np.load(GDIR / f"{name}.npz")
         layers = forward_layers(NET, z["tile"].transpose(2, 0, 1).copy())  # recompute independently of the exporter
+        l4 = layers[3]
+        if NET.anchor:  # the RTL's ram4 / L4 golden dump is the pixel AFTER the anchor add; the signed residual is stored separately
+            centre = z["tile"].transpose(2, 0, 1)[:, 3:-3, 3:-3].astype(np.int32)
+            assert (z["L4_residual"] == layers[3]).all(), name
+            l4 = np.clip(layers[3] + np.repeat(centre, 4, axis=0), 0, 255)
+        want = [layers[0], layers[1], layers[2], l4]
         for i in range(4):
-            assert (z[f"L{i + 1}"] == layers[i]).all(), (name, i)
+            assert (z[f"L{i + 1}"] == want[i]).all(), (name, i)
             hexv = read_mem(GDIR / f"{name}_L{i + 1}.hex", 8, False)
-            assert (hexv.reshape(layers[i].transpose(1, 2, 0).shape) == layers[i].transpose(1, 2, 0)).all(), (name, i)
+            assert (hexv.reshape(want[i].transpose(1, 2, 0).shape) == want[i].transpose(1, 2, 0)).all(), (name, i)
         assert (read_mem(GDIR / f"{name}_in.hex", 8, False).reshape(z["tile"].shape) == z["tile"]).all()
         assert (read_mem(GDIR / f"{name}_out.hex", 8, False).reshape(z["out"].shape) == layers[4].transpose(1, 2, 0)).all()
 
@@ -110,6 +116,12 @@ def test_golden_set_covers_stress_cases():
     zs = [np.load(GDIR / f"{n}.npz") for n in names]
     for layer in ("L1", "L2", "L3", "L4"):  # every layer clamps at 0 AND saturates at 255 in at least one golden tile
         assert any((z[layer] == 0).any() for z in zs) and any((z[layer] == 255).any() for z in zs), layer
+    if NET.anchor:  # the anchor path: negative residuals, and the sum clamping at both ends, must occur in the golden set
+        res = [z["L4_residual"] for z in zs]
+        tot = [z["L4_residual"] + np.repeat(z["tile"].transpose(2, 0, 1)[:, 3:-3, 3:-3].astype(np.int32), 4, axis=0) for z in zs]
+        assert any((r < 0).any() for r in res) and any((r > 0).any() for r in res)
+        assert any((t < 0).any() for t in tot), "no golden pixel where residual + centre pixel is below 0"
+        assert any((t > 255).any() for t in tot), "no golden pixel where residual + centre pixel is above 255"
     s = np.load(GDIR / "small12.npz")
     assert s["tile"].shape == (12, 12, 3) and s["out"].shape == (12, 12, 3)
 

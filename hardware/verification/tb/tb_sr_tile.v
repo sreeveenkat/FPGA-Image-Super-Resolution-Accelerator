@@ -24,7 +24,7 @@ module tb_sr_tile;
 `ifdef POSTSYNTH
     sr_tile_core dut (    // post-synthesis netlist: parameters are baked in, internals are not reachable (only the stream interface is checked)
 `else
-    sr_tile_core #(.HC(HC), .SHIFT1(L1_SHIFT), .SHIFT2(L2_SHIFT), .SHIFT3(L3_SHIFT), .SHIFT4(L4_SHIFT)) dut (
+    sr_tile_core #(.HC(HC), .SHIFT1(L1_SHIFT), .SHIFT2(L2_SHIFT), .SHIFT3(L3_SHIFT), .SHIFT4(L4_SHIFT), .ANCHOR(NET_ANCHOR)) dut (
 `endif
         .clk(clk), .rst(rst), .start(start), .busy(busy), .done(done),
         .in_valid(in_valid), .in_data(in_data), .in_ready(in_ready),
@@ -37,9 +37,10 @@ module tb_sr_tile;
                                         .busy(), .done(), .in_ready(), .out_valid(), .out_data(), .out_last(), .cycles());
     initial begin
         #1;
-        if (dflt_check.SHIFT1 !== L1_SHIFT || dflt_check.SHIFT2 !== L2_SHIFT || dflt_check.SHIFT3 !== L3_SHIFT || dflt_check.SHIFT4 !== L4_SHIFT) begin
-            $display("FAIL sr_tile_core: default SHIFT parameters (%0d %0d %0d %0d) differ from network_params.vh (%0d %0d %0d %0d)",
-                     dflt_check.SHIFT1, dflt_check.SHIFT2, dflt_check.SHIFT3, dflt_check.SHIFT4, L1_SHIFT, L2_SHIFT, L3_SHIFT, L4_SHIFT);
+        if (dflt_check.SHIFT1 !== L1_SHIFT || dflt_check.SHIFT2 !== L2_SHIFT || dflt_check.SHIFT3 !== L3_SHIFT || dflt_check.SHIFT4 !== L4_SHIFT ||
+            dflt_check.ANCHOR !== NET_ANCHOR) begin
+            $display("FAIL sr_tile_core: default SHIFT/ANCHOR parameters (%0d %0d %0d %0d, anchor %0d) differ from network_params.vh (%0d %0d %0d %0d, anchor %0d)",
+                     dflt_check.SHIFT1, dflt_check.SHIFT2, dflt_check.SHIFT3, dflt_check.SHIFT4, dflt_check.ANCHOR, L1_SHIFT, L2_SHIFT, L3_SHIFT, L4_SHIFT, NET_ANCHOR);
             $finish;
         end
     end

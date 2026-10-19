@@ -18,4 +18,5 @@ localparam L4_CIN = 16;
 localparam L4_COUT = 12;
 localparam L4_K = 3;
 localparam L4_DEPTHWISE = 0;
-localparam L4_SHIFT = 22;
+localparam L4_SHIFT = 25;
+localparam NET_ANCHOR = 1;  // 1: L4 output = clamp(requant + centre input pixel of the colour, 0, 255), see conv_engine ANCHOR

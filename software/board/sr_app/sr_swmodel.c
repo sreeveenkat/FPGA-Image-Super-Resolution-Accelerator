@@ -12,10 +12,15 @@
 /* activations, [y][x][c] (pixel-major, like the RTL words); static: the board program's stack is small */
 static uint8_t a1[S1 * S1 * C], a2[S2 * S2 * C], a3[S3 * S3 * C];
 
-static inline uint8_t requant(int32_t acc, uint32_t m, int shift)
+static inline int32_t requant_signed(int32_t acc, uint32_t m, int shift, int32_t lo)
 {
     int64_t y = ((int64_t)acc * (int64_t)m + ((int64_t)1 << (shift - 1))) >> shift;   /* gcc: >> of a negative value is arithmetic */
-    return (uint8_t)(y < 0 ? 0 : (y > 255 ? 255 : y));
+    return (int32_t)(y < lo ? lo : (y > 255 ? 255 : y));
+}
+
+static inline uint8_t requant(int32_t acc, uint32_t m, int shift)
+{
+    return (uint8_t)requant_signed(acc, m, shift, 0);
 }
 
 int sr_sw_run_tile(void *ctx, const uint8_t *in, uint8_t *out)
@@ -62,7 +67,13 @@ int sr_sw_run_tile(void *ctx, const uint8_t *in, uint8_t *out)
                         for (int ci = 0; ci < C; ci++) acc += px[ci] * w[(ci * 3 + ky) * 3 + kx];
                     }
                 const int c = k >> 2, dy = (k >> 1) & 1, dx = k & 1;
+#if SR_ANCHOR
+                /* anchor network: signed residual (clamp -255..255) + the centre input pixel of colour c (output pixel (y,x) sits at input (y+3,x+3)), clamp 0..255 */
+                int32_t v = requant_signed(acc, sr_L4_m[k], SR_L4_SHIFT, -255) + in[((y + 3) * T_IN + x + 3) * 3 + c];
+                out[((2 * y + dy) * (2 * S4) + 2 * x + dx) * 3 + c] = (uint8_t)(v < 0 ? 0 : (v > 255 ? 255 : v));
+#else
                 out[((2 * y + dy) * (2 * S4) + 2 * x + dx) * 3 + c] = requant(acc, sr_L4_m[k], SR_L4_SHIFT);
+#endif
             }
     return 0;
 }

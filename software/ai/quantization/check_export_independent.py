@@ -20,6 +20,7 @@ def mem(path,bits,signed):
         out.append(v)
     return out
 vh=open(R+'hardware/rtl/weights/network_params.vh').read()
+ANCHOR=int(re.search(r'NET_ANCHOR = (\d+);',vh).group(1)) if 'NET_ANCHOR' in vh else 0   # anchor network: layer 4 = signed residual (clamp -255..255) + centre input pixel
 P={}
 for n in range(1,5):
     g=dict(re.findall(rf'L{n}_(\w+) = (\d+);',vh)); g={k:int(v) for k,v in g.items()}
@@ -27,7 +28,7 @@ for n in range(1,5):
     g['b']=mem(R+f'hardware/rtl/weights/bias_L{n}.mem',32,True)
     g['m']=mem(R+f'hardware/rtl/weights/mult_L{n}.mem',16,False)
     P[n]=g
-def layer(x,H,W,C,g):                      # x: flat list [y][x][c], valid conv; returns flat [y][x][co], H',W'
+def layer(x,H,W,C,g,lo=0):                    # x: flat list [y][x][c], valid conv; returns flat [y][x][co], H',W'
     K,CO,CI,dw,sh=g['K'],g['COUT'],g['CIN'],g['DEPTHWISE'],g['SHIFT']; assert C==CI
     oh,ow=H-K+1,W-K+1; out=[0]*(oh*ow*CO); w=g['w']; rnd=1<<(sh-1)
     for y in range(oh):
@@ -45,12 +46,19 @@ def layer(x,H,W,C,g):                      # x: flat list [y][x][c], valid conv;
                             for kx in range(K):
                                 acc+=x[base+kx*C]*w[((co*CI+ci)*K+ky)*K+kx]
                 v=(acc*g['m'][co]+rnd)>>sh
-                out[(y*ow+xx)*CO+co]=0 if v<0 else 255 if v>255 else v
+                out[(y*ow+xx)*CO+co]=lo if v<lo else 255 if v>255 else v
     return out,oh,ow
 def run(name,h,wd):
     x=mem(R+f'data/golden/{name}_in.hex',8,False); H,W,C=h+6,wd+6,3; assert len(x)==H*W*3
+    img,W0=x,W
     for n in range(1,5):
-        x,H,W=layer(x,H,W,C,P[n]); C=P[n]['COUT']
+        x,H,W=layer(x,H,W,C,P[n],-255 if (ANCHOR and n==4) else 0); C=P[n]['COUT']
+        if ANCHOR and n==4:   # out[4c+j] = clamp(residual + centre pixel of colour c, 0, 255); the output pixel (y,x) sits at input (y+3,x+3)
+            for y in range(H):
+                for xx in range(W):
+                    for co in range(12):
+                        v=x[(y*W+xx)*12+co]+img[((y+3)*W0+xx+3)*3+co//4]
+                        x[(y*W+xx)*12+co]=0 if v<0 else 255 if v>255 else v
         ref=mem(R+f'data/golden/{name}_L{n}.hex',8,False); assert x==ref,(name,'layer',n)
     # pixel shuffle from L4 flat [y][x][12]
     out=[0]*(2*H*2*W*3)

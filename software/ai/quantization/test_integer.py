@@ -200,7 +200,8 @@ def test_output_shapes_dtypes_tile_70_to_128():
     assert out.shape == (128, 128, 3) and out.dtype == np.uint8
     layers = forward_layers(n, tile.transpose(2, 0, 1).copy())
     assert [a.shape for a in layers] == [(16, 68, 68), (16, 66, 66), (16, 66, 66), (12, 64, 64), (3, 128, 128)]
-    assert all(0 <= int(a.min()) and int(a.max()) <= 255 for a in layers)
+    lo = [0, 0, 0, -255 if n.anchor else 0, 0]  # the anchor network's last conv layer is a signed residual
+    assert all(lo[i] <= int(a.min()) and int(a.max()) <= 255 for i, a in enumerate(layers))
     assert (layers[-1].astype(np.uint8).transpose(1, 2, 0) == out).all()
 
 

@@ -12,6 +12,7 @@ module tb_conv_layer;
     parameter HC    = 6;
     parameter HH    = HC;
     parameter RAND  = 0;
+    parameter ANCHOR = -1;   // layer 4 only: 1 = anchor engine (adds the centre input pixel); -1 = the network's setting for real tiles, 0 for RAND
 
     // geometry per layer: 1 conv3x3 3->16 | 2 depthwise3x3 16 | 3 pointwise 16->16 | 4 conv3x3 16->12
     localparam C_IN      = (LAYER == 1) ? 3 : 16;
@@ -23,6 +24,10 @@ module tb_conv_layer;
     localparam OW        = IN_W - K + 1;
     localparam OH        = IN_H - K + 1;
     `include "hardware/rtl/weights/network_params.vh"
+    localparam ANCH  = (LAYER != 4) ? 0 : (ANCHOR < 0) ? (RAND ? 0 : NET_ANCHOR) : ANCHOR;
+    localparam ANC_W = HC + 6;                      // the anchor RAM holds the input tile of the whole core (core + 2*3 halo)
+    localparam ANC_H = HH + 6;
+    localparam NANC  = ANC_W * ANC_H;
     localparam SHIFT = RAND ? 20 : (LAYER == 1) ? L1_SHIFT : (LAYER == 2) ? L2_SHIFT : (LAYER == 3) ? L3_SHIFT : L4_SHIFT;
     localparam NIN   = IN_W * IN_H;
     localparam NOUT  = OW * OH;
@@ -37,6 +42,10 @@ module tb_conv_layer;
     wire [8*C_OUT-1:0]      out_data;
     wire busy, done;
     wire [31:0] cycles;
+    wire [$clog2(NANC)-1:0] anc_addr;
+    wire [23:0]             anc_data;
+    tile_ram #(.WIDTH(24), .DEPTH(NANC)) ram_anc (
+        .clk(clk), .we(1'b0), .waddr({$clog2(NANC){1'b0}}), .wdata(24'd0), .raddr(anc_addr), .rdata(anc_data));
 
     tile_ram #(.WIDTH(8*C_IN), .DEPTH(NIN)) ram_in (
         .clk(clk), .we(1'b0), .waddr({$clog2(NIN){1'b0}}), .wdata({8*C_IN{1'b0}}), .raddr(in_addr), .rdata(in_data));
@@ -50,15 +59,19 @@ module tb_conv_layer;
 `else
     localparam PERIOD_INFO = (((K*K*(DEPTHWISE ? 1 : C_IN)) > C_OUT) ? (K*K*(DEPTHWISE ? 1 : C_IN)) : C_OUT);
     conv_engine #(.C_IN(C_IN), .C_OUT(C_OUT), .K(K), .DEPTHWISE(DEPTHWISE), .IN_W(IN_W), .IN_H(IN_H), .SHIFT(SHIFT),
+                  .ANCHOR(ANCH), .ANC_W(ANC_W), .ANC_OFF(3), .AWA($clog2(NANC)),
                   .W_FILE(RAND ? {"data/golden/unit/randL", "0" + LAYER[7:0], "_wrom.mem"} : {"hardware/rtl/weights/wrom_L", "0" + LAYER[7:0], ".mem"}),
                   .B_FILE(RAND ? {"data/golden/unit/randL", "0" + LAYER[7:0], "_bias.mem"}    : {"hardware/rtl/weights/bias_L",    "0" + LAYER[7:0], ".mem"}),
                   .M_FILE(RAND ? {"data/golden/unit/randL", "0" + LAYER[7:0], "_mult.mem"}    : {"hardware/rtl/weights/mult_L",    "0" + LAYER[7:0], ".mem"})) dut (
 `endif
         .clk(clk), .rst(rst), .start(start), .busy(busy), .done(done),
-        .in_addr(in_addr), .in_data(in_data), .out_we(out_we), .out_addr(out_addr), .out_data(out_data), .cycles(cycles));
+        .in_addr(in_addr), .in_data(in_data), .out_we(out_we), .out_addr(out_addr), .out_data(out_data), .cycles(cycles),
+        .anc_addr(anc_addr), .anc_data(anc_data));
 
     reg [7:0] raw_in  [0:NIN*C_IN-1];
     reg [7:0] raw_exp [0:NOUT*C_OUT-1];
+    reg [7:0] raw_anc [0:NANC*3-1];
+    reg [8*200-1:0] fanc;
     reg [8*64-1:0] tile;
     reg [8*200-1:0] fin, fexp;
     integer nx, p, c, j, errors, shown, timeout, tmax, pass, npass, first_cycles, ok;
@@ -129,22 +142,30 @@ module tb_conv_layer;
             tile = "rand";
             $sformat(fin,  "data/golden/unit/randL%0d_in.hex",  LAYER);
             $sformat(fexp, "data/golden/unit/randL%0d_out.hex", LAYER);
+            if (ANCH) begin
+                $sformat(fexp, "data/golden/unit/randA4_out.hex");
+                $sformat(fanc, "data/golden/unit/randA4_anc.hex");
+            end
         end else begin
             if (LAYER == 1) $sformat(fin, "data/golden/%0s_in.hex", tile);
             else            $sformat(fin, "data/golden/%0s_L%0d.hex", tile, LAYER - 1);
             $sformat(fexp, "data/golden/%0s_L%0d.hex", tile, LAYER);
+            $sformat(fanc, "data/golden/%0s_in.hex", tile);
         end
         $readmemh(fin, raw_in);
         $readmemh(fexp, raw_exp);
+        if (ANCH) $readmemh(fanc, raw_anc);
         // guard against a vacuous pass: X compares equal to X with !==, so a missing/short golden file must be detected explicitly
         nx = 0;
         for (p = 0; p < NIN*C_IN;   p = p + 1) if (^raw_in[p]  === 1'bx) nx = nx + 1;
         for (p = 0; p < NOUT*C_OUT; p = p + 1) if (^raw_exp[p] === 1'bx) nx = nx + 1;
+        if (ANCH) for (p = 0; p < NANC*3; p = p + 1) if (^raw_anc[p] === 1'bx) nx = nx + 1;
         if (nx != 0) begin
             $display("FAIL layer %0d tile %0s: %0d undefined bytes in the golden files %0s / %0s (missing or too short?)", LAYER, tile, nx, fin, fexp);
             $finish;
         end
         load_input;
+        if (ANCH) for (p = 0; p < NANC; p = p + 1) ram_anc.mem[p] = {raw_anc[3*p+2], raw_anc[3*p+1], raw_anc[3*p]};
         // Small tiles (and always with +REPEAT) are run three times:
         //   pass 0: normal run
         //   pass 1: second run right after the first one (counters/addresses must restart cleanly), output RAM poisoned first
@@ -195,8 +216,8 @@ module tb_conv_layer;
                 $finish;
             end
         end
-        $display("PASS layer %0d tile %0s%0s: %0d pixels (%0dx%0d) x %0d ch bit-exact, %0d cycles (%0d per pixel, PERIOD %0d)%0s",
-                 LAYER, tile, RAND ? " (randomized params)" : "", NOUT, OW, OH, C_OUT, first_cycles, first_cycles / NOUT, PER_X,
+        $display("PASS layer %0d tile %0s%0s%0s: %0d pixels (%0dx%0d) x %0d ch bit-exact, %0d cycles (%0d per pixel, PERIOD %0d)%0s",
+                 LAYER, tile, RAND ? " (randomized params)" : "", ANCH ? " ANCHOR" : "", NOUT, OW, OH, C_OUT, first_cycles, first_cycles / NOUT, PER_X,
                  extra ? ", re-run + abort/recover OK" : "");
         $finish;
     end

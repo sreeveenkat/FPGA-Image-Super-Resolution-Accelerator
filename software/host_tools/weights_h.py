@@ -28,6 +28,7 @@ if __name__ == "__main__":
         parts.append(array("int32_t", f"sr_{n}_b", z[f"{n}_b"]))
         parts.append(array("uint32_t", f"sr_{n}_m", z[f"{n}_m"]))
         parts.append(f"#define SR_{n}_SHIFT {int(z[f'{n}_shift'])}\n")
+    parts.append(f"#define SR_ANCHOR {int(bool(z['meta_anchor'])) if 'meta_anchor' in z.files else 0}  /* 1: layer 4 is a signed residual + centre input pixel */\n")
     parts.append("#endif\n")
     OUT.write_text("\n".join(parts))
     print(f"wrote {OUT} ({OUT.stat().st_size} bytes)")

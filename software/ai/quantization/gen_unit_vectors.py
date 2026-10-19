@@ -95,6 +95,17 @@ def random_layers():
         (OUT / f"{nm}_mult.mem").write_text(hexw(m, 4))
         (OUT / f"{nm}_in.hex").write_text(hexw(x.transpose(1, 2, 0), 2))      # [y][x][c]
         (OUT / f"{nm}_out.hex").write_text(hexw(y.transpose(1, 2, 0), 2))
+        if idx == 4:  # anchor variant of the last layer: signed residual + centre pixel of the colour, anchor image = core + 3 px halo each side
+            arng = np.random.default_rng(7000)
+            anc = arng.integers(0, 256, (3, RAND_H + 6, RAND_W + 6)).astype(np.uint8)
+            anc[:, ::4, ::3] = 255
+            anc[:, 1::5, :] = 0
+            res = conv_requant(x, wt, b, m, RAND_SHIFT, dw, lo=-255)
+            centre = anc[:, 3:3 + RAND_H, 3:3 + RAND_W].astype(np.int32)
+            ya = np.clip(res + np.repeat(centre, 4, axis=0), 0, 255)
+            (OUT / "randA4_anc.hex").write_text(hexw(anc.transpose(1, 2, 0), 2))
+            (OUT / "randA4_out.hex").write_text(hexw(ya.transpose(1, 2, 0), 2))
+            print(f"randA4 (anchor): residual {res.min()}..{res.max()}, outputs 0:{(ya == 0).mean():.2f} 255:{(ya == 255).mean():.2f}")
         print(f"{nm}: in {x.shape} -> out {y.shape}, distinct M {len(set(m.tolist()))}, outputs 0:{(y == 0).mean():.2f} 255:{(y == 255).mean():.2f}")
 
 
@@ -111,6 +122,16 @@ def main():
         assert acc.min() >= -2 ** 31 and acc.max() <= 2 ** 31 - 1 and m.min() >= 0 and m.max() <= 65535  # representable in hardware
         lines = [f"{int(a) & 0xFFFFFFFF:08x}{int(mm):04x}{int(e):02x}" for a, mm, e in zip(acc, m, exp)]
         (OUT / f"requant_s{s}.hex").write_text("\n".join(lines) + "\n")
+        # anchor mode: y = clamp(clamp_signed(requant, -255..255) + add, 0, 255), checked against the two-step integer-model definition
+        arng = np.random.default_rng(2000 + s)
+        add = arng.integers(0, 256, len(acc))
+        add[0::4], add[1::4] = 0, 255
+        add[2::16] = arng.choice([1, 2, 253, 254], len(add[2::16]))
+        res = requant(acc.reshape(-1, 1, 1), m, s, lo=-255).reshape(-1)
+        expa = np.clip(res.astype(np.int64) + add, 0, 255)
+        la = [f"{int(a) & 0xFFFFFFFF:08x}{int(mm):04x}{int(ad):02x}{int(e):02x}" for a, mm, ad, e in zip(acc, m, add, expa)]
+        (OUT / f"requant_add_s{s}.hex").write_text("\n".join(la) + "\n")
+        print(f"requant_add_s{s}.hex: outputs 0:{int((expa == 0).sum())} 255:{int((expa == 255).sum())}")
         print(f"requant_s{s}.hex: {len(lines)} vectors, outputs 0:{int((exp == 0).sum())} 255:{int((exp == 255).sum())} other:{int(((exp > 0) & (exp < 255)).sum())}")
     random_layers()
 

@@ -30,6 +30,7 @@ build() {  # build <name> <iverilog-args...>
 
 echo "== unit tests"
 for s in 1 2 3 8 21 22 23 24 25; do build rq$s -P tb_requant.SHIFT=$s hardware/rtl/common/requant.v $TB/tb_requant.v && run rq$s; done
+for s in 21 22 25; do build rqa$s -P tb_requant_add.SHIFT=$s hardware/rtl/common/requant.v $TB/tb_requant_add.v && run rqa$s; done   # anchor mode of the requantizer
 build mac hardware/rtl/common/mac_unit.v $TB/tb_mac_unit.v && run mac
 build ram hardware/rtl/common/tile_ram.v $TB/tb_tile_ram.v && run ram
 for L in 1 2 3 4; do build wr$L -P tb_weight_rom.LAYER=$L hardware/rtl/common/weight_rom.v $TB/tb_weight_rom.v && run wr$L; done
@@ -50,6 +51,7 @@ echo "== conv engine, randomized parameters (distinct M per channel, extreme val
 for L in 1 2 3 4; do
     build r$L -P tb_conv_layer.LAYER=$L -P tb_conv_layer.HC=6 -P tb_conv_layer.HH=4 -P tb_conv_layer.RAND=1 $RTL $TB/tb_conv_layer.v && run r$L
 done
+build ra4 -P tb_conv_layer.LAYER=4 -P tb_conv_layer.HC=6 -P tb_conv_layer.HH=4 -P tb_conv_layer.RAND=1 -P tb_conv_layer.ANCHOR=1 $RTL $TB/tb_conv_layer.v && run ra4   # anchor engine, random anchor image, residual saturating at both ends
 
 echo "== tile_ram_split"
 build splitram hardware/rtl/common/tile_ram_split.v $TB/tb_tile_ram_split.v && run splitram
@@ -129,6 +131,8 @@ if [ "$MODE" = full ]; then
         run top64 +TILE=real0 +STALL=1
         run top64 +TILE=real0 +NOEXTRA +OFFFEW                  # START vs first input beat at 6 points, real size
     }
+    echo "== anchor mutation test: 26 deliberate RTL defects, each must be caught (mutate_anchor.py exits 0 only then)"
+    runpy $PY hardware/verification/mutate_anchor.py --seam
 fi
 
 echo "== summary: $pass test runs passed, $fail failed ($MODE)"

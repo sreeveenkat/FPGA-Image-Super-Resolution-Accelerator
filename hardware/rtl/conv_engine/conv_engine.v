@@ -27,6 +27,10 @@ module conv_engine #(
     parameter W_FILE    = "wrom.mem",      // step-major weight ROM file (wrom_Ln.mem), see weight_rom.v
     parameter B_FILE    = "bias.mem",
     parameter M_FILE    = "mult.mem",
+    parameter ANCHOR    = 0,               // 1: add the centre input pixel of the output colour (layer 4 of the anchor network), see below
+    parameter ANC_W     = 70,              // width of the anchor RAM (the 70x70 input tile in ram0)
+    parameter ANC_OFF   = 3,               // halo: output pixel (x,y) belongs to anchor pixel (x+ANC_OFF, y+ANC_OFF)
+    parameter AWA       = 13,              // address width of the anchor RAM
     parameter AWI       = $clog2(IN_W * IN_H),
     parameter AWO       = $clog2((IN_W - K + 1) * (IN_H - K + 1))
 ) (
@@ -42,7 +46,10 @@ module conv_engine #(
     output wire                 out_we,
     output wire [AWO-1:0]       out_addr,
     output wire [8*C_OUT-1:0]   out_data,
-    output reg  [31:0]          cycles    // clock cycles from start until done
+    output reg  [31:0]          cycles,   // clock cycles from start until done
+    // anchor RAM read port (only used when ANCHOR = 1; 24-bit RGB words, R at bits 7:0), 1-cycle latency, address held steady for the whole pixel
+    output wire [AWA-1:0]       anc_addr,
+    input  wire [23:0]          anc_data
 );
     localparam OW      = IN_W - K + 1;
     localparam OH      = IN_H - K + 1;
@@ -58,6 +65,7 @@ module conv_engine #(
         if (DEPTHWISE && C_IN != C_OUT) begin $display("conv_engine: DEPTHWISE needs C_IN == C_OUT"); $finish; end
         if (C_IN > 256 || C_OUT > 256)  begin $display("conv_engine: channel counts are limited to 256 (8-bit counters)"); $finish; end
         if (K != 1 && K != 3)           begin $display("conv_engine: K must be 1 or 3"); $finish; end
+        if (ANCHOR && C_OUT != 12)      begin $display("conv_engine: ANCHOR needs C_OUT == 12 (3 colours x 4 sub-pixels)"); $finish; end
         if (IN_W < K || IN_H < K)       begin $display("conv_engine: input smaller than the kernel"); $finish; end
     end
     // synthesis translate_on
@@ -185,8 +193,20 @@ module conv_engine #(
     wire         rq_v;
     wire [7:0]   rq_y;
     wire [8:0]   rq_tag;
-    requant #(.SHIFT(SHIFT), .TW(9)) u_rq (
-        .clk(clk), .rst(rst), .v_in(rq_v_r), .acc(rq_acc_r), .m(rq_m_r),
+    // anchor: output channel k = 4*c + 2*dy + dx adds colour c = k >> 2 of the input pixel that sits at the centre of this output pixel's 3x3 window.
+    // The anchor address follows the pixel whose results are being requantized: out_cnt (below) is that pixel's index until its word is written, which is
+    // many cycles before the next pixel's requantization starts, so anc_data is stable when it is needed.
+    reg [7:0] rq_add_r;
+    always @(posedge clk) begin
+        case (rq_i[3:2])
+            2'd0:    rq_add_r <= ANCHOR ? anc_data[7:0]   : 8'd0;
+            2'd1:    rq_add_r <= ANCHOR ? anc_data[15:8]  : 8'd0;
+            default: rq_add_r <= ANCHOR ? anc_data[23:16] : 8'd0;
+        endcase
+    end
+
+    requant #(.SHIFT(SHIFT), .TW(9), .ADD_EN(ANCHOR)) u_rq (
+        .clk(clk), .rst(rst), .v_in(rq_v_r), .acc(rq_acc_r), .m(rq_m_r), .add(rq_add_r),
         .tag_in(rq_tag_r), .v_out(rq_v), .y(rq_y), .tag_out(rq_tag));
 
     // ------------------------------------------------------------------ output word assembly and write
@@ -208,6 +228,21 @@ module conv_engine #(
         if (rst || (start && !busy)) out_cnt <= 0;
         else if (wr_pend) out_cnt <= out_cnt + 1;
     end
+
+    // anchor address generator: raster over the OW x OH output pixels, one step per written word; address = (y + ANC_OFF) * ANC_W + (x + ANC_OFF)
+    localparam ANC_ROWSTEP = ANC_W - OW + 1;      // from the last pixel of a row to the first pixel of the next row
+    reg [15:0]     anc_x;
+    reg [AWA-1:0]  anc_a;
+    always @(posedge clk) begin
+        if (rst || (start && !busy)) begin
+            anc_x <= 0;
+            anc_a <= ANC_OFF * ANC_W + ANC_OFF;
+        end else if (wr_pend) begin
+            if (anc_x == OW - 1) begin anc_x <= 0; anc_a <= anc_a + ANC_ROWSTEP; end
+            else begin anc_x <= anc_x + 1; anc_a <= anc_a + 1; end
+        end
+    end
+    assign anc_addr = anc_a;
 
     // ------------------------------------------------------------------ status
     always @(posedge clk) begin

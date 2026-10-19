@@ -24,7 +24,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "software" / "ai"))
 from dataset.pairs import list_images, load_rgb, make_pair  # noqa: E402
-from quantization.integer_reference import LAYER_SPEC, QNet, forward_layers, pad_replicate  # noqa: E402
+from quantization.integer_reference import LAYER_SPEC, QNet, forward_layers, pad_replicate, pixel_shuffle  # noqa: E402
 
 QPARAMS = ROOT / "software/ai/quantization/qparams.npz"
 WDIR = ROOT / "hardware" / "rtl" / "weights"
@@ -85,6 +85,7 @@ def export_weights(net):
         (WDIR / f"mult_L{n}.mem").write_text(hex_lines(L["m"], 4))
         vh += [f"localparam L{n}_CIN = {cin};", f"localparam L{n}_COUT = {cout};", f"localparam L{n}_K = {k};",
                f"localparam L{n}_DEPTHWISE = {int(dw)};", f"localparam L{n}_SHIFT = {L['shift']};"]
+    vh.append(f"localparam NET_ANCHOR = {int(net.anchor)};  // 1: L4 output = clamp(requant + centre input pixel of the colour, 0, 255), see conv_engine ANCHOR")
     (WDIR / "network_params.vh").write_text("\n".join(vh) + "\n")
     (WDIR / "README.md").write_text(README)
 
@@ -122,8 +123,13 @@ def export_golden(net):
     for name, tile in golden_tiles():
         layers = forward_layers(net, tile.transpose(2, 0, 1).copy())
         out = layers[-1].astype(np.uint8).transpose(1, 2, 0)
-        hwc = [lay.astype(np.uint8).transpose(1, 2, 0) for lay in layers[:4]]
-        np.savez(GDIR / f"{name}.npz", tile=tile, L1=layers[0], L2=layers[1], L3=layers[2], L4=layers[3], out=out)
+        l4 = layers[3]
+        if net.anchor:  # ram4 of the RTL holds the pixel AFTER the anchor add: out[4c+j] = clamp(residual + centre colour c, 0, 255)
+            centre = tile.transpose(2, 0, 1)[:, 3:-3, 3:-3].astype(np.int32)
+            l4 = np.clip(l4 + np.repeat(centre, 4, axis=0), 0, 255)
+        assert (pixel_shuffle(l4) == layers[-1]).all(), "ram4 content must shuffle to the output tile"
+        hwc = [lay.astype(np.uint8).transpose(1, 2, 0) for lay in (layers[0], layers[1], layers[2], l4)]
+        np.savez(GDIR / f"{name}.npz", tile=tile, L1=layers[0], L2=layers[1], L3=layers[2], L4=l4, L4_residual=layers[3], out=out)
         (GDIR / f"{name}_in.hex").write_text(hex_lines(tile, 2))
         for i, a in enumerate(hwc, 1):
             (GDIR / f"{name}_L{i}.hex").write_text(hex_lines(a, 2))

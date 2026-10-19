@@ -86,7 +86,7 @@ def test_tiled_equals_whole():
 
 def test_checkpoint_beats_bicubic_on_flat_and_runs():
     ck = torch.load(ROOT / "software/ai/checkpoints/srnet_fp32.pt", map_location="cpu")
-    m = SRNet(ck["scale"], ck["ch"])
+    m = SRNet(ck["scale"], ck["ch"], ck.get("anchor", False))
     m.load_state_dict(ck["state"])
     lr = np.full((10, 12, 3), 128, np.uint8)
     out = predict_full(m, lr)
@@ -123,7 +123,7 @@ def test_checkpoint_beats_bicubic_on_real_images():
     from dataset.pairs import load_rgb, make_pair, upscale_pil
     from evaluation.metrics import psnr_y
     ck = torch.load(ROOT / "software/ai/checkpoints/srnet_fp32.pt", map_location="cpu")
-    m = SRNet(ck["scale"], ck["ch"])
+    m = SRNet(ck["scale"], ck["ch"], ck.get("anchor", False))
     m.load_state_dict(ck["state"])
     for s, n in [("Set5", "butterfly"), ("Set14", "zebra"), ("Set14", "ppt3")]:
         lr, hr = make_pair(load_rgb(ROOT / "data" / "test" / "HR" / s / f"{n}.png"), 2)
