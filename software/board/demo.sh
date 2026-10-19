@@ -12,7 +12,7 @@ ROOT=$(pwd)
 V=/home/sreevenkat/Desktop/venkat/vitis
 BIT_0602=$V/m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit
 BIT_0601=$V/m6_sr/m6_sr.runs/impl_1/design_1_wrapper.bit
-BIT=$BIT_0602; EXPV=0x53520602; VIEW=1
+BIT=/home/sreevenkat/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit; EXPV=0x53522201; VIEW=1   # R2q sandbox: default is this tree's own bitstream
 for a in "$@"; do
     case "$a" in
         --0601) BIT=$BIT_0601; EXPV=0x53520601 ;;

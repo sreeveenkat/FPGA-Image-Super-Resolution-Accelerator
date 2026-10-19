@@ -2,7 +2,8 @@
 
 Status 2026-10-19: **built and simulated, NOT yet run on the board.** The deployed bitstream (0602), `qparams.npz` and the `main` branch are untouched;
 `~/Desktop/venkat/TESTED_0602.bit` is the fallback. RTL change versus 0602: only the default `SHIFT1..4` of `sr_tile_core.v` (24/23/21/24 -> 22/22/21/22).
-The VERSION register is unchanged (0x53520602), so the bitstream cannot be told apart by register: use the R2q golden tile (T1) and the R2q expected output (T2), see `docs/paper/board_checklist.md`.
+**VERSION register 0x53522201** (R2q; deployed R0 = 0x53520602, R3q = 0x53523201): each design reports its own value, and this tree's driver (`VERSION & 0xFFFFFF00 == 0x53522200`) refuses the other bitstreams. The R2q golden tile (T1) and the R2q expected output (T2) still prove the weights, see `docs/paper/board_checklist.md`.
+The first R2q build (VERSION 0x53520602, WNS +0.671 / WHS +0.020 ns, 5,289 LUT, 7,803 FF, 1.912 W) was superseded on 2026-10-19 by the build below; its files are in `~/Desktop/venkat/R2q_artifacts/superseded_VERSION0602/`.
 
 ## What R2q is
 `software/ai/checkpoints/srnet_fp32.pt` in this branch = `rep_qat_s1` of the ladder (2 seeds, seed chosen on the 42 clean validation images), merged to the same
@@ -37,12 +38,12 @@ Post-synthesis netlist simulation (`run_postsynth.sh`, xsim, 2026-10-19): **5/5 
 ## Build (Vivado 2024.1, `build_m6_system.tcl`, 2 jobs; about 7 min)
 | | R2q | 0602 (deployed) |
 |---|---|---|
-| WNS / WHS at 100 MHz | **+0.671 / +0.020 ns** | +0.503 / +0.016 ns |
+| WNS / WHS at 100 MHz | **+0.944 / +0.019 ns** | +0.503 / +0.016 ns |
 | failing endpoints | 0 of 23,882 | 0 |
-| LUT / FF | 5,289 / 7,803 | 5,296 / 7,831 |
+| LUT / FF | 5,287 / 7,803 | 5,296 / 7,831 |
 | BRAM tiles / DSP | 71.5 / 68 | 71.5 (72 est.) / 68 |
-| power estimate (vectorless, low confidence) | 1.912 W | 1.913 W |
+| power estimate (vectorless, low confidence) | 1.910 W | 1.913 W |
 | .mem files read from the sandbox path (Synth 8-3876) | 12 of 12 | 12 of 12 |
 0 CRITICAL WARNING in the synthesis/implementation run logs (the block-design creation prints the usual PS7 DDR-skew critical warnings of the board preset; same as before).
 The timing difference is placement noise (the logic is identical apart from constants); do not read it as an improvement.
-Artifacts (labelled R2q, outside the repo): `~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.{bit,xsa}` and `reports_R2q/`; project `~/Desktop/venkat/R2q_build/m6_sr_R2q`.
+Artifacts (labelled R2q, outside the repo): `~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.{bit,xsa}` and `reports_R2q/`; project `~/Desktop/venkat/R2q_build/m6_sr_R2q_v2201` (0 of 23,882 endpoints failing, 12 of 12 `.mem` files read from the sandbox path, 0 CRITICAL WARNING in the run logs). After the VERSION change: `test_regs.py` PASS, `run_tests.sh quick` 38/38; the post-synthesis simulation above was run on the netlist before the change (VERSION is a constant of the AXI-Lite top, outside the simulated layers/core).

@@ -7,7 +7,7 @@
 cd "$(dirname "$0")/../.."
 source ~/Desktop/vivado_install/Vitis/2024.1/settings64.sh >/dev/null 2>&1
 N="${1:-100}"; LOG="${2:-data/board/fresh_load_soak.log}"; D=data/board; B=software/board/build
-EXPV="${SR_EXPECT_VERSION:-0x53520602}"
+EXPV="${SR_EXPECT_VERSION:-0x53522201}"
 unset SR_SYSRST SR_NO_ISOLATE SR_NOFPGA SR_DOW2
 ok=0; bad=0
 echo "fresh_load_soak start $(date -Is) N=$N expected VERSION $EXPV" | tee -a "$LOG"
