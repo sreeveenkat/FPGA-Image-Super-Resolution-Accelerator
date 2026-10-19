@@ -74,7 +74,7 @@ Two git worktrees outside this folder, one branch each (local only, not pushed):
 | R3q: anchor (plain net + NN residual + QAT), RTL change in `requant.v`, `conv_engine.v`, `sr_tile_core.v` | `r3q` (on top of `r2q`) / `~/Desktop/venkat/sandbox_R3q` | `9e7c06a` | quick 42/42, full 95/95, 26 RTL mutants all caught, seam tests exact, cycles per tile unchanged (926,201); Vivado: WNS +0.490 / WHS +0.018 ns, 5,334 LUT, 7,869 FF, 71.5 BRAM, 68 DSP; anchor cost **+45 LUT / +66 FF / 0 DSP / 0 BRAM**; `results/utilization/m6_system_R3q.md` |
 
 Bitstreams (outside the repo): `~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit`, `~/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.bit`; fallback `~/Desktop/venkat/TESTED_0602.bit`.
-NOT done: nothing of R2q/R3q has run on the board; `run_postsynth.sh` (netlist simulation) was not run for either; board steps are in `docs/paper/board_checklist.md`.
+Post-synthesis netlist simulation: 5/5 PASS for both (2026-10-19). NOT done: nothing of R2q/R3q has run on the board; board steps are in `docs/paper/board_checklist.md`.
 Merging a branch into `main` (and installing its qparams/weights as the deployed ones) is the owner's decision after the board results.
 
 ## Plan (owner)
