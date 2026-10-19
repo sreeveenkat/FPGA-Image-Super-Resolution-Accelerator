@@ -14,7 +14,7 @@ Status: offsets 0x00-0x14 (VERSION 0x53520601) **run on the ZedBoard since 2026-
 | 0x08 | TILE_SIZE | R | HC (64): core tile edge in input pixels. Input tile = HC+6 = 70, output tile = 2*HC = 128 |
 | 0x0C | CYCLES | R | core clock cycles from start to the last output byte of the last / current tile (cleared by start and reset; holds its value afterwards) |
 | 0x10 | ERROR_CODE | R | 0 none, 1 early `tlast` (on an input beat that is not the last), 2 last input beat without `tlast`, 3 `tkeep` != 0xF on an accepted input beat. The FIRST error of a tile is kept. |
-| 0x14 | VERSION | R | `0x53520602` (the first board bitstream, before the debug registers, reads `0x53520601`; the driver accepts both) |
+| 0x14 | VERSION | R | `0x53523201` (R3q build; the deployed R0 bitstream reads `0x53520602`, the first board bitstream, before the debug registers, `0x53520601`). Each design has its own VERSION: R0 0x53520602, R2q 0x53522201, R3q 0x53523201; the driver of each tree accepts only its own family (`VERSION & 0xFFFFFF00`) |
 | 0x18 | DBG_IN_BEATS | R | debug: input beats accepted since the last accepted START |
 | 0x1C | DBG_TLAST_AT | R | debug: 1 + index (since START) of the first accepted input beat with `tlast`; 0 = none yet. Correct tile: 3,675 |
 | 0x20 | DBG_START2BEAT | R | debug: bits 30:0 cycles from the accepted START to the first accepted input beat (saturating); bit 31 = `s_axis_tvalid` was high in the START cycle |

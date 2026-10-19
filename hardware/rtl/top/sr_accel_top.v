@@ -13,7 +13,7 @@
 //   0x0C CYCLES     R: core cycles of the last/current tile (start to last output byte)
 //   0x10 ERROR_CODE R: 0 none | 1 s_axis_tlast on a beat that is not the last input beat | 2 last input beat without tlast | 3 s_axis_tkeep != 4'hF
 //                      (the FIRST error of a tile is kept).  Errors are only reported; the tile is still processed.  Recovery = soft reset.
-//   0x14 VERSION    R: 32'h5352_0602  (0601 = the first board version, without the debug registers below)
+//   0x14 VERSION    R: 32'h5352_3201  (R3q; 0x53520602 = deployed R0 build, 0601 = the first board version, without the debug registers below)
 //   Debug registers (read-only, added 2026-10-11 to find the board's first-tile stream errors; they do not change the data path):
 //   0x18 DBG_IN_BEATS   input beats accepted since the last accepted start
 //   0x1C DBG_TLAST_AT   1 + index (since start) of the first accepted input beat with tlast; 0 = none yet
@@ -80,7 +80,7 @@ module sr_accel_top #(
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TREADY" *) input  wire        m_axis_tready,
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TLAST" *)  output wire        m_axis_tlast
 );
-    localparam [31:0] VERSION = 32'h5352_0602;
+    localparam [31:0] VERSION = 32'h5352_3201;
 
     // ------------------------------------------------------------------ AXI4-Lite slave: AW and W may arrive in any order, one write at a time
     reg         aw_got, w_got, bvalid, rvalid;

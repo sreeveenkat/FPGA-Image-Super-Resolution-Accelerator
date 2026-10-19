@@ -1,7 +1,7 @@
 # R3q: anchor network (plain 3x3 net + nearest-neighbour residual) with QAT, sandbox build (branch `r3q`, based on `r2q`)
 
 Status 2026-10-19: **RTL changed, simulated, built; NOT yet run on the board.** Deployed bitstream 0602, `main` and the R2q sandbox are untouched
-(`~/Desktop/venkat/TESTED_0602.bit` is the fallback). VERSION register unchanged (0x53520602): tell the bitstreams apart by the golden tile and the output checksum
+(`~/Desktop/venkat/TESTED_0602.bit` is the fallback). **VERSION register 0x53523201** (R3q; deployed R0 = 0x53520602, R2q = 0x53522201); this tree's driver (`VERSION & 0xFFFFFF00 == 0x53523200`) refuses the other bitstreams. The golden tile and the output checksum still prove the weights
 (`docs/paper/board_checklist.md`).
 
 ## Network
@@ -44,14 +44,15 @@ Post-synthesis netlist simulation (`run_postsynth.sh`, xsim, 2026-10-19): **5/5 
 ## Build (Vivado 2024.1, `build_m6_system.tcl`, 2 jobs; about 7 min)
 | | R3q | R2q | 0602 |
 |---|---|---|---|
-| WNS / WHS at 100 MHz | **+0.490 / +0.018 ns** | +0.671 / +0.020 | +0.503 / +0.016 |
-| failing endpoints | 0 of 24,028 | 0 | 0 |
-| LUT / FF (whole system) | 5,334 / 7,869 | 5,289 / 7,803 | 5,296 / 7,831 |
-| accelerator `sr_accel_top_0` LUT / FF | 2,172 / 3,743 | 2,127 / 3,677 | - |
+| WNS / WHS at 100 MHz | **+0.683 / +0.028 ns** | +0.944 / +0.019 | +0.503 / +0.016 |
+| failing endpoints | 0 of 24,028 | 0 of 23,882 | 0 |
+| LUT / FF (whole system) | 5,323 / 7,869 | 5,287 / 7,803 | 5,296 / 7,831 |
+| accelerator `sr_accel_top_0` LUT / FF | 2,162 / 3,743 | 2,129 / 3,677 | - |
 | BRAM tiles / DSP | 71.5 / 68 | 71.5 / 68 | 71.5 / 68 |
-| power estimate (vectorless, low confidence) | 1.914 W | 1.912 W | 1.913 W |
+| power estimate (vectorless, low confidence) | 1.916 W | 1.910 W | 1.913 W |
 | .mem files read from the sandbox path | 12 of 12 | 12 of 12 | 12 of 12 |
-**Measured anchor cost (R3q - R2q, whole accelerator): +45 LUT, +66 FF, 0 DSP, 0 BRAM** (layer-4 engine +31 LUT / +42 FF, core +8 LUT for the ram0 address mux, rest placement noise);
+**Measured anchor cost (R3q - R2q, whole accelerator): +33 to +45 LUT (two builds each), +66 FF, 0 DSP, 0 BRAM** (layer-4 engine +31 LUT / +42 FF, core +8 LUT for the ram0 address mux, rest placement noise);
 the estimate before the build was 80-120 LUT / 60-70 FF. Critical path is still ram2 -> MAC input of layer 3 (not the anchor path). Slack differences of +-0.2 ns between builds
 are placement noise. 0 CRITICAL WARNING in the synthesis/implementation run logs.
-Artifacts (labelled R3q, outside the repo): `~/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.{bit,xsa}`, `reports_R3q/`; project `~/Desktop/venkat/R3q_build/m6_sr_R3q`.
+The first R3q build (VERSION 0x53520602: WNS +0.490 / WHS +0.018 ns, 5,334 LUT, 7,869 FF, 1.914 W) was superseded on 2026-10-19 by the build in the first column; its files are in `R3q_artifacts/superseded_VERSION0602/`. **Anchor enabled, confirmed in the full-system synthesis log** (`design_1_sr_accel_top_0_0_synth_1/runme.log`, both builds): `Parameter ANCHOR bound to: 1`, `ANC_W 70`, `ANC_OFF 3` on the layer-4 `conv_engine` and `ADD_EN bound to: 1` on its requantizer (the other three requantizers: `ADD_EN 0`).
+Artifacts (labelled R3q, outside the repo): `~/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.{bit,xsa}`, `reports_R3q/`; project `~/Desktop/venkat/R3q_build/m6_sr_R3q_v3201`.

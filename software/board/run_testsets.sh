@@ -6,7 +6,7 @@
 cd "$(dirname "$0")/../.."
 source ~/Desktop/vivado_install/Vitis/2024.1/settings64.sh >/dev/null 2>&1
 LOG="${1:-data/board/testsets/run.log}"; B=software/board/build; T=data/board/testsets
-EXPV="${SR_EXPECT_VERSION:-0x53520602}"
+EXPV="${SR_EXPECT_VERSION:-0x53523201}"
 unset SR_SYSRST SR_NO_ISOLATE SR_NOFPGA SR_DOW2
 ok=0; bad=0; n=0
 echo "run_testsets start $(date -Is)" | tee -a "$LOG"

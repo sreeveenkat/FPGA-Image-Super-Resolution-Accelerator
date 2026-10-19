@@ -36,7 +36,7 @@
 #define SR_ERR_BAD_TKEEP       3u   /* s_axis_tkeep != 4'hF on an accepted input beat */
 
 /* ---- constants */
-#define SR_VERSION          0x53520602u   /* "SR" 0x06 0x02 (0x53520601 = first board version, no debug registers; the driver accepts both) */
+#define SR_VERSION          0x53523201u   /* "SR" 32 01 = R3q; deployed R0 is 0x53520602 (0x53520601 = first board version, no debug registers); this tree's driver accepts only VERSION & 0xFFFFFF00 == 0x53523200 */
 #define SR_VERSION_MASK     0xFFFFFF00u   /* the driver checks VERSION & mask == SR_VERSION & mask */
 #define SR_HC               64u           /* TILE_SIZE the bitstream is built with (sr_accel_top parameter HC) */
 #define SR_HALO             3u
