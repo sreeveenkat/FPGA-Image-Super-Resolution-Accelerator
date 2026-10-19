@@ -64,12 +64,21 @@ anchor on top of rep (R2q to R3q, see below) +0.26 / +0.20 / +0.13; total R3q - 
 * **(d) Accumulators**: both candidates pass `acc_range.py` (`results/quality/acc_range_*.txt`): worst-case headroom 11-15 bits in the 32-bit accumulator, the 49-bit requantizer
   product fits (R3q L4 is the tightest: sign-aware worst case ±532k = 21 bits, observed ±73k). SHIFT becomes 22/22/21/22 (R2q) and 22/22/21/25 (R3q) instead of 24/23/21/24: a bitstream rebuild is needed for either.
 
+## Deployment sandboxes (2026-10-19; `main`, the deployed checkpoint, `qparams.npz`, `hardware/` and the 0602 bitstream are untouched)
+
+Two git worktrees outside this folder, one branch each (local only, not pushed):
+
+| Step | Branch / folder | Commit | Result |
+|---|---|---|---|
+| R2q: re-param + QAT weights, same RTL except the `SHIFT` defaults (22/22/21/22) | `r2q` / `~/Desktop/venkat/sandbox_R2q` | `18c9976` | Python tests, `run_tests.sh` quick 38/38 and full 90/90; Vivado: WNS +0.671 / WHS +0.020 ns, 5,289 LUT, 7,803 FF, 71.5 BRAM, 68 DSP; `results/utilization/m6_system_R2q.md` in that branch |
+| R3q: anchor (plain net + NN residual + QAT), RTL change in `requant.v`, `conv_engine.v`, `sr_tile_core.v` | `r3q` (on top of `r2q`) / `~/Desktop/venkat/sandbox_R3q` | `9e7c06a` | quick 42/42, full 95/95, 26 RTL mutants all caught, seam tests exact, cycles per tile unchanged (926,201); Vivado: WNS +0.490 / WHS +0.018 ns, 5,334 LUT, 7,869 FF, 71.5 BRAM, 68 DSP; anchor cost **+45 LUT / +66 FF / 0 DSP / 0 BRAM**; `results/utilization/m6_system_R3q.md` |
+
+Bitstreams (outside the repo): `~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit`, `~/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.bit`; fallback `~/Desktop/venkat/TESTED_0602.bit`.
+NOT done: nothing of R2q/R3q has run on the board; `run_postsynth.sh` (netlist simulation) was not run for either; board steps are in `docs/paper/board_checklist.md`.
+Merging a branch into `main` (and installing its qparams/weights as the deployed ones) is the owner's decision after the board results.
+
 ## Plan (owner)
 
 1. Done: final two-seed table, overlap check, crops, R3q vs R2q.
-2. NEXT (needs the owner's go): deploy R2q first in a sandbox copy: `quantize.py` with the R2q checkpoint's `act_max`, `export_rtl.py`, golden vectors, Python tests,
-   `check_export_independent`, iverilog `run_tests.sh`, Vivado rebuild, board byte-exact check. The deployed checkpoint, `qparams.npz` and `hardware/` stay untouched until then.
-   Candidates: `software/ai/checkpoints/q/rep_qat_s1.pt` (better validation seed of R2q) and `plainA_qat_s1.pt` (R3q).
-3. The anchor RTL change: owner's rule is "only if R3q clearly beats R2q". It beats it by more than the seed spread (+0.13 to +0.26 dB) but is a modest gain for an RTL change;
-   cost estimate (not synthesized) in `docs/paper/anchor_hw_estimate.md`. Owner decides.
-4. Later: cost of loading weights/qparams at runtime over AXI-Lite instead of `$readmemh`.
+2. Done (PC side): R2q sandbox, R3q sandbox. Board: `docs/paper/board_checklist.md` (T1/T2 re-run, T7, R2q byte-exact + frame time, power current + R2q, later R3q).
+3. Later: cost of loading weights/qparams at runtime over AXI-Lite instead of `$readmemh`.
