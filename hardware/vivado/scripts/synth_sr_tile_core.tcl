@@ -15,12 +15,14 @@ file mkdir $out
 # SHIFT of each layer from the exported header
 set fh [open $root/hardware/rtl/weights/network_params.vh]; set hdr [read $fh]; close $fh
 foreach n {1 2 3 4} { regexp "L${n}_SHIFT = (\\d+);" $hdr -> shift$n }
+set anchor 0
+regexp "NET_ANCHOR = (\\d+);" $hdr -> anchor
 
 read_verilog [glob $root/hardware/rtl/common/*.v]
 read_verilog $root/hardware/rtl/conv_engine/conv_engine.v
 read_verilog $root/hardware/rtl/sr_core/sr_tile_core.v
 synth_design -top sr_tile_core -part xc7z020clg484-1 -mode out_of_context -flatten_hierarchy rebuilt \
-    -generic HC=$hc -generic SHIFT1=$shift1 -generic SHIFT2=$shift2 -generic SHIFT3=$shift3 -generic SHIFT4=$shift4 \
+    -generic HC=$hc -generic SHIFT1=$shift1 -generic SHIFT2=$shift2 -generic SHIFT3=$shift3 -generic SHIFT4=$shift4 -generic ANCHOR=$anchor \
     -generic "WDIR=\"$root/hardware/rtl/weights/\""
 create_clock -name clk -period $clk_ns [get_ports clk]
 write_checkpoint -force $out/post_synth.dcp   ;# open later in the GUI:  vivado <this file>

@@ -39,7 +39,7 @@ Accumulators: 11-15 bits of headroom in 32 bits, L4 the tightest (sign-aware wor
 | `run_tests.sh full` | **95/95**: all real-size tiles 926,201 cycles (unchanged), real-size seam test 4 tiles + HC=8 seam 20 tiles bit-exact (these also exercise the halo-aligned anchor read at tile borders), AXI wrapper and top at HC=64 |
 | `mutate_anchor.py --seam` (inside `full`) | 26 deliberate defects (add ignored / shifted / subtracted / halved, rounding bit dropped, no saturation, halo offset 2 and 4, row step and row wrap off by one, wrong colour mapping, R/B swapped, address not restarted for the 2nd tile, address advancing per byte, ram0 port switched in the wrong state, wrong stride, no anchor data, wrong defaults): **all caught**; 1 equivalent mutant (`|` replaced by `+` on disjoint bits) correctly survives |
 | C ARM model with the anchor (`sr_swmodel.c`, `SR_ANCHOR`), `test_swmodel.sh` | byte-exact vs the integer model on the PC: 960x540 fnv1a32 **0x45dd4e2d**, 128x128 baboon 0xa1d2f75c |
-NOT run: `run_postsynth.sh` (netlist simulation).
+Post-synthesis netlist simulation (`run_postsynth.sh`, xsim, 2026-10-19): **5/5 PASS** on the R3q weights: layers 1-4 (layer 4 synthesized with ANCHOR=1, checked against the anchored golden tile, re-run and reset-abort sweep) and the HC=6 tile core are bit-exact. The synthesis scripts `synth_conv_engine.tcl` / `synth_sr_tile_core.tcl` now pass the anchor generics when `network_params.vh` has `NET_ANCHOR = 1`.
 
 ## Build (Vivado 2024.1, `build_m6_system.tcl`, 2 jobs; about 7 min)
 | | R3q | R2q | 0602 |

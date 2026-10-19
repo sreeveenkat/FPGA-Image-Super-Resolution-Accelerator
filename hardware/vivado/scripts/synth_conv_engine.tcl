@@ -28,13 +28,24 @@ if {$small} {   ;# small12 tile: core 6x6 -> input widths 12 / 10 / 8 / 8
 # SHIFT of each layer from the exported header
 set fh [open $root/hardware/rtl/weights/network_params.vh]; set hdr [read $fh]; close $fh
 regexp "L${layer}_SHIFT = (\\d+);" $hdr -> shift
+# anchor network (network_params.vh NET_ANCHOR = 1): layer 4 also reads the anchor RAM = input tile of the core (core + 6 px wide)
+set anchor 0
+regexp "NET_ANCHOR = (\\d+);" $hdr -> anchor
+set anc_w [expr {$small ? 12 : 70}]
+set anc_gen {}
+set anc_args {}
+if {$layer == 4 && $anchor} {
+    set anc_aw [expr {int(ceil(log($anc_w * $anc_w) / log(2)))}]
+    set anc_gen [list ANCHOR=1 ANC_W=$anc_w ANC_OFF=3 AWA=$anc_aw]
+    foreach g $anc_gen { lappend anc_args -generic $g }
+}
 
 read_verilog [glob $root/hardware/rtl/common/*.v]
 read_verilog $root/hardware/rtl/conv_engine/conv_engine.v
 set wd $root/hardware/rtl/weights
 set gen [list C_IN=$cin C_OUT=$cout K=$k DEPTHWISE=$dw IN_W=$iw IN_H=$iw SHIFT=$shift \
     "W_FILE=\"$wd/wrom_L$layer.mem\"" "B_FILE=\"$wd/bias_L$layer.mem\"" "M_FILE=\"$wd/mult_L$layer.mem\""]
-synth_design -top conv_engine -part xc7z020clg484-1 -mode out_of_context -generic [lindex $gen 0] -generic [lindex $gen 1] -generic [lindex $gen 2] -generic [lindex $gen 3] -generic [lindex $gen 4] -generic [lindex $gen 5] -generic [lindex $gen 6] -generic [lindex $gen 7] -generic [lindex $gen 8] -generic [lindex $gen 9] -flatten_hierarchy rebuilt
+synth_design -top conv_engine -part xc7z020clg484-1 -mode out_of_context -generic [lindex $gen 0] -generic [lindex $gen 1] -generic [lindex $gen 2] -generic [lindex $gen 3] -generic [lindex $gen 4] -generic [lindex $gen 5] -generic [lindex $gen 6] -generic [lindex $gen 7] -generic [lindex $gen 8] -generic [lindex $gen 9] {*}$anc_args -flatten_hierarchy rebuilt
 create_clock -name clk -period $clk_ns [get_ports clk]
 write_checkpoint -force $out/post_synth.dcp   ;# open later in the GUI:  vivado <this file>
 report_utilization    -file $out/utilization.txt
