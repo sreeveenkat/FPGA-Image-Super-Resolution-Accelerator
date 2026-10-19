@@ -32,7 +32,7 @@ Besides the analytic bound, `rq21..rq25` in `run_tests.sh` drive `requant.v` wit
 | C ARM-only model (T7 code, `test_swmodel.sh`) vs the integer model, 960x540 + 128x128 | byte-exact on the PC; R2q expected fnv1a32 0x2afbc9ae (960x540), 0x272bafbb (128x128 baboon) (deployed: 0xcf947f22) |
 Changed test: `test_integer_model_close_to_fp32_on_real_image` required INT8 vs FP32 output > 42 dB (deployed PTQ: 48 dB); the QAT weights give 40.8 dB, threshold now 38 dB
 (a broken quantizer is far lower; the exact layer-wise check against an independent float64 implementation is unchanged).
-NOT run: `run_postsynth.sh` (netlist simulation of the synthesized layers), because the bitstream build below uses the same RTL with only constants changed.
+Post-synthesis netlist simulation (`run_postsynth.sh`, xsim, 2026-10-19): **5/5 PASS** on the R2q weights: layers 1-4 (small12 tile, re-run, reset-abort sweep) and the HC=6 tile core (2 tiles, abort sweep) are bit-exact.
 
 ## Build (Vivado 2024.1, `build_m6_system.tcl`, 2 jobs; about 7 min)
 | | R2q | 0602 (deployed) |
