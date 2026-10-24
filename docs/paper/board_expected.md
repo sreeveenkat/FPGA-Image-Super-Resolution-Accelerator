@@ -28,8 +28,8 @@ Tree `/home/sreevenkat/Desktop/venkat/sem_project_all`. Cross-checks (model re-r
 | ELF T2 full frame (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sem_project_all/software/board/build/sr_app_t2.elf` | `fdecdb826b564f8c72d4f9857d9e70ea` |
 | ELF T3 timing, 20 frames (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sem_project_all/software/board/build/sr_app_t3_20f.elf` | `99aa0385edda1b8edf144a76e3007691` |
 | ELF T3 timing, 200 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sem_project_all/software/board/build/sr_app_t3_200f.elf` | `d18a22d68855409ca40db5b645857613` |
-| ELF T7 ARM only, 1 frame (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sem_project_all/software/board/build/sr_app_t11.elf` | `f10f4601c0d1ae05fdaad87f17d0f23d` |
-| ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sem_project_all/software/board/build/sr_app_t11_20f.elf` | `b105c531fb66ae90fceed91a0e82a596` |
+| ELF T7 ARM only, 1 frame (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sem_project_all/software/board/build/sr_app_t11.elf` | `f10f4601c0d1ae05fdaad87f17d0f23d` |
+| ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sem_project_all/software/board/build/sr_app_t11_20f.elf` | `b105c531fb66ae90fceed91a0e82a596` |
 
 ## R2q
 
@@ -53,8 +53,8 @@ Tree `/home/sreevenkat/Desktop/venkat/sandbox_R2q`. Cross-checks (model re-run i
 | ELF T2 full frame (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R2q/software/board/build/sr_app_t2.elf` | `2d0ae1652b72e7ce9b1698722a0248a8` |
 | ELF T3 timing, 20 frames (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R2q/software/board/build/sr_app_t3_20f.elf` | `8616b4e37252e891b2968be97654ad95` |
 | ELF T3 timing, 200 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R2q/software/board/build/sr_app_t3_200f.elf` | `0150b3186b6200eefd5d80de3ee10d83` |
-| ELF T7 ARM only, 1 frame (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R2q/software/board/build/sr_app_t11.elf` | `8efe14b0c0b98962374f5168296af25c` |
-| ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R2q/software/board/build/sr_app_t11_20f.elf` | `9cc182ff06f1276d849ec6b60fb1961b` |
+| ELF T7 ARM only, 1 frame (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R2q/software/board/build/sr_app_t11.elf` | `8efe14b0c0b98962374f5168296af25c` |
+| ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R2q/software/board/build/sr_app_t11_20f.elf` | `9cc182ff06f1276d849ec6b60fb1961b` |
 
 ## R3q
 
@@ -78,6 +78,6 @@ Tree `/home/sreevenkat/Desktop/venkat/sandbox_R3q`. Cross-checks (model re-run i
 | ELF T2 full frame (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t2.elf` | `c60eaa6e74fe22052a200b4be284c88e` |
 | ELF T3 timing, 20 frames (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t3_20f.elf` | `841a4e6a0e525ce58e194b6983d642b7` |
 | ELF T3 timing, 200 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t3_200f.elf` | `c3795738e15aea22fc3461a812361cbc` |
-| ELF T7 ARM only, 1 frame (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t11.elf` | `702add67565362004f3230d95bad93ff` |
-| ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t11_20f.elf` | `e93504b7531b4bd5e41cda7669b63a3c` |
+| ELF T7 ARM only, 1 frame (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t11.elf` | `702add67565362004f3230d95bad93ff` |
+| ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t11_20f.elf` | `e93504b7531b4bd5e41cda7669b63a3c` |
 
