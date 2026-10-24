@@ -35,13 +35,13 @@ PSNR-Y (dB) / SSIM-Y. Selection (checkpoint, QAT step, which seed's crops) used 
 | INT8 | Set5 | Set14 | BSD100 | val42 PSNR |
 |---|---|---|---|---|
 | bicubic | 33.67 / 0.9303 | 30.32 / 0.8698 | 29.56 / 0.8434 | |
-| R0 deployed baseline (PTQ) | 34.93 ± 0.10 / 0.9402 ± 0.0017 | 31.35 ± 0.05 / 0.8931 ± 0.0016 | 30.48 ± 0.05 / 0.8745 ± 0.0012 | 33.28 ± 0.14 |
+| R0 (2-seed mean: deployed + baseline_s1) (PTQ); the deployed checkpoint alone is 35.02 / 31.40 / 30.53 (`table_a_x2.md` on main) | 34.93 ± 0.10 / 0.9402 ± 0.0017 | 31.35 ± 0.05 / 0.8931 ± 0.0016 | 30.48 ± 0.05 / 0.8745 ± 0.0012 | 33.28 ± 0.14 |
 | R1q plain, new data + recipe + QAT | 35.41 ± 0.02 / 0.9446 | 31.66 ± 0.02 / 0.8975 | 30.69 ± 0.02 / 0.8782 | 33.66 ± 0.02 |
 | **R2q rep + QAT (no RTL change)** | 35.79 ± 0.04 / 0.9479 ± 0.0001 | 31.85 ± 0.04 / 0.9000 ± 0.0003 | 30.83 ± 0.04 / 0.8802 ± 0.0004 | 33.88 ± 0.04 |
 | **R3q plain + anchor + QAT (needs RTL change)** | 36.05 ± 0.15 / 0.9505 ± 0.0010 | 32.05 ± 0.07 / 0.9025 ± 0.0010 | 30.96 ± 0.05 / 0.8824 ± 0.0009 | 34.12 ± 0.09 |
 | R4q rep + anchor + QAT | 35.93 ± 0.16 / 0.9497 | 31.97 ± 0.11 / 0.9015 | 30.90 ± 0.07 / 0.8813 | 34.03 ± 0.13 |
 
-FP32 (not deployable, for reference): R0 35.16 / 31.47 / 30.59; R1 35.65 / 31.80 / 30.77; R2 36.06 / 32.05 / 30.95; R3 36.12 / 32.09 / 30.99; R4 36.05 / 32.07 / 30.96.
+FP32 (not deployable, for reference): R0 (2-seed mean: deployed + baseline_s1) 35.16 / 31.47 / 30.59 (the deployed FP32 checkpoint alone: 35.21 / 31.51 / 30.60, `table_a_x2.md` on main); R1 35.65 / 31.80 / 30.77; R2 36.06 / 32.05 / 30.95; R3 36.12 / 32.09 / 30.99; R4 36.05 / 32.07 / 30.96.
 PTQ of the merged rep net collapses (R2 INT8 PTQ 32.39 ± 0.94 on Set5), QAT fixes it (+3.4 dB): QAT is mandatory for R2/R4.
 
 Gain per step, INT8 (Set5 / Set14 / BSD100): data + recipe + QAT (R1q - R0) +0.48 / +0.31 / +0.22; rep blocks (R2q - R1q) +0.39 / +0.19 / +0.14;
@@ -95,6 +95,6 @@ Merging a branch into `main` (and installing its qparams/weights as the deployed
 
 1. Done: final two-seed table, overlap check, crops, R3q vs R2q.
 2. Done (PC side): R2q sandbox, R3q sandbox, per-design VERSION, full regressions, netlist simulations.
-3. **NEXT: the board checklist, `docs/paper/board_checklist.md`**: T1/T2 re-run on the current design, T7 ARM baseline, R2q byte-exact + frame time, power (current and R2q), then R3q. Bitstreams, ELFs and expected checksums are ready (R0 0xcf947f22, R2q 0x2afbc9ae, R3q 0x45dd4e2d for the 960x540 frame).
+3. **NEXT: the board checklist, `docs/paper/board_checklist.md` (on main; the file is not in this branch)**: T1/T2 re-run on the current design, T7 ARM baseline, R2q byte-exact + frame time, power (current and R2q), then R3q. Bitstreams, ELFs and expected checksums are ready (R0 0xcf947f22, R2q 0x2afbc9ae, R3q 0x45dd4e2d for the 960x540 frame).
 4. After the board results: the owner decides which branch is merged into `main` and installed as the deployed weights/bitstream.
 5. Later: cost of loading weights/qparams at runtime over AXI-Lite instead of `$readmemh`.

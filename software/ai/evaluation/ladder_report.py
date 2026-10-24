@@ -2,9 +2,10 @@
 
 Run from the project root:  .venv/bin/python software/ai/evaluation/ladder_report.py  ->  results/quality/image_quality_ladder.md
 
-Rungs (every one has 2 seeds):  R0 baseline (the deployed model) | R1 plain SRNet, new recipe | R2 re-parameterized (rep) | R3 plain + anchor | R4 rep + anchor,
+Rungs (every one has 2 seeds):  R0 baseline recipe (2-seed mean: the deployed checkpoint + baseline_s1, a retrain) | R1 plain SRNet, new recipe | R2 re-parameterized (rep) | R3 plain + anchor | R4 rep + anchor,
 each as FP32, as INT8 by post-training quantization (PTQ) and as INT8 after quantization-aware training (QAT, per-layer weight scales = the RTL scheme).
 INT8 always means the NumPy integer model, i.e. what the RTL computes.  "mean +- h" is the mean over seeds and h the half-range (max-min)/2.
+Gain rows that involve R0 are "vs R0 2-seed mean": R0 is the mean of the deployed checkpoint and one retrain (baseline_s1), NOT the deployed checkpoint alone (see table_a_x2.md).
 A gain is marked "(within noise)" when it is smaller than the larger of the two half-ranges.  Selection used the 42 clean validation images only.
 """
 import json
@@ -19,7 +20,7 @@ COLS = [(s, m) for s in SETS for m in ("psnr_y", "ssim_y")] + [("val", "psnr_y")
 
 # key -> (label, json names)
 R = {
-    "R0": ("R0 baseline (deployed: 180 imgs, 50k steps)", ["baseline", "baseline_s1"]),
+    "R0": ("R0 (2-seed mean: deployed + baseline_s1; 180 imgs, 50k steps)", ["baseline", "baseline_s1"]),
     "R1": ("R1 plain, DIV2K-800+Flickr2K, 8-fold aug, cosine, 300k steps", ["plain_s0", "plain_s1"]),
     "R2": ("R2 rep (re-parameterized training blocks, merged)", ["rep_s0", "rep_s1"]),
     "R3": ("R3 plain + NN anchor", ["plainA_s0", "plainA_s1"]),
@@ -33,14 +34,14 @@ FP32_ROWS = ["R0", "R1", "R2", "R3", "R4"]
 INT8_PTQ_ROWS = ["R0", "R1", "R2", "R3", "R4"]
 INT8_QAT_ROWS = ["R1q", "R2q", "R3q", "R4q"]
 # (label, a, b, kind): gain of b over a
-FP32_GAINS = [("data+recipe: R1 - R0", "R0", "R1"), ("rep blocks: R2 - R1", "R1", "R2"), ("anchor on plain: R3 - R1", "R1", "R3"),
+FP32_GAINS = [("data+recipe: R1 - R0 (vs R0 2-seed mean)", "R0", "R1"), ("rep blocks: R2 - R1", "R1", "R2"), ("anchor on plain: R3 - R1", "R1", "R3"),
               ("anchor on rep: R4 - R2", "R2", "R4"), ("rep on anchor: R4 - R3", "R3", "R4")]
 INT8_GAINS = [("PTQ -> QAT, plain: R1q - R1", "R1", "R1q"), ("PTQ -> QAT, rep: R2q - R2", "R2", "R2q"),
-              ("deployed -> new plain+QAT: R1q - R0", "R0", "R1q"), ("rep blocks (INT8): R2q - R1q", "R1q", "R2q"),
+              ("new plain+QAT: R1q - R0 (vs R0 2-seed mean)", "R0", "R1q"), ("rep blocks (INT8): R2q - R1q", "R1q", "R2q"),
               ("anchor on plain (INT8): R3q - R1q", "R1q", "R3q"), ("anchor on rep (INT8): R4q - R2q", "R2q", "R4q"),
               ("rep on anchor (INT8): R4q - R3q", "R3q", "R4q"),
-              ("rep+QAT vs deployed: R2q - R0", "R0", "R2q"), ("anchor+QAT vs rep+QAT: R3q - R2q", "R2q", "R3q"),
-              ("plain+anchor+QAT vs deployed: R3q - R0", "R0", "R3q"), ("everything: R4q - R0", "R0", "R4q")]
+              ("rep+QAT: R2q - R0 (vs R0 2-seed mean)", "R0", "R2q"), ("anchor+QAT vs rep+QAT: R3q - R2q", "R2q", "R3q"),
+              ("plain+anchor+QAT: R3q - R0 (vs R0 2-seed mean)", "R0", "R3q"), ("everything: R4q - R0 (vs R0 2-seed mean)", "R0", "R4q")]
 
 
 def load(name):
@@ -94,7 +95,7 @@ def main():
            "INT8 = the NumPy integer model (bit-exact with the RTL).  QAT checkpoints are only meaningful quantized, so they have no FP32 row.", ""]
     o, _ = table("FP32", FP32_ROWS, "fp32", FP32_GAINS)
     out += o
-    o, _ = table("INT8 by post-training quantization (PTQ, 99.99 percentile, per-layer weight scales)", INT8_PTQ_ROWS, "int8", [])
+    o, _ = table("INT8 by post-training quantization (PTQ, 99.99 percentile, per-layer weight scales)", INT8_PTQ_ROWS, "int8", FP32_GAINS)
     out += o
     o, _ = table("INT8 after quantization-aware training (QAT, per-layer weight scales)", ["R0"] + INT8_QAT_ROWS, "int8", INT8_GAINS, extra=INT8_PTQ_ROWS[1:])
     out += o

@@ -2,7 +2,7 @@
 
 Status 2026-10-19: **built and simulated, NOT yet run on the board.** The deployed bitstream (0602), `qparams.npz` and the `main` branch are untouched;
 `~/Desktop/venkat/TESTED_0602.bit` is the fallback. RTL change versus 0602: only the default `SHIFT1..4` of `sr_tile_core.v` (24/23/21/24 -> 22/22/21/22).
-**VERSION register 0x53522201** (R2q; deployed R0 = 0x53520602, R3q = 0x53523201): each design reports its own value, and this tree's driver (`VERSION & 0xFFFFFF00 == 0x53522200`) refuses the other bitstreams. The R2q golden tile (T1) and the R2q expected output (T2) still prove the weights, see `docs/paper/board_checklist.md`.
+**VERSION register 0x53522201** (R2q; deployed R0 = 0x53520602, R3q = 0x53523201): each design reports its own value, and this tree's driver (`VERSION & 0xFFFFFF00 == 0x53522200`) refuses the other bitstreams. The R2q golden tile (T1) and the R2q expected output (T2) still prove the weights, see `docs/paper/board_checklist.md` (on main).
 The first R2q build (VERSION 0x53520602, WNS +0.671 / WHS +0.020 ns, 5,289 LUT, 7,803 FF, 1.912 W) was superseded on 2026-10-19 by the build below; its files are in `~/Desktop/venkat/R2q_artifacts/superseded_VERSION0602/`.
 
 ## What R2q is

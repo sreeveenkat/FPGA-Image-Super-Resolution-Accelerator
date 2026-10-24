@@ -7,7 +7,7 @@ INT8 = the NumPy integer model (bit-exact with the RTL).  QAT checkpoints are on
 
 | Row | Set5 PSNR | Set5 SSIM | Set14 PSNR | Set14 SSIM | BSD100 PSNR | BSD100 SSIM | val42 PSNR |
 |---|---|---|---|---|---|---|---|
-| **R0 baseline (deployed: 180 imgs, 50k steps)** (n=2) | 35.160 ± 0.045 | 0.9445 ± 0.0004 | 31.470 ± 0.038 | 0.8971 ± 0.0005 | 30.587 ± 0.015 | 0.8783 ± 0.0003 | 33.565 ± 0.034 |
+| **R0 (2-seed mean: deployed + baseline_s1; 180 imgs, 50k steps)** (n=2) | 35.160 ± 0.045 | 0.9445 ± 0.0004 | 31.470 ± 0.038 | 0.8971 ± 0.0005 | 30.587 ± 0.015 | 0.8783 ± 0.0003 | 33.565 ± 0.034 |
 | &nbsp;&nbsp;seed `baseline` | 35.205 | 0.9449 | 31.508 | 0.8975 | 30.602 | 0.8785 | 33.598 |
 | &nbsp;&nbsp;seed `baseline_s1` | 35.115 | 0.9441 | 31.432 | 0.8966 | 30.571 | 0.8780 | 33.531 |
 | **R1 plain, DIV2K-800+Flickr2K, 8-fold aug, cosine, 300k steps** (n=2) | 35.647 ± 0.013 | 0.9482 ± 0.0002 | 31.795 ± 0.018 | 0.9005 ± 0.0003 | 30.770 ± 0.016 | 0.8807 ± 0.0003 | 33.862 ± 0.016 |
@@ -25,7 +25,7 @@ INT8 = the NumPy integer model (bit-exact with the RTL).  QAT checkpoints are on
 
 | Gain (mean over seeds) | Set5 PSNR | Set5 SSIM | Set14 PSNR | Set14 SSIM | BSD100 PSNR | BSD100 SSIM | val42 PSNR |
 |---|---|---|---|---|---|---|---|
-| data+recipe: R1 - R0 | +0.487 | +0.0037 | +0.325 | +0.0035 | +0.183 | +0.0024 | +0.298 |
+| data+recipe: R1 - R0 (vs R0 2-seed mean) | +0.487 | +0.0037 | +0.325 | +0.0035 | +0.183 | +0.0024 | +0.298 |
 | rep blocks: R2 - R1 | +0.413 | +0.0027 | +0.257 | +0.0021 | +0.176 | +0.0017 | +0.258 |
 | anchor on plain: R3 - R1 | +0.469 | +0.0030 | +0.293 | +0.0024 | +0.217 | +0.0021 | +0.308 |
 | anchor on rep: R4 - R2 | -0.006 (within noise) | -0.0001 (within noise) | +0.017 (within noise) | -0.0001 (within noise) | +0.016 (within noise) | -0.0001 (within noise) | +0.009 (within noise) |
@@ -35,7 +35,7 @@ INT8 = the NumPy integer model (bit-exact with the RTL).  QAT checkpoints are on
 
 | Row | Set5 PSNR | Set5 SSIM | Set14 PSNR | Set14 SSIM | BSD100 PSNR | BSD100 SSIM | val42 PSNR |
 |---|---|---|---|---|---|---|---|
-| **R0 baseline (deployed: 180 imgs, 50k steps)** (n=2) | 34.928 ± 0.095 | 0.9402 ± 0.0017 | 31.347 ± 0.051 | 0.8931 ± 0.0016 | 30.475 ± 0.051 | 0.8745 ± 0.0012 | 33.281 ± 0.136 |
+| **R0 (2-seed mean: deployed + baseline_s1; 180 imgs, 50k steps)** (n=2) | 34.928 ± 0.095 | 0.9402 ± 0.0017 | 31.347 ± 0.051 | 0.8931 ± 0.0016 | 30.475 ± 0.051 | 0.8745 ± 0.0012 | 33.281 ± 0.136 |
 | &nbsp;&nbsp;seed `baseline` | 35.023 | 0.9420 | 31.398 | 0.8948 | 30.526 | 0.8756 | 33.417 |
 | &nbsp;&nbsp;seed `baseline_s1` | 34.833 | 0.9385 | 31.296 | 0.8915 | 30.424 | 0.8733 | 33.146 |
 | **R1 plain, DIV2K-800+Flickr2K, 8-fold aug, cosine, 300k steps** (n=2) | 34.287 ± 0.411 | 0.9296 ± 0.0008 | 31.047 ± 0.218 | 0.8838 ± 0.0006 | 30.201 ± 0.122 | 0.8654 ± 0.0002 | 32.615 ± 0.195 |
@@ -53,12 +53,17 @@ INT8 = the NumPy integer model (bit-exact with the RTL).  QAT checkpoints are on
 
 | Gain (mean over seeds) | Set5 PSNR | Set5 SSIM | Set14 PSNR | Set14 SSIM | BSD100 PSNR | BSD100 SSIM | val42 PSNR |
 |---|---|---|---|---|---|---|---|
+| data+recipe: R1 - R0 (vs R0 2-seed mean) | -0.641 | -0.0107 | -0.300 | -0.0093 | -0.274 | -0.0091 | -0.666 |
+| rep blocks: R2 - R1 | -1.893 | -0.0674 | -1.188 | -0.0666 | -0.911 | -0.0541 | -1.599 |
+| anchor on plain: R3 - R1 | +1.600 | +0.0181 | +0.926 | +0.0160 | +0.701 | +0.0145 | +1.361 |
+| anchor on rep: R4 - R2 | +3.108 | +0.0822 | +1.945 | +0.0805 | +1.473 | +0.0663 | +2.639 |
+| rep on anchor: R4 - R3 | -0.384 (within noise) | -0.0032 (within noise) | -0.169 (within noise) | -0.0021 (within noise) | -0.139 (within noise) | -0.0023 (within noise) | -0.321 (within noise) |
 
 ## INT8 after quantization-aware training (QAT, per-layer weight scales)
 
 | Row | Set5 PSNR | Set5 SSIM | Set14 PSNR | Set14 SSIM | BSD100 PSNR | BSD100 SSIM | val42 PSNR |
 |---|---|---|---|---|---|---|---|
-| **R0 baseline (deployed: 180 imgs, 50k steps)** (n=2) | 34.928 ± 0.095 | 0.9402 ± 0.0017 | 31.347 ± 0.051 | 0.8931 ± 0.0016 | 30.475 ± 0.051 | 0.8745 ± 0.0012 | 33.281 ± 0.136 |
+| **R0 (2-seed mean: deployed + baseline_s1; 180 imgs, 50k steps)** (n=2) | 34.928 ± 0.095 | 0.9402 ± 0.0017 | 31.347 ± 0.051 | 0.8931 ± 0.0016 | 30.475 ± 0.051 | 0.8745 ± 0.0012 | 33.281 ± 0.136 |
 | &nbsp;&nbsp;seed `baseline` | 35.023 | 0.9420 | 31.398 | 0.8948 | 30.526 | 0.8756 | 33.417 |
 | &nbsp;&nbsp;seed `baseline_s1` | 34.833 | 0.9385 | 31.296 | 0.8915 | 30.424 | 0.8733 | 33.146 |
 | **R1 + QAT** (n=2) | 35.409 ± 0.020 | 0.9446 ± 0.0004 | 31.657 ± 0.017 | 0.8975 ± 0.0004 | 30.693 ± 0.017 | 0.8782 ± 0.0005 | 33.662 ± 0.016 |
@@ -78,15 +83,15 @@ INT8 = the NumPy integer model (bit-exact with the RTL).  QAT checkpoints are on
 |---|---|---|---|---|---|---|---|
 | PTQ -> QAT, plain: R1q - R1 | +1.122 | +0.0150 | +0.610 | +0.0137 | +0.492 | +0.0128 | +1.046 |
 | PTQ -> QAT, rep: R2q - R2 | +3.400 | +0.0857 | +1.987 | +0.0827 | +1.541 | +0.0690 | +2.861 |
-| deployed -> new plain+QAT: R1q - R0 | +0.481 | +0.0044 | +0.310 | +0.0044 | +0.218 | +0.0037 | +0.380 |
+| new plain+QAT: R1q - R0 (vs R0 2-seed mean) | +0.481 | +0.0044 | +0.310 | +0.0044 | +0.218 | +0.0037 | +0.380 |
 | rep blocks (INT8): R2q - R1q | +0.385 | +0.0033 | +0.189 | +0.0024 | +0.139 | +0.0020 | +0.216 |
 | anchor on plain (INT8): R3q - R1q | +0.642 | +0.0059 | +0.392 | +0.0050 | +0.269 | +0.0042 | +0.454 |
 | anchor on rep (INT8): R4q - R2q | +0.140 (within noise) | +0.0018 | +0.122 | +0.0015 (within noise) | +0.064 (within noise) | +0.0011 (within noise) | +0.151 |
 | rep on anchor (INT8): R4q - R3q | -0.118 (within noise) | -0.0008 (within noise) | -0.081 (within noise) | -0.0011 (within noise) | -0.066 (within noise) | -0.0011 (within noise) | -0.087 (within noise) |
-| rep+QAT vs deployed: R2q - R0 | +0.866 | +0.0077 | +0.498 | +0.0069 | +0.356 | +0.0057 | +0.597 |
+| rep+QAT: R2q - R0 (vs R0 2-seed mean) | +0.866 | +0.0077 | +0.498 | +0.0069 | +0.356 | +0.0057 | +0.597 |
 | anchor+QAT vs rep+QAT: R3q - R2q | +0.258 | +0.0026 | +0.203 | +0.0025 | +0.130 | +0.0022 | +0.238 |
-| plain+anchor+QAT vs deployed: R3q - R0 | +1.124 | +0.0103 | +0.701 | +0.0094 | +0.487 | +0.0079 | +0.835 |
-| everything: R4q - R0 | +1.006 | +0.0095 | +0.621 | +0.0083 | +0.420 | +0.0068 | +0.747 |
+| plain+anchor+QAT: R3q - R0 (vs R0 2-seed mean) | +1.124 | +0.0103 | +0.701 | +0.0094 | +0.487 | +0.0079 | +0.835 |
+| everything: R4q - R0 (vs R0 2-seed mean) | +1.006 | +0.0095 | +0.621 | +0.0083 | +0.420 | +0.0068 | +0.747 |
 
 ## Reference points
 
