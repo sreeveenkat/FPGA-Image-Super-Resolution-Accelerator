@@ -1,0 +1,559 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2024 Advanced Micro Devices, Inc. All Rights Reserved.
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2024.1 (lin64) Build 5076996 Wed May 22 18:36:09 MDT 2024
+| Date         : Sat Oct 24 18:52:25 2026
+| Host         : sreevenkat-Dell-G15-5530 running 64-bit Ubuntu 24.04.5 LTS
+| Command      : report_timing -delay_type max -max_paths 10 -nworst 1 -sort_by slack -path_type full -file /home/sreevenkat/Desktop/venkat/sem_project_all/results/utilization/timing_150mhz/worst10_setup_paths.txt
+| Design       : design_1_wrapper
+| Device       : 7z020-clg484
+| Speed File   : -1  PRODUCTION 1.12 2019-11-22
+| Design State : Routed
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Report
+
+Slack (VIOLATED) :        -1.693ns  (required time - arrival time)
+  Source:                 design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Destination:            design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[1].u_mac/acc_reg/A[7]
+                            (rising edge-triggered cell DSP48E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Path Group:             clk_fpga_0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.562ns  (clk_fpga_0 rise@6.562ns - clk_fpga_0 rise@0.000ns)
+  Data Path Delay:        6.192ns  (logic 3.084ns (49.805%)  route 3.108ns (50.195%))
+  Logic Levels:           3  (LUT6=2 MUXF7=1)
+  Clock Path Skew:        -0.030ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.862ns = ( 9.424 - 6.562 ) 
+    Source Clock Delay      (SCD):    3.121ns
+    Clock Pessimism Removal (CPR):    0.229ns
+  Clock Uncertainty:      0.105ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.197ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_fpga_0 rise edge)
+                                                      0.000     0.000 r  
+                         propagated clock network latency
+                                                      3.121     3.121    
+    RAMB36_X5Y11         RAMB36E1                     0.000     3.121 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/CLKBWRCLK
+    RAMB36_X5Y11         RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[4])
+                                                      2.454     5.575 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/DOBDO[4]
+                         net (fo=1, routed)           1.496     7.071    design_1_i/sr_accel_top_0/inst/wrap/core/e4/q_lo[31]
+    SLICE_X92Y74         LUT6 (Prop_lut6_I4_O)        0.124     7.195 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_37/O
+                         net (fo=1, routed)           0.000     7.195    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_37_n_0
+    SLICE_X92Y74         MUXF7 (Prop_muxf7_I0_O)      0.209     7.404 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_11/O
+                         net (fo=1, routed)           0.587     7.991    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_11_n_0
+    SLICE_X91Y76         LUT6 (Prop_lut6_I4_O)        0.297     8.288 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_1/O
+                         net (fo=12, routed)          1.025     9.314    design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[1].u_mac/A[7]
+    DSP48_X4Y29          DSP48E1                                      r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[1].u_mac/acc_reg/A[7]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_fpga_0 rise edge)
+                                                      6.562     6.562 r  
+                         propagated clock network latency
+                                                      2.862     9.424    
+                         clock pessimism              0.229     9.654    
+                         clock uncertainty           -0.105     9.549    
+    DSP48_X4Y29          DSP48E1 (Setup_dsp48e1_CLK_A[7])
+                                                     -1.928     7.621    design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[1].u_mac/acc_reg
+  -------------------------------------------------------------------
+                         required time                          7.621    
+                         arrival time                          -9.314    
+  -------------------------------------------------------------------
+                         slack                                 -1.693    
+
+Slack (VIOLATED) :        -1.690ns  (required time - arrival time)
+  Source:                 design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Destination:            design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[10].u_mac/acc_reg/A[7]
+                            (rising edge-triggered cell DSP48E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Path Group:             clk_fpga_0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.562ns  (clk_fpga_0 rise@6.562ns - clk_fpga_0 rise@0.000ns)
+  Data Path Delay:        6.192ns  (logic 3.084ns (49.805%)  route 3.108ns (50.195%))
+  Logic Levels:           3  (LUT6=2 MUXF7=1)
+  Clock Path Skew:        -0.027ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.865ns = ( 9.427 - 6.562 ) 
+    Source Clock Delay      (SCD):    3.121ns
+    Clock Pessimism Removal (CPR):    0.229ns
+  Clock Uncertainty:      0.105ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.197ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_fpga_0 rise edge)
+                                                      0.000     0.000 r  
+                         propagated clock network latency
+                                                      3.121     3.121    
+    RAMB36_X5Y11         RAMB36E1                     0.000     3.121 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/CLKBWRCLK
+    RAMB36_X5Y11         RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[4])
+                                                      2.454     5.575 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/DOBDO[4]
+                         net (fo=1, routed)           1.496     7.071    design_1_i/sr_accel_top_0/inst/wrap/core/e4/q_lo[31]
+    SLICE_X92Y74         LUT6 (Prop_lut6_I4_O)        0.124     7.195 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_37/O
+                         net (fo=1, routed)           0.000     7.195    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_37_n_0
+    SLICE_X92Y74         MUXF7 (Prop_muxf7_I0_O)      0.209     7.404 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_11/O
+                         net (fo=1, routed)           0.587     7.991    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_11_n_0
+    SLICE_X91Y76         LUT6 (Prop_lut6_I4_O)        0.297     8.288 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_1/O
+                         net (fo=12, routed)          1.025     9.314    design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[10].u_mac/A[7]
+    DSP48_X4Y28          DSP48E1                                      r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[10].u_mac/acc_reg/A[7]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_fpga_0 rise edge)
+                                                      6.562     6.562 r  
+                         propagated clock network latency
+                                                      2.865     9.427    
+                         clock pessimism              0.229     9.657    
+                         clock uncertainty           -0.105     9.552    
+    DSP48_X4Y28          DSP48E1 (Setup_dsp48e1_CLK_A[7])
+                                                     -1.928     7.624    design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[10].u_mac/acc_reg
+  -------------------------------------------------------------------
+                         required time                          7.624    
+                         arrival time                          -9.314    
+  -------------------------------------------------------------------
+                         slack                                 -1.690    
+
+Slack (VIOLATED) :        -1.618ns  (required time - arrival time)
+  Source:                 design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Destination:            design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[11].u_mac/acc_reg/A[3]
+                            (rising edge-triggered cell DSP48E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Path Group:             clk_fpga_0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.562ns  (clk_fpga_0 rise@6.562ns - clk_fpga_0 rise@0.000ns)
+  Data Path Delay:        6.117ns  (logic 3.243ns (53.014%)  route 2.874ns (46.986%))
+  Logic Levels:           4  (LUT6=2 MUXF7=1 MUXF8=1)
+  Clock Path Skew:        -0.030ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.862ns = ( 9.424 - 6.562 ) 
+    Source Clock Delay      (SCD):    3.121ns
+    Clock Pessimism Removal (CPR):    0.229ns
+  Clock Uncertainty:      0.105ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.197ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_fpga_0 rise edge)
+                                                      0.000     0.000 r  
+                         propagated clock network latency
+                                                      3.121     3.121    
+    RAMB36_X5Y11         RAMB36E1                     0.000     3.121 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/CLKBWRCLK
+    RAMB36_X5Y11         RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOPBDOP[0])
+                                                      2.454     5.575 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/DOPBDOP[0]
+                         net (fo=1, routed)           1.476     7.052    design_1_i/sr_accel_top_0/inst/wrap/core/e4/q_lo[35]
+    SLICE_X91Y72         LUT6 (Prop_lut6_I4_O)        0.124     7.176 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_98/O
+                         net (fo=1, routed)           0.000     7.176    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_98_n_0
+    SLICE_X91Y72         MUXF7 (Prop_muxf7_I1_O)      0.245     7.421 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_57/O
+                         net (fo=1, routed)           0.000     7.421    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_57_n_0
+    SLICE_X91Y72         MUXF8 (Prop_muxf8_I0_O)      0.104     7.525 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_21/O
+                         net (fo=1, routed)           0.475     8.000    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_21_n_0
+    SLICE_X94Y72         LUT6 (Prop_lut6_I1_O)        0.316     8.316 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_5/O
+                         net (fo=12, routed)          0.923     9.239    design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[11].u_mac/A[3]
+    DSP48_X4Y30          DSP48E1                                      r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[11].u_mac/acc_reg/A[3]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_fpga_0 rise edge)
+                                                      6.562     6.562 r  
+                         propagated clock network latency
+                                                      2.862     9.424    
+                         clock pessimism              0.229     9.654    
+                         clock uncertainty           -0.105     9.549    
+    DSP48_X4Y30          DSP48E1 (Setup_dsp48e1_CLK_A[3])
+                                                     -1.928     7.621    design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[11].u_mac/acc_reg
+  -------------------------------------------------------------------
+                         required time                          7.621    
+                         arrival time                          -9.239    
+  -------------------------------------------------------------------
+                         slack                                 -1.618    
+
+Slack (VIOLATED) :        -1.618ns  (required time - arrival time)
+  Source:                 design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/CLKARDCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Destination:            design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[5].u_mac/acc_reg/A[2]
+                            (rising edge-triggered cell DSP48E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Path Group:             clk_fpga_0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.562ns  (clk_fpga_0 rise@6.562ns - clk_fpga_0 rise@0.000ns)
+  Data Path Delay:        6.130ns  (logic 3.236ns (52.789%)  route 2.894ns (47.211%))
+  Logic Levels:           4  (LUT6=2 MUXF7=1 MUXF8=1)
+  Clock Path Skew:        -0.017ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.876ns = ( 9.438 - 6.562 ) 
+    Source Clock Delay      (SCD):    3.122ns
+    Clock Pessimism Removal (CPR):    0.230ns
+  Clock Uncertainty:      0.105ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.197ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_fpga_0 rise edge)
+                                                      0.000     0.000 r  
+                         propagated clock network latency
+                                                      3.122     3.122    
+    RAMB36_X4Y5          RAMB36E1                     0.000     3.122 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/CLKARDCLK
+    RAMB36_X4Y5          RAMB36E1 (Prop_ramb36e1_CLKARDCLK_DOADO[2])
+                                                      2.454     5.576 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/DOADO[2]
+                         net (fo=1, routed)           1.456     7.033    design_1_i/sr_accel_top_0/inst/wrap/core/e3/q_hi[2]
+    SLICE_X94Y31         LUT6 (Prop_lut6_I3_O)        0.124     7.157 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_111/O
+                         net (fo=1, routed)           0.000     7.157    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_111_n_0
+    SLICE_X94Y31         MUXF7 (Prop_muxf7_I0_O)      0.241     7.398 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_73/O
+                         net (fo=1, routed)           0.000     7.398    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_73_n_0
+    SLICE_X94Y31         MUXF8 (Prop_muxf8_I0_O)      0.098     7.496 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_32/O
+                         net (fo=1, routed)           0.504     7.999    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_32_n_0
+    SLICE_X95Y31         LUT6 (Prop_lut6_I1_O)        0.319     8.318 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_13/O
+                         net (fo=16, routed)          0.934     9.253    design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[5].u_mac/A[2]
+    DSP48_X3Y9           DSP48E1                                      r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[5].u_mac/acc_reg/A[2]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_fpga_0 rise edge)
+                                                      6.562     6.562 r  
+                         propagated clock network latency
+                                                      2.876     9.438    
+                         clock pessimism              0.230     9.668    
+                         clock uncertainty           -0.105     9.563    
+    DSP48_X3Y9           DSP48E1 (Setup_dsp48e1_CLK_A[2])
+                                                     -1.928     7.635    design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[5].u_mac/acc_reg
+  -------------------------------------------------------------------
+                         required time                          7.635    
+                         arrival time                          -9.253    
+  -------------------------------------------------------------------
+                         slack                                 -1.618    
+
+Slack (VIOLATED) :        -1.615ns  (required time - arrival time)
+  Source:                 design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/CLKARDCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Destination:            design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[7].u_mac/acc_reg/A[2]
+                            (rising edge-triggered cell DSP48E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Path Group:             clk_fpga_0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.562ns  (clk_fpga_0 rise@6.562ns - clk_fpga_0 rise@0.000ns)
+  Data Path Delay:        6.128ns  (logic 3.236ns (52.811%)  route 2.892ns (47.189%))
+  Logic Levels:           4  (LUT6=2 MUXF7=1 MUXF8=1)
+  Clock Path Skew:        -0.017ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.876ns = ( 9.438 - 6.562 ) 
+    Source Clock Delay      (SCD):    3.122ns
+    Clock Pessimism Removal (CPR):    0.230ns
+  Clock Uncertainty:      0.105ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.197ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_fpga_0 rise edge)
+                                                      0.000     0.000 r  
+                         propagated clock network latency
+                                                      3.122     3.122    
+    RAMB36_X4Y5          RAMB36E1                     0.000     3.122 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/CLKARDCLK
+    RAMB36_X4Y5          RAMB36E1 (Prop_ramb36e1_CLKARDCLK_DOADO[2])
+                                                      2.454     5.576 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/DOADO[2]
+                         net (fo=1, routed)           1.456     7.033    design_1_i/sr_accel_top_0/inst/wrap/core/e3/q_hi[2]
+    SLICE_X94Y31         LUT6 (Prop_lut6_I3_O)        0.124     7.157 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_111/O
+                         net (fo=1, routed)           0.000     7.157    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_111_n_0
+    SLICE_X94Y31         MUXF7 (Prop_muxf7_I0_O)      0.241     7.398 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_73/O
+                         net (fo=1, routed)           0.000     7.398    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_73_n_0
+    SLICE_X94Y31         MUXF8 (Prop_muxf8_I0_O)      0.098     7.496 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_32/O
+                         net (fo=1, routed)           0.504     7.999    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_32_n_0
+    SLICE_X95Y31         LUT6 (Prop_lut6_I1_O)        0.319     8.318 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_13/O
+                         net (fo=16, routed)          0.932     9.250    design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[7].u_mac/A[2]
+    DSP48_X3Y10          DSP48E1                                      r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[7].u_mac/acc_reg/A[2]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_fpga_0 rise edge)
+                                                      6.562     6.562 r  
+                         propagated clock network latency
+                                                      2.876     9.438    
+                         clock pessimism              0.230     9.668    
+                         clock uncertainty           -0.105     9.563    
+    DSP48_X3Y10          DSP48E1 (Setup_dsp48e1_CLK_A[2])
+                                                     -1.928     7.635    design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[7].u_mac/acc_reg
+  -------------------------------------------------------------------
+                         required time                          7.635    
+                         arrival time                          -9.250    
+  -------------------------------------------------------------------
+                         slack                                 -1.615    
+
+Slack (VIOLATED) :        -1.615ns  (required time - arrival time)
+  Source:                 design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Destination:            design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[4].u_mac/acc_reg/A[3]
+                            (rising edge-triggered cell DSP48E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Path Group:             clk_fpga_0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.562ns  (clk_fpga_0 rise@6.562ns - clk_fpga_0 rise@0.000ns)
+  Data Path Delay:        6.117ns  (logic 3.243ns (53.014%)  route 2.874ns (46.986%))
+  Logic Levels:           4  (LUT6=2 MUXF7=1 MUXF8=1)
+  Clock Path Skew:        -0.027ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.865ns = ( 9.427 - 6.562 ) 
+    Source Clock Delay      (SCD):    3.121ns
+    Clock Pessimism Removal (CPR):    0.229ns
+  Clock Uncertainty:      0.105ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.197ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_fpga_0 rise edge)
+                                                      0.000     0.000 r  
+                         propagated clock network latency
+                                                      3.121     3.121    
+    RAMB36_X5Y11         RAMB36E1                     0.000     3.121 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/CLKBWRCLK
+    RAMB36_X5Y11         RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOPBDOP[0])
+                                                      2.454     5.575 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/DOPBDOP[0]
+                         net (fo=1, routed)           1.476     7.052    design_1_i/sr_accel_top_0/inst/wrap/core/e4/q_lo[35]
+    SLICE_X91Y72         LUT6 (Prop_lut6_I4_O)        0.124     7.176 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_98/O
+                         net (fo=1, routed)           0.000     7.176    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_98_n_0
+    SLICE_X91Y72         MUXF7 (Prop_muxf7_I1_O)      0.245     7.421 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_57/O
+                         net (fo=1, routed)           0.000     7.421    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_57_n_0
+    SLICE_X91Y72         MUXF8 (Prop_muxf8_I0_O)      0.104     7.525 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_21/O
+                         net (fo=1, routed)           0.475     8.000    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_21_n_0
+    SLICE_X94Y72         LUT6 (Prop_lut6_I1_O)        0.316     8.316 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_5/O
+                         net (fo=12, routed)          0.923     9.239    design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[4].u_mac/A[3]
+    DSP48_X4Y31          DSP48E1                                      r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[4].u_mac/acc_reg/A[3]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_fpga_0 rise edge)
+                                                      6.562     6.562 r  
+                         propagated clock network latency
+                                                      2.865     9.427    
+                         clock pessimism              0.229     9.657    
+                         clock uncertainty           -0.105     9.552    
+    DSP48_X4Y31          DSP48E1 (Setup_dsp48e1_CLK_A[3])
+                                                     -1.928     7.624    design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[4].u_mac/acc_reg
+  -------------------------------------------------------------------
+                         required time                          7.624    
+                         arrival time                          -9.239    
+  -------------------------------------------------------------------
+                         slack                                 -1.615    
+
+Slack (VIOLATED) :        -1.615ns  (required time - arrival time)
+  Source:                 design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/CLKARDCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Destination:            design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[11].u_mac/acc_reg/A[2]
+                            (rising edge-triggered cell DSP48E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Path Group:             clk_fpga_0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.562ns  (clk_fpga_0 rise@6.562ns - clk_fpga_0 rise@0.000ns)
+  Data Path Delay:        6.130ns  (logic 3.236ns (52.789%)  route 2.894ns (47.211%))
+  Logic Levels:           4  (LUT6=2 MUXF7=1 MUXF8=1)
+  Clock Path Skew:        -0.014ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.879ns = ( 9.441 - 6.562 ) 
+    Source Clock Delay      (SCD):    3.122ns
+    Clock Pessimism Removal (CPR):    0.230ns
+  Clock Uncertainty:      0.105ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.197ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_fpga_0 rise edge)
+                                                      0.000     0.000 r  
+                         propagated clock network latency
+                                                      3.122     3.122    
+    RAMB36_X4Y5          RAMB36E1                     0.000     3.122 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/CLKARDCLK
+    RAMB36_X4Y5          RAMB36E1 (Prop_ramb36e1_CLKARDCLK_DOADO[2])
+                                                      2.454     5.576 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/DOADO[2]
+                         net (fo=1, routed)           1.456     7.033    design_1_i/sr_accel_top_0/inst/wrap/core/e3/q_hi[2]
+    SLICE_X94Y31         LUT6 (Prop_lut6_I3_O)        0.124     7.157 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_111/O
+                         net (fo=1, routed)           0.000     7.157    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_111_n_0
+    SLICE_X94Y31         MUXF7 (Prop_muxf7_I0_O)      0.241     7.398 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_73/O
+                         net (fo=1, routed)           0.000     7.398    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_73_n_0
+    SLICE_X94Y31         MUXF8 (Prop_muxf8_I0_O)      0.098     7.496 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_32/O
+                         net (fo=1, routed)           0.504     7.999    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_32_n_0
+    SLICE_X95Y31         LUT6 (Prop_lut6_I1_O)        0.319     8.318 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_13/O
+                         net (fo=16, routed)          0.934     9.253    design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[11].u_mac/A[2]
+    DSP48_X3Y8           DSP48E1                                      r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[11].u_mac/acc_reg/A[2]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_fpga_0 rise edge)
+                                                      6.562     6.562 r  
+                         propagated clock network latency
+                                                      2.879     9.441    
+                         clock pessimism              0.230     9.671    
+                         clock uncertainty           -0.105     9.566    
+    DSP48_X3Y8           DSP48E1 (Setup_dsp48e1_CLK_A[2])
+                                                     -1.928     7.638    design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[11].u_mac/acc_reg
+  -------------------------------------------------------------------
+                         required time                          7.638    
+                         arrival time                          -9.253    
+  -------------------------------------------------------------------
+                         slack                                 -1.615    
+
+Slack (VIOLATED) :        -1.612ns  (required time - arrival time)
+  Source:                 design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/CLKARDCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Destination:            design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[9].u_mac/acc_reg/A[2]
+                            (rising edge-triggered cell DSP48E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Path Group:             clk_fpga_0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.562ns  (clk_fpga_0 rise@6.562ns - clk_fpga_0 rise@0.000ns)
+  Data Path Delay:        6.128ns  (logic 3.236ns (52.811%)  route 2.892ns (47.189%))
+  Logic Levels:           4  (LUT6=2 MUXF7=1 MUXF8=1)
+  Clock Path Skew:        -0.014ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.879ns = ( 9.441 - 6.562 ) 
+    Source Clock Delay      (SCD):    3.122ns
+    Clock Pessimism Removal (CPR):    0.230ns
+  Clock Uncertainty:      0.105ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.197ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_fpga_0 rise edge)
+                                                      0.000     0.000 r  
+                         propagated clock network latency
+                                                      3.122     3.122    
+    RAMB36_X4Y5          RAMB36E1                     0.000     3.122 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/CLKARDCLK
+    RAMB36_X4Y5          RAMB36E1 (Prop_ramb36e1_CLKARDCLK_DOADO[2])
+                                                      2.454     5.576 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram2/hi_part.mem_hi_reg_0/DOADO[2]
+                         net (fo=1, routed)           1.456     7.033    design_1_i/sr_accel_top_0/inst/wrap/core/e3/q_hi[2]
+    SLICE_X94Y31         LUT6 (Prop_lut6_I3_O)        0.124     7.157 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_111/O
+                         net (fo=1, routed)           0.000     7.157    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_111_n_0
+    SLICE_X94Y31         MUXF7 (Prop_muxf7_I0_O)      0.241     7.398 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_73/O
+                         net (fo=1, routed)           0.000     7.398    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_73_n_0
+    SLICE_X94Y31         MUXF8 (Prop_muxf8_I0_O)      0.098     7.496 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_32/O
+                         net (fo=1, routed)           0.504     7.999    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_32_n_0
+    SLICE_X95Y31         LUT6 (Prop_lut6_I1_O)        0.319     8.318 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_13/O
+                         net (fo=16, routed)          0.932     9.250    design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[9].u_mac/A[2]
+    DSP48_X3Y11          DSP48E1                                      r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[9].u_mac/acc_reg/A[2]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_fpga_0 rise edge)
+                                                      6.562     6.562 r  
+                         propagated clock network latency
+                                                      2.879     9.441    
+                         clock pessimism              0.230     9.671    
+                         clock uncertainty           -0.105     9.566    
+    DSP48_X3Y11          DSP48E1 (Setup_dsp48e1_CLK_A[2])
+                                                     -1.928     7.638    design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[9].u_mac/acc_reg
+  -------------------------------------------------------------------
+                         required time                          7.638    
+                         arrival time                          -9.250    
+  -------------------------------------------------------------------
+                         slack                                 -1.612    
+
+Slack (VIOLATED) :        -1.606ns  (required time - arrival time)
+  Source:                 design_1_i/sr_accel_top_0/inst/wrap/core/ram2/mem_lo_reg_6/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Destination:            design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[5].u_mac/acc_reg/A[3]
+                            (rising edge-triggered cell DSP48E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Path Group:             clk_fpga_0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.562ns  (clk_fpga_0 rise@6.562ns - clk_fpga_0 rise@0.000ns)
+  Data Path Delay:        6.110ns  (logic 3.089ns (50.560%)  route 3.021ns (49.440%))
+  Logic Levels:           3  (LUT6=2 MUXF7=1)
+  Clock Path Skew:        -0.026ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.876ns = ( 9.438 - 6.562 ) 
+    Source Clock Delay      (SCD):    3.131ns
+    Clock Pessimism Removal (CPR):    0.230ns
+  Clock Uncertainty:      0.105ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.197ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_fpga_0 rise edge)
+                                                      0.000     0.000 r  
+                         propagated clock network latency
+                                                      3.131     3.131    
+    RAMB36_X5Y3          RAMB36E1                     0.000     3.131 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram2/mem_lo_reg_6/CLKBWRCLK
+    RAMB36_X5Y3          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[5])
+                                                      2.454     5.585 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram2/mem_lo_reg_6/DOBDO[5]
+                         net (fo=1, routed)           1.513     7.099    design_1_i/sr_accel_top_0/inst/wrap/core/e3/q_lo[59]
+    SLICE_X96Y32         LUT6 (Prop_lut6_I4_O)        0.124     7.223 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_72/O
+                         net (fo=1, routed)           0.000     7.223    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_72_n_0
+    SLICE_X96Y32         MUXF7 (Prop_muxf7_I1_O)      0.214     7.437 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_31/O
+                         net (fo=1, routed)           0.400     7.837    design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_31_n_0
+    SLICE_X95Y32         LUT6 (Prop_lut6_I4_O)        0.297     8.134 r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/acc_reg_i_12/O
+                         net (fo=16, routed)          1.107     9.241    design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[5].u_mac/A[3]
+    DSP48_X3Y9           DSP48E1                                      r  design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[5].u_mac/acc_reg/A[3]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_fpga_0 rise edge)
+                                                      6.562     6.562 r  
+                         propagated clock network latency
+                                                      2.876     9.438    
+                         clock pessimism              0.230     9.668    
+                         clock uncertainty           -0.105     9.563    
+    DSP48_X3Y9           DSP48E1 (Setup_dsp48e1_CLK_A[3])
+                                                     -1.928     7.635    design_1_i/sr_accel_top_0/inst/wrap/core/e3/lane[5].u_mac/acc_reg
+  -------------------------------------------------------------------
+                         required time                          7.635    
+                         arrival time                          -9.241    
+  -------------------------------------------------------------------
+                         slack                                 -1.606    
+
+Slack (VIOLATED) :        -1.605ns  (required time - arrival time)
+  Source:                 design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/CLKBWRCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Destination:            design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[11].u_mac/acc_reg/A[7]
+                            (rising edge-triggered cell DSP48E1 clocked by clk_fpga_0  {rise@0.000ns fall@3.281ns period=6.562ns})
+  Path Group:             clk_fpga_0
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.562ns  (clk_fpga_0 rise@6.562ns - clk_fpga_0 rise@0.000ns)
+  Data Path Delay:        6.104ns  (logic 3.084ns (50.522%)  route 3.020ns (49.478%))
+  Logic Levels:           3  (LUT6=2 MUXF7=1)
+  Clock Path Skew:        -0.030ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.862ns = ( 9.424 - 6.562 ) 
+    Source Clock Delay      (SCD):    3.121ns
+    Clock Pessimism Removal (CPR):    0.229ns
+  Clock Uncertainty:      0.105ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.197ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk_fpga_0 rise edge)
+                                                      0.000     0.000 r  
+                         propagated clock network latency
+                                                      3.121     3.121    
+    RAMB36_X5Y11         RAMB36E1                     0.000     3.121 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/CLKBWRCLK
+    RAMB36_X5Y11         RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[4])
+                                                      2.454     5.575 r  design_1_i/sr_accel_top_0/inst/wrap/core/ram3/mem_lo_reg_3/DOBDO[4]
+                         net (fo=1, routed)           1.496     7.071    design_1_i/sr_accel_top_0/inst/wrap/core/e4/q_lo[31]
+    SLICE_X92Y74         LUT6 (Prop_lut6_I4_O)        0.124     7.195 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_37/O
+                         net (fo=1, routed)           0.000     7.195    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_37_n_0
+    SLICE_X92Y74         MUXF7 (Prop_muxf7_I0_O)      0.209     7.404 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_11/O
+                         net (fo=1, routed)           0.587     7.991    design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_11_n_0
+    SLICE_X91Y76         LUT6 (Prop_lut6_I4_O)        0.297     8.288 r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/acc_reg_i_1/O
+                         net (fo=12, routed)          0.937     9.226    design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[11].u_mac/A[7]
+    DSP48_X4Y30          DSP48E1                                      r  design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[11].u_mac/acc_reg/A[7]
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk_fpga_0 rise edge)
+                                                      6.562     6.562 r  
+                         propagated clock network latency
+                                                      2.862     9.424    
+                         clock pessimism              0.229     9.654    
+                         clock uncertainty           -0.105     9.549    
+    DSP48_X4Y30          DSP48E1 (Setup_dsp48e1_CLK_A[7])
+                                                     -1.928     7.621    design_1_i/sr_accel_top_0/inst/wrap/core/e4/lane[11].u_mac/acc_reg
+  -------------------------------------------------------------------
+                         required time                          7.621    
+                         arrival time                          -9.226    
+  -------------------------------------------------------------------
+                         slack                                 -1.605    
+
+
+
+

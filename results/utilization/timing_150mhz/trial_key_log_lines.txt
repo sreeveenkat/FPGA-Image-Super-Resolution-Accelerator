@@ -1,0 +1,6 @@
+# Vivado v2024.1 (64-bit)
+TRIAL requested 150 MHz, actual 152.380966 MHz, src DDR PLL
+****** Vivado v2024.1 (64-bit)
+INFO: [Route 35-57] Estimated Timing Summary | WNS=-1.695 | TNS=-423.380| WHS=0.017  | THS=0.000  |
+impl_1 status: route_design Complete, Failed Timing!
+# if {![string match "*route_design Complete*" $st]} { error "implementation did not finish: $st" }
