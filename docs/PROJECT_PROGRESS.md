@@ -93,7 +93,7 @@ The anchor costs +33 to +45 LUT, +66 FF, 0 DSP, 0 BRAM and no extra cycles (meas
 * Done: cycle model, PC baseline (GPU 7.9 ms per frame, CPU about 100-130 ms), novelty search, venue shortlist, ARM-only baseline code (T7).
 * Finding: the layer pipeline and bit-exact golden verification are **not new ideas** (existing work found). Plausible contributions: measured utilization gap on a low-cost Zynq, mutation-tested RTL with board-level byte-exactness, energy against the on-chip ARM and a GPU.
 * Deadlines: ISCAS 2027 on 22 Oct 2026 and ARC 2027 on 25 Oct 2026 (both tight); FPL, GLSVLSI and VDAT 2027 are expected around March-April 2027 (not announced).
-* Written but never run: `software/analysis/mutation_study.py`. No results exist.
+* Mutation study run 2026-10-24: 20 RTL mutants, all caught by the quick suite, no survivors (`docs/paper/mutation_study.md`). Simulation only.
 
 ---
 
@@ -122,7 +122,6 @@ Other open items:
 * Report PDF outdated (LaTeX source missing); the README should be updated after the board results.
 * Choose paper venue and deadline.
 * Repeat the 150 MHz trial and keep its reports; a pipelining change is needed before any 125/150 MHz claim.
-* Run or drop the mutation study.
 * Commit pending files: 7 modified docs/scripts, plus `timing_150mhz.md`, `mutation_study.py` and the Demo Run Sheet PDF. The PDF names a person in its byline, so check it before committing.
 * Add the MIT license (decided, not added).
 

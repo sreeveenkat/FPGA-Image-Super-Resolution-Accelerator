@@ -101,8 +101,8 @@ Merging a branch into `main` (and installing its qparams/weights as the deployed
 | DSP use of the 68 DSPs (model) | 17.2 % inside the core, 16.4 % over the frame: only one of the four layer engines works at a time | `docs/paper/cycle_model.md` Part 1 |
 | Predicted, line-buffer layer pipeline, 68 DSP, 100 MHz | about 3.9 fps (258 ms) | `cycle_model.md` Part 2 (model, not built) |
 | Predicted, one shared engine, 68 DSP | 2.2 fps (I/O as today) / 2.8 fps (overlapped I/O) at 100 MHz; 3.1 / 3.9 fps at 150 MHz | `cycle_model.md` Part 3 (model, not built). The two "3.9 fps" are different designs at different clocks |
-| 150 MHz | **Not met.** Unchanged design at 152.38 MHz: WNS -1.693 ns, 580 of 23,943 endpoints failing, worst path activation RAM -> split-RAM mux -> MAC DSP input. Rough bound about 121 MHz (extrapolation). Raw reports were not saved | `docs/paper/timing_150mhz.md` |
-| RTL mutation study | `software/analysis/mutation_study.py` exists (written 2026-10-16) and has **never been run**: no results, no findings | no output file exists |
+| 150 MHz | **Not met** (reproduced 2026-10-24 with all reports saved). Unchanged design at 152.38 MHz: WNS -1.693 ns, 580 of 23,943 endpoints failing, worst path activation RAM -> split-RAM mux -> MAC DSP input; 434 of the 580 are that path type, the AXI DMA IP fails by up to 0.885 ns. A one-register fix is PROPOSED (not built) in `docs/paper/fmax_plan.md`: 125 MHz looks reachable, 150 MHz not with one register | `docs/paper/timing_150mhz.md`, `results/utilization/timing_150mhz/`, `docs/paper/fmax_plan.md` |
+| RTL mutation study | run 2026-10-24: 20 mutants, 20 caught by `run_tests.sh quick`, 0 survivors, unmutated control 36/36; full suite not run (it contains quick); 18 of 20 image-effect twins verified; simulation only | `docs/paper/mutation_study.md`, `software/analysis/mutation_study.py` |
 
 Everything in the table above is on R0 (main). R2q and R3q have the same cycle count per tile in simulation (926,201) but nothing of them has run on the board.
 

@@ -4,6 +4,8 @@ Prepared 2026-10-19, updated for the per-design VERSION values. **Nothing below 
 `results/utilization/m6_system_R2q.md` (branch `r2q`) and `results/utilization/m6_system_R3q.md` (branch `r3q`).
 Board on the PROG/JTAG USB (J17), boot jumpers on JTAG. Run every `xsdb` command from the project root of the tree named in the heading.
 
+Companion files (2026-10-24): `docs/paper/board_session_runbook.md` (the order of the day and every command), `docs/paper/board_expected.md` (what the board must print for each design, generated from each tree's integer model), `software/board/board_run.sh` (run + UART log capture, PC-tested only).
+
 ## 0. The three designs and how to tell them apart
 
 | Name | Weights | Bitstream (outside the repo) | Tree to run from | 960x540 expected fnv1a32 | 128x128 baboon fnv1a32 |
