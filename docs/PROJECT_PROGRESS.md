@@ -119,10 +119,10 @@ Proposed merge criteria (the owner confirms): byte-exact T1/T2 and 119/119; 20-f
 
 Other open items:
 
-* Report PDF outdated (LaTeX source missing); the README should be updated after the board results.
+* Report PDF outdated (LaTeX source missing); an IEEE skeleton is in `docs/paper/draft/` (not compiled: no TeX installed); the README should be updated after the board results.
 * Choose paper venue and deadline.
-* Repeat the 150 MHz trial and keep its reports; a pipelining change is needed before any 125/150 MHz claim.
-* Commit pending files: 7 modified docs/scripts, plus `timing_150mhz.md`, `mutation_study.py` and the Demo Run Sheet PDF. The PDF names a person in its byline, so check it before committing.
+* 150 MHz: trial repeated and reports kept (2026-10-24); a pipelining change is needed before any 125/150 MHz claim, proposal in `docs/paper/fmax_plan.md` (owner decides whether to build it).
+* The Demo Run Sheet PDF is still untracked on purpose: it names a person in its byline (its facts are in `docs/paper/rehearsal_2026-10-13_notes.md`).
 * Add the MIT license (decided, not added).
 
 ---
