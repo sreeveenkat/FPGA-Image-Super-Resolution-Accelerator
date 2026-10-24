@@ -2,7 +2,7 @@
 
 Status 2026-10-19: **RTL changed, simulated, built; NOT yet run on the board.** Deployed bitstream 0602, `main` and the R2q sandbox are untouched
 (`~/Desktop/venkat/TESTED_0602.bit` is the fallback). **VERSION register 0x53523201** (R3q; deployed R0 = 0x53520602, R2q = 0x53522201); this tree's driver (`VERSION & 0xFFFFFF00 == 0x53523200`) refuses the other bitstreams. The golden tile and the output checksum still prove the weights
-(`docs/paper/board_checklist.md`).
+(`docs/paper/board_checklist.md`, on main).
 
 ## Network
 `software/ai/checkpoints/srnet_fp32.pt` in this branch = `plainA_qat_s1` of the ladder (anchor, QAT with per-layer weight scales, `act_max` inside). SHIFT 22/22/21/25.

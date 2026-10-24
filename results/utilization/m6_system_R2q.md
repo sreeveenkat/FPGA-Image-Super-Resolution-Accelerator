@@ -2,7 +2,9 @@
 
 Status 2026-10-19: **built and simulated, NOT yet run on the board.** The deployed bitstream (0602), `qparams.npz` and the `main` branch are untouched;
 `~/Desktop/venkat/TESTED_0602.bit` is the fallback. RTL change versus 0602: only the default `SHIFT1..4` of `sr_tile_core.v` (24/23/21/24 -> 22/22/21/22).
-The VERSION register is unchanged (0x53520602), so the bitstream cannot be told apart by register: use the R2q golden tile (T1) and the R2q expected output (T2), see `docs/paper/board_checklist.md`.
+The VERSION register is unchanged (0x53520602), so the bitstream cannot be told apart by register: use the R2q golden tile (T1) and the R2q expected output (T2), see `docs/paper/board_checklist.md` (on main; the file is not in this branch).
+
+**Superseded note (2026-10-24):** this copy is the report of the FIRST R2q build (commit 18c9976 of branch `r2q`). The current R2q build has its own VERSION **0x53522201** and different timing/power numbers; the current report is `results/utilization/m6_system_R2q.md` in branch `r2q` (`~/Desktop/venkat/sandbox_R2q`). The R3q report in this branch is `m6_system_R3q.md`.
 
 ## What R2q is
 `software/ai/checkpoints/srnet_fp32.pt` in this branch = `rep_qat_s1` of the ladder (2 seeds, seed chosen on the 42 clean validation images), merged to the same
