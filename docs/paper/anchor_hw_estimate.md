@@ -1,4 +1,9 @@
-# Anchor (nearest-neighbour residual) - hardware cost estimate
+# Anchor (nearest-neighbour residual) - hardware cost estimate (SUPERSEDED by the implementation, see below)
+
+> **2026-10-19 update:** the anchor was implemented and built (branch `r3q`, `results/utilization/m6_system_R3q.md` in that branch). The result is cheaper than the estimate below:
+> **no signed 9-bit residual is needed** (the anchor pixel rides in the requantizer's rounding constant, one clamp does the rest), no new pipeline stage, no extra cycle;
+> measured **+33 to +45 LUT (two builds each) / +66 FF / 0 DSP / 0 BRAM** for the whole accelerator (estimate: 80-120 LUT / 60-70 FF / +1-2 cycles per tile).
+> Simulation and synthesis only: not run on the board. The text below is the pre-implementation estimate, kept for the record.
 
 **Status: ESTIMATE, nothing synthesized.** The software side is measured (`results/quality/image_quality_ladder.md`, `software/ai/quantization/test_anchor.py`).
 No RTL has been changed. Numbers marked "est." come from reading `conv_engine.v`, `sr_tile_core.v` and `requant.v`, not from Vivado.
