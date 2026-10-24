@@ -1,0 +1,199 @@
+% DRAFT skeleton, started 2026-10-24.  IEEE conference format (IEEEtran).  NOT compiled: no TeX distribution is installed on the development PC (see README.md).
+% Rules for this file: every number comes from a stored result file named in a comment next to it; anything not measured on the board is marked "pending board run".
+% Baseline everywhere = the DEPLOYED checkpoint (INT8 PSNR-Y 35.02 / 31.40 / 30.53 dB), not the 2-seed R0 mean of the ladder study.
+% Venue and deadline are not chosen; page limit and review type (single / double blind) are not known.  A public repository link must be anonymised for double-blind review.
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{url}
+
+\begin{document}
+
+\title{An INT8 Super-Resolution Accelerator on a Low-Cost Zynq-7020:\\Bit-Exact Verification and a Measured Utilization Gap}
+
+\author{\IEEEauthorblockN{TODO: authors}
+\IEEEauthorblockA{TODO: affiliation}}
+
+\maketitle
+
+\begin{abstract}
+% Only measured statements; edit after the board session.
+We describe a $\times 2$ image super-resolution accelerator for a ZedBoard (XC7Z020): a 2{,}620-parameter INT8 CNN upscales $960\times540$ to $1920\times1080$
+in 1.312\,s per frame (0.762\,fps, 20-frame mean, board-measured) with 68 DSP48 blocks at 100\,MHz.
+The output is byte-identical to a NumPy integer model on all 119 images of Set5, Set14 and BSD100 on the board.
+On these sets the INT8 network gains about 1.4, 1.1 and 1.0\,dB PSNR-Y over bicubic interpolation (Table~\ref{tab:quality}).
+TODO: contributions after the board session (utilization gap and its closure, mutation-tested RTL, energy against the on-chip ARM core).
+\end{abstract}
+
+\begin{IEEEkeywords}
+super-resolution, FPGA, Zynq, INT8 quantization, bit-exact verification
+\end{IEEEkeywords}
+
+\section{Introduction}
+% TODO: motivation (low-cost edge FPGA, why a tiny network), problem statement, contributions (to be fixed AFTER the related-work reading; see docs/paper/related_work_and_venues.md:
+% the layer pipeline and bit-exact golden-model verification are NOT new ideas).
+TODO.
+
+\section{Related Work}
+% TODO: read each paper in full before citing (docs/paper/related_work_and_venues.md section 1 lists the candidates: FPGA SR systems for UHD video, real-time SR on edge FPGAs,
+% energy-efficient deconvolution accelerators, CGRA4ML for bit parity, mutation testing of HDL).  Only FSRCNN has been read so far.
+Compact networks such as FSRCNN~\cite{dong2016fsrcnn} reach good quality with few parameters; our network follows the same idea at a smaller scale.
+TODO: FPGA super-resolution accelerators; layer-pipelined designs; verification against golden models.
+
+\section{Model}\label{sec:model}
+The network (\texttt{software/ai/models/srnet.py}) maps an RGB image to a $2\times$ larger one with four convolutions and a pixel shuffle:
+$3\times3$ convolution $3\!\to\!16$ with ReLU, $3\times3$ depthwise convolution (16 channels) with ReLU, $1\times1$ convolution $16\!\to\!16$ with ReLU,
+$3\times3$ convolution $16\!\to\!12$, and a pixel shuffle with factor 2 (channel $k=4c+2\,dy+dx$).
+All convolutions are valid (no padding): the input carries a 3-pixel border (replicated for whole images, real neighbours for tiles).
+It has 2{,}620 parameters and 2{,}560 multiply-accumulates (MACs) per input pixel (asserted in \texttt{software/ai/evaluation/test\_model.py}).
+
+\begin{table}[t]
+\caption{Layers of the network. Parameters include biases.}\label{tab:layers}
+\centering
+\begin{tabular}{llrr}
+\toprule
+Layer & Shape & Parameters & MACs / input pixel \\
+\midrule
+L1 conv $3{\times}3$ + ReLU & $3\to16$ & 448 & 432 \\
+L2 depthwise $3{\times}3$ + ReLU & 16 & 160 & 144 \\
+L3 conv $1{\times}1$ + ReLU & $16\to16$ & 272 & 256 \\
+L4 conv $3{\times}3$ & $16\to12$ & 1{,}740 & 1{,}728 \\
+\midrule
+Total & & 2{,}620 & 2{,}560 \\
+\bottomrule
+\end{tabular}
+% per-layer values computed from the layer shapes: L1 3*3*3*16 (+16), L2 16*9 (+16), L3 16*16 (+16), L4 16*9*12 (+12); totals equal the asserted 2,620 / 2,560.
+\end{table}
+
+Training uses 180 DIV2K images with an L1 loss (the checkpoint \texttt{srnet\_fp32.pt}; \texttt{results/quality/m2\_training\_summary.md}).
+The low-resolution inputs are made by Pillow bicubic downscaling after cropping the high-resolution image to even sides; PSNR and SSIM are computed on the luma channel (BT.601)
+with a 2-pixel border shaved, SSIM with a Gaussian $11\times11$ window, $\sigma=1.5$ (\texttt{software/ai/evaluation/metrics.py}).
+TODO: training details to be checked against \texttt{train.py} before submission.
+
+\section{Quantization}\label{sec:quant}
+Activations are unsigned 8-bit with one scale per layer, weights are signed 8-bit with a per-layer scale (values in $[-127,127]$), biases and accumulators are 32-bit.
+A layer output is $y=\mathrm{clamp}\big((acc\cdot M+2^{S-1})\gg S,\,0,\,255\big)$ with a 16-bit multiplier $M$ per output channel and a shift $S$ per layer
+($S=24,23,21,24$ for L1--L4); the product $acc\cdot M$ needs about 40 bits.
+The activation range of each layer is a percentile of all post-ReLU values over 100 training crops.
+The percentile was chosen on 12 validation images (Table~\ref{tab:ptq}); post-training quantization (PTQ) is sufficient, quantization-aware training was not needed for the deployed network.
+
+\begin{table}[t]
+\caption{PTQ percentile sweep, per-layer weight scales, 12 validation images (FP32 reference 34.954\,dB PSNR-Y).}\label{tab:ptq}
+\centering
+\begin{tabular}{rrr}
+\toprule
+Percentile & PSNR-Y INT8 (dB) & Drop vs FP32 (dB) \\
+\midrule
+99.0 & 29.648 & 5.307 \\
+99.9 & 34.529 & 0.425 \\
+\textbf{99.99} & \textbf{34.731} & \textbf{0.223} \\
+100.0 & 34.675 & 0.280 \\
+\bottomrule
+\end{tabular}
+% source: results/quality/m3_ptq_sweep.md (per-channel weights were slightly worse in the same file and were not used)
+\end{table}
+
+On the test sets the INT8 model loses on average 0.182, 0.111 and 0.076\,dB PSNR-Y against the FP32 network on Set5, Set14 and BSD100
+(worst single image 0.314, 0.285 and 0.413\,dB; \texttt{results/quality/model\_int8\_x2.md}).
+The INT8 model is implemented as a NumPy integer model (\texttt{integer\_reference.py}); it is the golden reference of the hardware (Section~\ref{sec:arch}).
+
+\section{Architecture}\label{sec:arch}
+% TODO: figure (PS, DMA, AXI-Lite registers, tile core with four engines), text.  Facts to use (all stored):
+%  - 64x64 core tile + 3 px halo = 70x70 input (14,700 B in, 49,152 B out per tile), 960x540 padded to 960x576 = 135 tiles          [HANDOFF section 3]
+%  - one convolution engine per layer, run one after another; 926,201 cycles per tile in simulation (engines 854,149), 70 BRAM tiles and 68 DSP for the core [local project log 6e/6f, results/utilization/m5_tile_core.md]
+%  - 32-bit AXI-Stream wrapper with TLAST and error flags, AXI4-Lite registers, ARM driver with timeouts and error recovery        [docs/REGISTER_MAP.md]
+TODO.
+
+\section{Results}\label{sec:results}
+All board numbers were measured on a ZedBoard with the deployed bitstream (VERSION 0x53520602, 100\,MHz), the test image is a DIV2K image of $960\times540$.
+Power is a Vivado estimate, not a measurement.
+
+\begin{table}[t]
+\caption{Image quality, $\times2$, PSNR-Y (dB) / SSIM-Y. FPGA = outputs read back from the board, byte-identical to the INT8 integer model.}\label{tab:quality}
+\centering
+\begin{tabular}{lccc}
+\toprule
+Method & Set5 & Set14 & BSD100 \\
+\midrule
+Bicubic & 33.67 / 0.9303 & 30.32 / 0.8698 & 29.56 / 0.8434 \\
+FP32 network & 35.21 / 0.9449 & 31.51 / 0.8975 & 30.60 / 0.8785 \\
+INT8 integer model & 35.02 / 0.9420 & 31.40 / 0.8948 & 30.53 / 0.8756 \\
+FPGA (board) & 35.02 / 0.9420 & 31.40 / 0.8948 & 30.53 / 0.8756 \\
+\bottomrule
+\end{tabular}
+% source: results/quality/table_a_x2.md (119 of 119 images byte-exact on the board; INT8 beats bicubic on 119 of 119 images)
+\end{table}
+
+Table~\ref{tab:quality} shows the quality; the network is better than bicubic interpolation on every one of the 119 images, and the board output equals the integer model on every image.
+Fine random texture (gravel, fur, fabric) is not recovered by a network of this size.
+
+\begin{table}[t]
+\caption{Candidate weight sets against the deployed design (R0). Quality: INT8 integer model, PSNR-Y (dB), the single built seed of each candidate. Resources and timing: Vivado post-implementation of the whole system at 100\,MHz, not board measurements.}\label{tab:candidates}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Design & Set5 / Set14 / BSD100 & LUT & WNS (ns) & Board \\
+\midrule
+R0 deployed & 35.02 / 31.40 / 30.53 & 5{,}296 & +0.503 & 0.762\,fps \\
+R2q (rep.\ + QAT) & 35.84 / 31.89 / 30.87 & 5{,}287 & +0.944 & pending board run \\
+R3q (anchor + QAT) & 36.20 / 32.12 / 31.01 & 5{,}323 & +0.683 & pending board run \\
+\bottomrule
+\end{tabular}
+% sources: R0 results/quality/table_a_x2.md, results/utilization/m6_system_0602.md, results/speed/m7_timing_20frames.md;
+%          R2q / R3q: results/utilization/m6_system_R2q.md (branch r2q), m6_system_R3q.md (branch r3q) -- INT8 lines and the build tables.
+% R2q needs only different constants (SHIFT 22/22/21/22); R3q adds a nearest-neighbour anchor (+33..45 LUT, +66 FF, no extra cycle: m6_system_R3q.md).
+\end{table}
+
+\begin{table}[t]
+\caption{Speed, resources and power of the deployed design (R0), $960\times540\to1920\times1080$.}\label{tab:system}
+\centering
+\begin{tabular}{ll}
+\toprule
+Item & Value \\
+\midrule
+Time per frame (20-frame mean) & 1{,}311.9\,ms (min 1{,}311.4, max 1{,}313.2) \\
+Frames per second & 0.762 \\
+Cycles per 64$\times$64 tile (board counter) & 926{,}217--926{,}241 (simulation 926{,}202) \\
+LUT / FF / BRAM tiles / DSP & 5{,}296 / 7{,}831 / 72 / 68 \\
+Timing at 100\,MHz (WNS / WHS) & +0.503 / +0.016\,ns \\
+Power, Vivado estimate (chip / accelerator) & 1.913 / 0.176\,W, confidence low \\
+ARM-only baseline (same chip, no accelerator) & pending board run \\
+\bottomrule
+\end{tabular}
+% sources: results/speed/m7_timing_20frames.md; results/utilization/m6_system_0602.md; results/utilization/m7_power.md.
+% 95.3 % of the frame is the core itself (1,250.4 ms of 1,311.9 ms, m7_timing_20frames.md).
+\end{table}
+
+\begin{table}[t]
+\caption{The same network on a desktop PC (not a fair energy comparison; PC times are medians over repeated runs).}\label{tab:pc}
+\centering
+\begin{tabular}{lrr}
+\toprule
+Implementation & ms / frame & fps \\
+\midrule
+FP32 PyTorch, CPU, 1 thread & 128.8 & 7.76 \\
+FP32 PyTorch, GPU incl.\ host copies & 7.9 & 126.81 \\
+INT8 NumPy integer model, CPU (unoptimised) & 1{,}526.2 & 0.66 \\
+ZedBoard FPGA (board-measured) & 1{,}311.9 & 0.76 \\
+\bottomrule
+\end{tabular}
+% source: docs/paper/cpu_baseline.md (i5-13450HX, RTX 3050 6 GB laptop GPU, PyTorch 2.12.0+cu130; 2026-10-16).  CPU energy not measured; GPU 0.548 J per frame is GPU power only.
+\end{table}
+
+\section{Discussion}
+% TODO after the board session and the fmax decision.  Facts to discuss (all stored):
+%  - utilization gap: only one of the four engines works at a time, 17.2 % of the 68 DSPs busy (cycle MODEL, docs/paper/cycle_model.md Part 1); layer 4 is 64 % of the cycles.
+%  - predictions (not built): line-buffer layer pipeline about 3.9 fps at 68 DSP, 100 MHz (Part 2); shared engine 2.2 / 2.8 fps (Part 3).  Label as predictions.
+%  - 150 MHz does not close timing without a pipeline register (docs/paper/timing_150mhz.md; reproduction status there).
+%  - limits: 0.76 fps is not real time; load, compute and output are not overlapped; power is an estimate; images go in over JTAG; two single first-tile failures of 2026-10-11 remain unexplained.
+TODO.
+
+\section*{Acknowledgment}
+TODO.
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}
