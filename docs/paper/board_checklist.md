@@ -66,10 +66,14 @@ the tooling are fine; then report the failing tile and the `t1_r2q.txt` stats.
 **differences** between states are the useful numbers. The synthesis power estimates are 1.913 W (0602) and 1.910 W (R2q, current VERSION 0x53522201 build; `m6_system_R2q.md:45` in branch `r2q`; the 1.912 W on its line 6 is the superseded first build), both "low confidence"; the measurement
 replaces them.
 
-**How (choose one, write down which):**
-* an inline DC power meter between the 12 V adapter and the barrel jack (simplest; note the model and its stated accuracy), or
-* a multimeter on the ZedBoard's current-sense point of the 12 V rail (I = V_sense / R_sense). **Check the header and the resistor value in the ZedBoard Hardware User
-  Guide first** (not verified here).
+**How (owner decision 2026-10-25): the 12 V input current-sense resistor, read with a multimeter.**
+* Measure the millivolts across the sense resistor (header J21 on the ZedBoard, per the owner; the board's own markings and schematic decide), then I = V / R and P = I x V_in.
+* **Also measure the actual input voltage** (multimeter on the 12 V rail / adapter output) in every state: do not assume 12.00 V.
+* **R and the header are NOT verified here.** The Hardware User Guide was not readable from this machine (the PDF URLs tried returned errors on 2026-10-25), so there is no page number to cite. Secondary sources only, not authoritative: element14 community posts say the guide describes a 10 mOhm, 1 W resistor in series with the 12 V input and J21 across it (https://community.element14.com/products/devtools/avnetboardscommunity/avnetboard-forums/f/zedboard-hardware-design/34032/zedboard-power-consumption); a worked example elsewhere uses 0.01 Ohm (https://www.openwall.com/lists/john-dev/2014/07/20/3). **Before the first reading: open the ZedBoard Hardware User's Guide, find the section on the 12 V input / J21, and write the resistor value, its tolerance, the guide version and the page number into `$D/power_readings.txt`** (and replace this paragraph with the citation). If the guide and the board disagree, the board wins and the difference is reported.
+* Expected size (from the secondary value only, a plan not a measurement): at 10 mOhm and about 0.5 A the drop is about 5 mV, so the meter needs mV resolution (0.01 mV is better). Record the meter model, range, stated accuracy and resolution.
+* Probe on the J21 pins only with the meter in voltage mode; an extra load across the header skews the reading (the header contact resistance is far above the sense resistor, as the second source notes), so do not use it to power anything.
+
+**Board-level power, not comparable to Vivado's on-chip estimate.** This is the whole ZedBoard's 12 V input (Zynq, DDR, regulators, USB-UART, LEDs, conversion losses). The Vivado numbers (1.913 W, 1.910 W) are the on-chip estimate of the Zynq only. Never put the two in one row without saying so, and never compare a board-level absolute with the estimate; compare the **delta** only.
 
 **States** (steady room temperature, wait 30 s in each state, read the meter at least 5 times or log it, note the time):
 
@@ -84,6 +88,8 @@ replaces them.
 
 Order: P0, P1a, P2a, P1b, P2b, P3, then **repeat P1a, P2a, P1b, P2b** once more in the opposite order (drift check). The 0602 and R2q fabrics are logically identical
 apart from constants, so P2a and P2b should agree within the meter's accuracy: if they differ by more than that, say so rather than averaging.
+
+**Reported deltas (owner decision):** accelerator delta = P(accelerator running T3) - P(PL configured, idle) (P2 - P1); also report P1 - P0 (cost of a configured but idle PL). All three states are measured with the same meter, range and input voltage reading.
 
 | Quantity | Formula | Value |
 |---|---|---|
