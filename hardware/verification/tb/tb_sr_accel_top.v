@@ -304,7 +304,7 @@ module tb_sr_accel_top;
         repeat (4) @(negedge aclk); aresetn = 1; repeat (2) @(negedge aclk);
         check_x = 1;
         // ---- registers
-        expect_reg(6'h14, 32'h5352_0602, "VERSION");
+        expect_reg(6'h14, 32'h5352_4201, "VERSION");
         expect_reg(6'h08, HC, "TILE_SIZE");
         expect_reg(6'h04, 32'd0, "STATUS");
         expect_reg(6'h10, 32'd0, "ERROR_CODE");
@@ -314,7 +314,7 @@ module tb_sr_accel_top;
         expect_reg(6'h34, 32'd0, "unmapped 0x34");
         expect_reg(6'h24, 32'd0, "DBG_PRE_BEATS (reset)");
         expect_reg(6'h28, 32'd0, "DBG_STARTS (reset)");
-        axil_write(6'h14, 32'hFFFF_FFFF, 4'hF, 0); expect_reg(6'h14, 32'h5352_0602, "VERSION (write)");
+        axil_write(6'h14, 32'hFFFF_FFFF, 4'hF, 0); expect_reg(6'h14, 32'h5352_4201, "VERSION (write)");
         axil_write(6'h08, 32'd3, 4'hF, 1);         expect_reg(6'h08, HC, "TILE_SIZE (write)");
         axil_write(6'h0C, 32'd5, 4'hF, 2);         axil_write(6'h04, 32'hFFFF_FFFF, 4'hF, 0);
         expect_reg(6'h04, 32'd0, "STATUS (write)");

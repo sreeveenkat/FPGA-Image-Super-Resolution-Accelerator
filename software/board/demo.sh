@@ -12,7 +12,7 @@ ROOT=$(pwd)
 V=/home/sreevenkat/Desktop/venkat/vitis
 BIT_0602=$V/m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit
 BIT_0601=$V/m6_sr/m6_sr.runs/impl_1/design_1_wrapper.bit
-BIT=$BIT_0602; EXPV=0x53520602; VIEW=1
+BIT=/home/sreevenkat/Desktop/venkat/R0_125_artifacts/design_1_wrapper_R0_125.bit; EXPV=0x53524201; VIEW=1   # r0_125 sandbox: this tree's own bitstream (not built into the repo; see results/utilization/m6_system_R0_125.md)
 for a in "$@"; do
     case "$a" in
         --0601) BIT=$BIT_0601; EXPV=0x53520601 ;;

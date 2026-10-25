@@ -112,14 +112,24 @@ module conv_engine #(
     reg [7:0]  ci1;
     wire [8*C_OUT-1:0] wvec;
 
+    // fmax change (docs/paper/fmax_plan.md): the activation is registered once more (a_r, see the MAC lanes) so that the
+    // RAM -> channel-select path ends in a register instead of the DSP A pin.  Weights and control follow one cycle later:
+    // the ROM address, v/first/last each get one more register stage (stage 2 = the cycle in which the MAC sees its inputs).
+    reg [WAW-1:0] waddr_r;
+    reg        v2, first2, last2;
+    always @(posedge clk) waddr_r <= issue ? step[WAW-1:0] : {WAW{1'b0}};
+
     weight_rom #(.C_IN(C_IN), .C_OUT(C_OUT), .K(K), .DEPTHWISE(DEPTHWISE), .FILE(W_FILE)) u_wrom (
-        .clk(clk), .addr(issue ? step[WAW-1:0] : {WAW{1'b0}}), .q(wvec));
+        .clk(clk), .addr(waddr_r), .q(wvec));
 
     always @(posedge clk) begin
         v1     <= issue && !rst;
         first1 <= (step == 0);
         last1  <= (step == STEPS - 1);
         ci1    <= ci;
+        v2     <= v1 && !rst;
+        first2 <= first1;
+        last2  <= last1;
     end
 
     reg signed [31:0] bias_mem [0:C_OUT-1];
@@ -140,16 +150,18 @@ module conv_engine #(
             end else begin : bc_sel
                 assign a_co = in_data[8*ci1 +: 8];
             end
+            reg [7:0] a_r;                       // registered activation (fmax change)
+            always @(posedge clk) a_r <= a_co;
             mac_unit u_mac (
-                .clk(clk), .v(v1), .first(first1), .bias(bias_mem[co]),
-                .a(a_co), .w(wvec[8*co +: 8]), .acc(acc_flat[32*co +: 32]));
+                .clk(clk), .v(v2), .first(first2), .bias(bias_mem[co]),
+                .a(a_r), .w(wvec[8*co +: 8]), .acc(acc_flat[32*co +: 32]));
         end
     endgenerate
 
     // final accumulators are visible 2 cycles after the last step's stage-1 cycle
     reg last_d1, last_d2;
     always @(posedge clk) begin
-        last_d1 <= v1 && last1 && !rst;
+        last_d1 <= v2 && last2 && !rst;
         last_d2 <= last_d1 && !rst;
     end
 
