@@ -102,6 +102,17 @@ On the test sets the INT8 model loses on average 0.182, 0.111 and 0.076\,dB PSNR
 (worst single image 0.314, 0.285 and 0.413\,dB; \texttt{results/quality/model\_int8\_x2.md}).
 The INT8 model is implemented as a NumPy integer model (\texttt{integer\_reference.py}); it is the golden reference of the hardware (Section~\ref{sec:arch}).
 
+\subsection{Hardware mapping of the requantizer}
+In hardware the requantization of one output value is a single DSP48E1 operation: the 32-bit accumulator times the 16-bit multiplier gives a signed product that needs about 40 bits (the DSP has 48), the rounding constant $2^{S-1}$ is added, the result is shifted right by $S$ and clamped to $[0,255]$.
+The requantizer is checked on its own with vectors for shifts 1, 2, 3, 8, 21, 23 and 24 and with randomized layers in which every output channel has a different multiplier (\texttt{hardware/verification}, \texttt{gen\_unit\_vectors.py}). A deliberately wrong shared multiplier is detected only by the randomized layers (Section~\ref{sec:discussion}), because the deployed weights give all channels of a layer the same $M$.
+For new weight sets an overflow analysis is part of the export: for the quantization-aware candidate R2q the largest possible $|acc\cdot M|$ plus rounding needs at most 35 bits (limit 48), and the accumulators keep 13--15 bits of headroom below 32 bits even under the worst-case bound (\texttt{results/quality/acc\_range\_R2q\_rep\_qat\_s1.txt}).
+
+\subsection{Quantization-aware candidates (integer model; not yet on the board)}
+Post-training quantization is enough for the deployed network, but not for every network. A re-parameterized network (training-time blocks merged into plain convolutions) collapses under PTQ, and quantization-aware training (QAT) recovers $+3.40$, $+1.99$ and $+1.54$\,dB PSNR-Y on Set5, Set14 and BSD100 (R2q $-$ R2, mean of two seeds; \texttt{results/quality/image\_quality\_ladder.md}).
+Against the mean of two trainings of the deployed recipe (R0), the QAT network R2q gains $+0.87$, $+0.50$ and $+0.36$\,dB, and R3q, which adds a nearest-neighbour anchor (the upscaled input is added to the last layer's output), $+1.12$, $+0.70$ and $+0.49$\,dB; R3q is $+0.26$, $+0.20$ and $+0.13$\,dB better than R2q (two seeds each, integer model, selection on validation images only).
+R2q needs no RTL change except different constants (shifts 22, 22, 21, 22); the anchor needs a small RTL change (the anchor pixel is added through the requantizer's rounding constant, no extra cycle; \texttt{results/utilization/m6\_system\_R3q.md} in the sandbox branch \texttt{r3q}).
+Both are simulated and netlist-simulated bit-exactly but \emph{pending board run}; every board statement in this paper refers to the deployed design R0.
+
 \section{Architecture}\label{sec:arch}
 % Sources for every number in this section are named in the comments; board numbers are from results/speed/*.md, simulation numbers from results/utilization/m4_*.md, m5_*.md, m6_*.md.
 The accelerator runs on a ZedBoard (Zynq XC7Z020-CLG484, 220 DSP48E1, 140 RAMB36). The processing system (PS, dual ARM Cortex-A9) runs a bare-metal driver; the programmable logic (PL) holds an AXI DMA, an AXI4-Lite register block and the tile core.
