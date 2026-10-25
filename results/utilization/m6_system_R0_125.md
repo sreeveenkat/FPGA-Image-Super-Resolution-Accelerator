@@ -1,6 +1,6 @@
 # r0_125: deployed network (R0 weights), one more register per engine run, fabric clock 125 MHz (built 2026-10-25, branch `r0_125`, NOT on the board)
 
-Sandbox `~/Desktop/venkat/sandbox_R0_125` (git worktree of branch `r0_125`, off main `b8e605f`). Change = exactly what `docs/paper/fmax_plan.md` proposes, plus the clock and a VERSION:
+Sandbox `~/Desktop/venkat/sandbox_R0_125` (git worktree of branch `r0_125`, off main `ad20b81`). Change = exactly what `docs/paper/fmax_plan.md` proposes, plus the clock and a VERSION:
 * `hardware/rtl/conv_engine/conv_engine.v`: the channel-selected activation is registered (`a_r`, one per MAC lane); the weight-ROM address, `v`, `first` and `last` are delayed by one cycle so data, weights and control stay aligned (`waddr_r`, `v2`, `first2`, `last2`). `mac_unit.v`, the requantizer and the weights are unchanged; no `.mem` file changed.
 * `hardware/vivado/bd/design_1_m6.tcl`: `PCW_FPGA0_PERIPHERAL_FREQMHZ` 100 -> 125 (+ `PCW_ACT_FPGA0_PERIPHERAL_FREQMHZ`, `PCW_CLK0_FREQ`); `sr_accel_top.v`: `FREQ_HZ 125000000` in the X_INTERFACE_PARAMETER.
 * VERSION 0x53524201 (`sr_accel_top.v`, `tb_sr_accel_top.v`, `sr_regs.h`, `docs/REGISTER_MAP.md`, the board scripts' default bitstream), so the driver of this tree refuses the other bitstreams (and theirs refuse this one). R0 stays 0x53520602.
