@@ -1,0 +1,30 @@
+# r0_125 vs deployed 0602: same real-size simulation, run 2026-10-25 from both trees (HC=64, tb_sr_tile.v / tb_sr_accel_top.v, identical commands)
+## main (deployed 0602 RTL)
+PASS sr_tile_core HC=64 tile real0: 49152 output bytes bit-exact, layer buffers exact, 926201 cycles
+PASS sr_tile_core HC=64 tile noise: 49152 output bytes bit-exact, layer buffers exact, 926201 cycles
+INFO HC=64 tile real0: CYCLES register = 926202 (core counter 926202)
+PASS sr_accel_top HC=64 tile real0: 12288 output beats bit-exact via AXI-Lite + AXI-Stream, CYCLES=926202, 2nd tile back to back
+## r0_125
+PASS sr_tile_core HC=64 tile real0: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile noise: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+INFO HC=64 tile real0: CYCLES register = 926206 (core counter 926206)
+PASS sr_accel_top HC=64 tile real0: 12288 output beats bit-exact via AXI-Lite + AXI-Stream, CYCLES=926206, 2nd tile back to back
+## r0_125, run_tests.sh full: layer engines on real0
+PASS layer 1 tile real0: 4624 pixels (68x68) x 16 ch bit-exact, 124873 cycles (27 per pixel, PERIOD 27)
+PASS layer 2 tile real0: 4356 pixels (66x66) x 16 ch bit-exact, 69714 cycles (16 per pixel, PERIOD 16)
+PASS layer 3 tile real0: 4356 pixels (66x66) x 16 ch bit-exact, 69721 cycles (16 per pixel, PERIOD 16)
+PASS layer 4 tile real0: 4096 pixels (64x64) x 12 ch bit-exact, 589845 cycles (144 per pixel, PERIOD 144)
+## r0_125, run_tests.sh full: whole core at the real size, all golden tiles
+PASS sr_tile_core HC=64 tile full255: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile noise: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile pixel: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile ramp: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile real0: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile real1: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile real2: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile real_corner: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile zeros: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile real0: 49152 output bytes bit-exact, layer buffers exact, 947270 cycles, random stalls
+PASS sr_tile_core HC=64 tile noise: 49152 output bytes bit-exact, layer buffers exact, 947270 cycles, random stalls
+## summary
+== summary: 88 test runs passed, 0 failed (full)
