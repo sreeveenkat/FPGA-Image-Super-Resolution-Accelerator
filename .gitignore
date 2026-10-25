@@ -47,3 +47,6 @@ software/arm_driver/
 software/board/sr_app/sr_weights.h
 data/train_extra/
 software/ai/checkpoints/q/
+
+# Demo run sheet PDF (byline names a person; owner decision 2026-10-25)
+docs/*Demo Run Sheet*.pdf
