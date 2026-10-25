@@ -8,6 +8,7 @@
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{url}
+\usepackage{tikz}
 
 \begin{document}
 
@@ -102,11 +103,65 @@ On the test sets the INT8 model loses on average 0.182, 0.111 and 0.076\,dB PSNR
 The INT8 model is implemented as a NumPy integer model (\texttt{integer\_reference.py}); it is the golden reference of the hardware (Section~\ref{sec:arch}).
 
 \section{Architecture}\label{sec:arch}
-% TODO: figure (PS, DMA, AXI-Lite registers, tile core with four engines), text.  Facts to use (all stored):
-%  - 64x64 core tile + 3 px halo = 70x70 input (14,700 B in, 49,152 B out per tile), 960x540 padded to 960x576 = 135 tiles          [HANDOFF section 3]
-%  - one convolution engine per layer, run one after another; 926,201 cycles per tile in simulation (engines 854,149), 70 BRAM tiles and 68 DSP for the core [local project log 6e/6f, results/utilization/m5_tile_core.md]
-%  - 32-bit AXI-Stream wrapper with TLAST and error flags, AXI4-Lite registers, ARM driver with timeouts and error recovery        [docs/REGISTER_MAP.md]
-TODO.
+% Sources for every number in this section are named in the comments; board numbers are from results/speed/*.md, simulation numbers from results/utilization/m4_*.md, m5_*.md, m6_*.md.
+The accelerator runs on a ZedBoard (Zynq XC7Z020-CLG484, 220 DSP48E1, 140 RAMB36). The processing system (PS, dual ARM Cortex-A9) runs a bare-metal driver; the programmable logic (PL) holds an AXI DMA, an AXI4-Lite register block and the tile core.
+Everything in the PL uses one clock, \texttt{FCLK\_CLK0}, at 100\,MHz, so there is no clock-domain crossing.
+
+\subsection{Tiling and dataflow}
+The frame is processed in tiles of $64\times64$ input pixels (producing $128\times128$ output pixels). Because all convolutions are valid, each tile needs a 3-pixel halo: $70\times70\times3 = 14{,}700$ bytes go in and
+$128\times128\times3 = 49{,}152$ bytes come out per tile. The ARM pads the $960\times540$ frame by replication, which gives $15\times9 = 135$ tiles per frame; the halo makes the engines compute about 10\,\% more MACs than the untiled frame (1.460 vs.\ 1.327\,G; cycle model, \texttt{docs/paper/cycle\_model.md}).
+A tile is processed in four steps that do not overlap: (i) the ARM copies the 70$\times$70 patch to a DDR buffer and the DMA streams it into the core, (ii) the four convolution layers run one after the other, (iii) the pixel-shuffled result streams back through the DMA to a second buffer, and (iv) the ARM places it in the output frame.
+The ARM work (padding 5.9\,ms and tile copies 26.4\,ms per frame) is measured on the board (Table~\ref{tab:system} and \texttt{results/speed/m7\_timing\_20frames.md}).
+
+\begin{figure}[t]
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[font=\footnotesize, box/.style={draw, rectangle, minimum height=7mm, align=center, inner sep=2pt}, >=stealth]
+\node[box] (arm) at (0,0) {ARM A9\\(driver)};
+\node[box] (ddr) at (0,-1.7) {DDR3\\tile buffers};
+\node[box] (dma) at (3.0,-1.7) {AXI DMA\\MM2S / S2MM};
+\node[box] (wrap) at (6.2,-1.7) {AXI-Stream\\wrapper};
+\node[box] (core) at (9.6,-1.7) {tile core\\(4 engines)};
+\node[box] (regs) at (6.2,0) {AXI4-Lite\\registers};
+\draw[->] (arm) -- node[left]{copy} (ddr);
+\draw[<->] (ddr) -- node[above]{HP0} (dma);
+\draw[->] ([yshift=2mm]dma.east) -- node[above]{32\,bit} ([yshift=2mm]wrap.west);
+\draw[<-] ([yshift=-2mm]dma.east) -- ([yshift=-2mm]wrap.west);
+\draw[->] ([yshift=2mm]wrap.east) -- node[above]{8\,bit} ([yshift=2mm]core.west);
+\draw[<-] ([yshift=-2mm]wrap.east) -- ([yshift=-2mm]core.west);
+\draw[->] (arm) -- node[above]{GP0, AXI-Lite} (regs);
+\draw[->] (regs) -- node[right]{start, soft reset} (wrap);
+\draw[->] (arm.south east) -- ++(1.0,0) |- node[pos=0.25,right]{DMA control} (dma.north);
+\end{tikzpicture}}
+\caption{System overview. The control path (registers, DMA set-up) is driven by the ARM; the data path is DDR $\leftrightarrow$ DMA $\leftrightarrow$ wrapper $\leftrightarrow$ core.}\label{fig:system}
+\end{figure}
+
+\subsection{Tile core and convolution engines}
+The tile core (\texttt{sr\_tile\_core.v}) contains an input loader, five tile RAMs, four convolution engines, a pixel shuffle and an output packer.
+Each activation RAM stores one pixel per word with the channels side by side (word widths 24, 128, 128, 128 and 96 bits for the input and the outputs of L1--L4); the engines read and write them directly.
+There is one engine per layer and one RAM per layer boundary (no ping-pong); a small sequencer starts the engines one after the other.
+An engine produces one output pixel every \textit{PERIOD} = max(\textit{steps}, $C_\mathrm{out}$) cycles, where \textit{steps} is the number of kernel taps times input channels: 27, 16, 16 and 144 cycles per pixel for L1--L4 (measured in simulation).
+It has one MAC lane per output channel, built as a DSP48E1 (uint8 activation $\times$ int8 weight, product register, 32-bit accumulator), a weight ROM that delivers all lanes' weights for the current step, and one requantizer shared by all channels that runs in the shadow of the next pixel's MACs.
+The lanes plus two requantizer DSPs give 18, 18, 18 and 14 DSP48 blocks, 68 in total (31\,\% of the device).
+The schedule is data independent: a 64$\times$64 tile takes 124{,}872, 69{,}713, 69{,}720 and 589{,}844 cycles in the four engines (854{,}149 together) and 926{,}201 cycles for the whole tile in simulation, identical on all nine real-size golden tiles; the board counter reads 926{,}217--926{,}241 (mean 926{,}220) per tile.
+The difference of 72{,}052 cycles between the tile and the engines is byte-wide stream I/O (14{,}700 cycles to load, 49{,}152 bytes out, and fetch cycles; derived by subtraction).
+% sources: results/utilization/m4_*.md, m5_tile_core.md, docs/paper/cycle_model.md Part 1 (simulated column), results/speed/m7_timing_20frames.md (board CYCLES).
+The layer RAMs dominate the memory: a plain $4624\times128$-bit RAM maps to 32 RAMB36 because Vivado rounds the depth to a power of two, so the RAMs are split into a power-of-two part plus a remainder (18.5 RAMB36 for each 128-bit RAM). The whole core uses 70 of 140 block-RAM tiles and 68 of 220 DSPs
+(\texttt{results/utilization/m5\_tile\_core.md}); in the complete system (PS7, DMA, interconnect, our logic) the 100\,MHz build uses 5{,}296 LUT, 7{,}831 FF, 72 BRAM tiles and 68 DSP with WNS +0.503\,ns (Table~\ref{tab:system}).
+One register stage between the engine's result mux and the requantizer (added after a first timing run) costs one cycle per engine run and nothing in throughput.
+
+\subsection{AXI interface, registers and driver}
+The wrapper (\texttt{sr\_axis\_wrapper.v}) converts a 32-bit AXI4-Stream (little-endian) into the core's byte stream and packs the output bytes into 32-bit beats with \texttt{TLAST} on the last one. It accepts input only during the core's load phase, so the DMA can be armed before the start pulse.
+It flags an early \texttt{TLAST}, a missing \texttt{TLAST} on the last input beat and a start while busy; the top module adds a \texttt{TKEEP} check. The first error of a tile is kept in \texttt{ERROR\_CODE}.
+The AXI4-Lite block (\texttt{sr\_accel\_top.v}) has CONTROL, STATUS, TILE\_SIZE, the core's CYCLES counter, ERROR\_CODE, VERSION and seven read-only debug registers (\texttt{docs/REGISTER\_MAP.md}).
+The driver programs the DMA in simple mode, polls with a timeout of about one second, and on any error resets the core, then the DMA, then the core again before it checks that STATUS and ERROR\_CODE are clear. It never retries a failed tile silently.
+On the board this was exercised with deliberate faults (input too short, input too long, output buffer too short) and with 8{,}000 back-to-back initialisation-and-tile cycles without an error (\texttt{results/speed/m6\_board.md}, tests T5 and T6).
+The early first-tile failures of 2026-10-11 were traced to reprogramming the PL while a DMA transfer was in flight; the programming scripts now isolate the PL first. Two single failures remain unexplained (Section~\ref{sec:discussion}).
+
+\subsection{Verification chain}
+The reference chain is PyTorch FP32 $\to$ NumPy integer model $\to$ RTL, and the RTL is compared with the integer model byte for byte. The regression (\texttt{hardware/verification/run\_tests.sh full}, Icarus Verilog, 88 runs) checks every engine layer by layer against golden tile dumps, randomized layers with distinct multipliers per channel, the whole core at the real tile size, a 4-tile seam test, the AXI wrapper and the register block (with random stalls), and one-cycle-reset aborts; post-synthesis netlists are simulated in xsim.
+On the board, the output of all 119 test images (Set5, Set14, BSD100) is byte-identical to the integer model (\texttt{results/quality/m7\_board\_testsets\_run.log}).
+How well this regression detects bugs is measured in Section~\ref{sec:discussion}.
 
 \section{Results}\label{sec:results}
 All board numbers were measured on a ZedBoard with the deployed bitstream (VERSION 0x53520602, 100\,MHz), the test image is a DIV2K image of $960\times540$.
@@ -188,7 +243,7 @@ ZedBoard FPGA (board-measured) & 1{,}311.9 & 0.76 \\
 % source: docs/paper/cpu_baseline.md (i5-13450HX, RTX 3050 6 GB laptop GPU, PyTorch 2.12.0+cu130; 2026-10-16).  CPU energy not measured; GPU 0.548 J per frame is GPU power only.
 \end{table}
 
-\section{Discussion}
+\section{Discussion}\label{sec:discussion}
 % TODO after the board session and the fmax decision.  Facts to discuss (all stored):
 %  - utilization gap: only one of the four engines works at a time, 17.2 % of the 68 DSPs busy (cycle MODEL, docs/paper/cycle_model.md Part 1); layer 4 is 64 % of the cycles.
 %  - predictions (not built): line-buffer layer pipeline about 3.9 fps at 68 DSP, 100 MHz (Part 2); shared engine 2.2 / 2.8 fps (Part 3).  Label as predictions.
