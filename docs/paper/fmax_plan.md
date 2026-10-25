@@ -1,4 +1,4 @@
-# Plan: raise the fabric clock above 100 MHz (PROPOSAL ONLY, 2026-10-24; no RTL was edited, nothing was built)
+# Plan: raise the fabric clock above 100 MHz (written 2026-10-24 as a proposal; the 125 MHz variant was BUILT 2026-10-25 in branch `r0_125`, see section 7; not tested on the board)
 
 Based on the stored reports of the 152.38 MHz trial: `results/utilization/timing_150mhz/` (README there) and `docs/paper/timing_150mhz.md`. Everything marked *estimate* is arithmetic on those stored numbers and has not been
 synthesized. Whether to build it, and in which sandbox, is the owner's decision.
@@ -64,3 +64,25 @@ The ARM/DMA overhead is held constant, which is conservative for the DMA part an
 * New worktree/branch off `main` (not in `main`, not touching the deployed bitstream); change only `conv_engine.v` (and `block design` clock: FCLK0 125 MHz from the IO PLL, remove the `FREQ_HZ 100000000` text from `sr_accel_top.v`'s X_INTERFACE_PARAMETER or set it to the new value).
 * Check list: `run_tests.sh quick` and `full` (cycles per tile change by +4, so every cycle-count check in the testbenches must be updated and the new numbers explained), `run_postsynth.sh`, the mutation study quick suite (`docs/paper/mutation_study.md`), Vivado at 125 MHz (WNS must be positive; save the reports under `results/utilization/`), then the board checklist (T1, T2 byte-exact 0xcf947f22 for the same weights, 119 images, 20-frame timing) with a new VERSION value.
 * Not analysed here: PS-PL interface timing at 125 MHz (everything uses `FCLK_CLK0`, no clock-domain crossing), board power at the faster clock (more switching), and that the ARM/DMA part may change with the clock.
+
+## 7. Built 2026-10-25 (branch `r0_125`, worktree `~/Desktop/venkat/sandbox_R0_125`): what the numbers say
+
+Only what section 2 proposes was changed (`conv_engine.v`), plus the clock (FCLK0 125 MHz in `design_1_m6.tcl`, `FREQ_HZ` metadata) and a new VERSION 0x53524201. Details and the Vivado reports: `results/utilization/m6_system_R0_125.md` **in branch `r0_125`** (not in main).
+
+**Cycles per tile, same test in both trees** (simulation, `tb_sr_tile.v` / `tb_sr_accel_top.v`, HC=64, tiles `real0` and `noise`, run 2026-10-25 from both trees with identical commands; raw lines in the branch file `results/utilization/r0_125_sim_cycles.txt`):
+
+| Quantity | Deployed 0602 (main) | r0_125 | Difference | Plan (section 3) |
+|---|---|---|---|---|
+| Tile core, start to last output byte | **926,201** | **926,205** | **+4** | +4 (926,201 -> 926,205) |
+| `CYCLES` register through `sr_accel_top` (+1 for the input word register) | 926,202 | 926,206 | +4 | not stated |
+| Engines L1 / L2 / L3 / L4 (`tb_conv_layer`, HC=64, `real0`) | 124,872 / 69,713 / 69,720 / 589,844 (`results/utilization/m4_*.md`; not re-run on 2026-10-25) | 124,873 / 69,714 / 69,721 / 589,845 | +1 each = +4 in total | +1 per engine run |
+| Core time per frame, 135 tiles, at 100 MHz | 135 x 926,201 / 100 MHz = 1,250.37 ms | (not run at this clock) | +5.4 us if it were | "unchanged within 0.01 ms" |
+| Core time per frame at 125 MHz | n/a | 135 x 926,205 / 125 MHz = **1,000.30 ms** | | |
+| Board (deployed design only): `CYCLES` 926,217-926,241 | `results/speed/m7_timing_20frames.md` | **no board run** | | |
+
+Sources: main 926,201 `results/utilization/m5_tile_core.md:16` and re-run 2026-10-25 (same line in the table above); r0_125 as listed; plan `docs/paper/fmax_plan.md` section 3.
+
+**The extra register costs 4 cycles per tile, not 0, and that does not depend on where Vivado puts it.** Cycles are a property of the RTL's behaviour (the testbench counts clock edges of the design as written): `a_r` delays the activation by one clock, so the weight address, `v`, `first` and `last` had to be delayed by one clock too, and every engine run ends one clock later. Whether the flip-flop ends up inside the DSP48's own A register (AREG=1) or in fabric changes only *where* the register is placed and what setup time the path needs (0.362 ns at the DSP versus 1.928 ns without a register); it cannot remove the clock cycle. The plan's phrase "0 FF if Vivado absorbs the register" was about flip-flop *count*, never about cycles.
+What the routed netlist shows about the absorption (`design_1_wrapper_routed.dcp`, `get_property AREG` on the MAC DSPs): engine 1 16 of 16, engine 2 16 of 16, engine 3 4 of 16, engine 4 7 of 12 have AREG=1 (43 of 60 MAC DSPs); the other 17 keep the activation register in fabric. The worst path (engine 4, `lane[10]`) is one of the absorbed ones (setup requirement 0.362 ns at the DSP). Fabric FF rose by 148 (7,831 -> 7,979), inside the plan's "below 250" estimate.
+
+**Predicted fps: unchanged by this check.** The prediction (`software/analysis/fmax_prediction.py`, `docs/paper/cycle_model.md` Part 4) already used +4 cycles per tile: 125 MHz, 926,224 cycles (board mean 926,220 + 4), overhead held at 61.5 ms: **1,061.8 ms = 0.942 fps** (the +4 changes the frame by 4.3 us at 125 MHz). It is still a **prediction**: nothing has run on the board. Timing: the routed 125 MHz build has WNS **+0.632 ns**, WHS +0.032 ns, 0 failing of 24,167 endpoints (plan estimate for the worst RAM->MAC path: about +1.31 ns, so the estimate was optimistic by about 0.7 ns; the DMA IP was estimated at +0.55 ns and every endpoint is at least +0.632 ns).

@@ -26,6 +26,11 @@ TREES = {
                 xsa=V / "R2q_artifacts/design_1_wrapper_R2q.xsa"),
     "R3q": dict(tree=V / "sandbox_R3q", version_expected="0x53523201", bits=[("sandbox build (tree default)", V / "R3q_artifacts/design_1_wrapper_R3q.bit")],
                 xsa=V / "R3q_artifacts/design_1_wrapper_R3q.xsa"),
+    # OPTIONAL last step (branch r0_125): deployed network, one more register per engine run, fabric clock 125 MHz.  Timing numbers here are PREDICTIONS (fmax_plan.md), not board values.
+    "R0 at 125 MHz (r0_125)": dict(tree=V / "sandbox_R0_125", version_expected="0x53524201", bits=[("sandbox build (tree default)", V / "R0_125_artifacts/design_1_wrapper_R0_125.bit")],
+                                   xsa=V / "R0_125_artifacts/design_1_wrapper_R0_125.xsa",
+                                   cycles="926,214-926,245 (the R0 window of 926,210-926,241 plus the 4 extra cycles per tile of simulation: 926,201 -> 926,205)",
+                                   t3="PREDICTED 1,061.8 ms (model, `docs/paper/fmax_plan.md`); plausible range **1,033-1,064 ms** (lower end = core cycles at 125 MHz 1,000.3 ms + ARM padding/copies 32.3 ms, i.e. the DMA handshake overhead would have to vanish; upper end = prediction + 2 ms); max - min <= 3 ms; output fnv as in the T2 row"),
 }
 ELFS = [("T1 golden tile", "sr_app_t1.elf"), ("T2 full frame", "sr_app_t2.elf"), ("T3 timing, 20 frames", "sr_app_t3_20f.elf"),
         ("T3 timing, 200 frames (power)", "sr_app_t3_200f.elf"), ("T7 ARM only, 1 frame", "sr_app_t11.elf"), ("T7 ARM only, 20 frames (power)", "sr_app_t11_20f.elf")]
@@ -85,10 +90,10 @@ def main():
                   "| Quantity | Expected on the board |", "|---|---|",
                   f"| `version=` in every stats file / `init ok: VERSION` on the UART | **{d['version_expected']}** |",
                   f"| T1 golden tile: `result=0`, stat6 (identical repeats) | 0 and **20**; the ARM compares {p['t1_out_bytes']} output bytes with the golden tile itself (FNV-1a 32 of that tile: `0x{p['t1_model_fnv']:08x}`) |",
-                  "| T1 CYCLES (stat0..2 = min/max/mean) | each within **926,210-926,241** (simulation 926,201 + 1 for the wrapper = 926,202) |",
+                  f"| T1 CYCLES (stat0..2 = min/max/mean) | each within **{d.get('cycles', '926,210-926,241 (simulation 926,201 + 1 for the wrapper = 926,202)')}** |",
                   f"| T2 960x540 -> 1920x1080 (135 tiles): `fnv1a32=` in marker and stats, `compare_raw.py` | **0x{p['t2_model_fnv']:08x}**, `BYTE-EXACT: yes`, `bytes=6220816` (16-byte header + 6,220,800) |",
                   f"| 128x128 -> 256x256 baboon (4 tiles) | **0x{p['baboon_model_fnv']:08x}** |",
-                  "| T3 20 frames | mean within +-2 ms of 1,311.9 ms, max - min <= 3 ms, CYCLES 926,210-926,241, output fnv as in the T2 row |",
+                  "| T3 20 frames | " + d.get("t3", "mean within +-2 ms of 1,311.9 ms, max - min <= 3 ms, CYCLES 926,210-926,241, output fnv as in the T2 row") + " |",
                   "| T7 (ARM only, 1 frame) | `BYTE-EXACT: yes`, fnv as in the T2 row; time per frame **unknown** (never run) |", ""]
         lines += ["| Artifact | Path | md5 |", "|---|---|---|"]
         for lab, b in d["bits"]:

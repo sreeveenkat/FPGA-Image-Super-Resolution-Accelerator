@@ -13,7 +13,7 @@ Tree `/home/sreevenkat/Desktop/venkat/sem_project_all`. Cross-checks (model re-r
 |---|---|
 | `version=` in every stats file / `init ok: VERSION` on the UART | **0x53520602** |
 | T1 golden tile: `result=0`, stat6 (identical repeats) | 0 and **20**; the ARM compares 49152 output bytes with the golden tile itself (FNV-1a 32 of that tile: `0xeab3ab4d`) |
-| T1 CYCLES (stat0..2 = min/max/mean) | each within **926,210-926,241** (simulation 926,201 + 1 for the wrapper = 926,202) |
+| T1 CYCLES (stat0..2 = min/max/mean) | each within **926,210-926,241 (simulation 926,201 + 1 for the wrapper = 926,202)** |
 | T2 960x540 -> 1920x1080 (135 tiles): `fnv1a32=` in marker and stats, `compare_raw.py` | **0xcf947f22**, `BYTE-EXACT: yes`, `bytes=6220816` (16-byte header + 6,220,800) |
 | 128x128 -> 256x256 baboon (4 tiles) | **0x91a4506d** |
 | T3 20 frames | mean within +-2 ms of 1,311.9 ms, max - min <= 3 ms, CYCLES 926,210-926,241, output fnv as in the T2 row |
@@ -39,7 +39,7 @@ Tree `/home/sreevenkat/Desktop/venkat/sandbox_R2q`. Cross-checks (model re-run i
 |---|---|
 | `version=` in every stats file / `init ok: VERSION` on the UART | **0x53522201** |
 | T1 golden tile: `result=0`, stat6 (identical repeats) | 0 and **20**; the ARM compares 49152 output bytes with the golden tile itself (FNV-1a 32 of that tile: `0x717e36fd`) |
-| T1 CYCLES (stat0..2 = min/max/mean) | each within **926,210-926,241** (simulation 926,201 + 1 for the wrapper = 926,202) |
+| T1 CYCLES (stat0..2 = min/max/mean) | each within **926,210-926,241 (simulation 926,201 + 1 for the wrapper = 926,202)** |
 | T2 960x540 -> 1920x1080 (135 tiles): `fnv1a32=` in marker and stats, `compare_raw.py` | **0x2afbc9ae**, `BYTE-EXACT: yes`, `bytes=6220816` (16-byte header + 6,220,800) |
 | 128x128 -> 256x256 baboon (4 tiles) | **0x272bafbb** |
 | T3 20 frames | mean within +-2 ms of 1,311.9 ms, max - min <= 3 ms, CYCLES 926,210-926,241, output fnv as in the T2 row |
@@ -64,7 +64,7 @@ Tree `/home/sreevenkat/Desktop/venkat/sandbox_R3q`. Cross-checks (model re-run i
 |---|---|
 | `version=` in every stats file / `init ok: VERSION` on the UART | **0x53523201** |
 | T1 golden tile: `result=0`, stat6 (identical repeats) | 0 and **20**; the ARM compares 49152 output bytes with the golden tile itself (FNV-1a 32 of that tile: `0xfe9163c9`) |
-| T1 CYCLES (stat0..2 = min/max/mean) | each within **926,210-926,241** (simulation 926,201 + 1 for the wrapper = 926,202) |
+| T1 CYCLES (stat0..2 = min/max/mean) | each within **926,210-926,241 (simulation 926,201 + 1 for the wrapper = 926,202)** |
 | T2 960x540 -> 1920x1080 (135 tiles): `fnv1a32=` in marker and stats, `compare_raw.py` | **0x45dd4e2d**, `BYTE-EXACT: yes`, `bytes=6220816` (16-byte header + 6,220,800) |
 | 128x128 -> 256x256 baboon (4 tiles) | **0xa1d2f75c** |
 | T3 20 frames | mean within +-2 ms of 1,311.9 ms, max - min <= 3 ms, CYCLES 926,210-926,241, output fnv as in the T2 row |
@@ -80,4 +80,29 @@ Tree `/home/sreevenkat/Desktop/venkat/sandbox_R3q`. Cross-checks (model re-run i
 | ELF T3 timing, 200 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t3_200f.elf` | `c3795738e15aea22fc3461a812361cbc` |
 | ELF T7 ARM only, 1 frame (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t11.elf` | `702add67565362004f3230d95bad93ff` |
 | ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t11_20f.elf` | `e93504b7531b4bd5e41cda7669b63a3c` |
+
+## R0 at 125 MHz (r0_125)
+
+Tree `/home/sreevenkat/Desktop/venkat/sandbox_R0_125`. Cross-checks (model re-run in this tree vs the files the board test uses): T1 OK, T2 OK, baboon OK, RTL VERSION constant in the tree `0x53524201` (= expected).
+
+| Quantity | Expected on the board |
+|---|---|
+| `version=` in every stats file / `init ok: VERSION` on the UART | **0x53524201** |
+| T1 golden tile: `result=0`, stat6 (identical repeats) | 0 and **20**; the ARM compares 49152 output bytes with the golden tile itself (FNV-1a 32 of that tile: `0xeab3ab4d`) |
+| T1 CYCLES (stat0..2 = min/max/mean) | each within **926,214-926,245 (the R0 window of 926,210-926,241 plus the 4 extra cycles per tile of simulation: 926,201 -> 926,205)** |
+| T2 960x540 -> 1920x1080 (135 tiles): `fnv1a32=` in marker and stats, `compare_raw.py` | **0xcf947f22**, `BYTE-EXACT: yes`, `bytes=6220816` (16-byte header + 6,220,800) |
+| 128x128 -> 256x256 baboon (4 tiles) | **0x91a4506d** |
+| T3 20 frames | PREDICTED 1,061.8 ms (model, `docs/paper/fmax_plan.md`); plausible range **1,033-1,064 ms** (lower end = core cycles at 125 MHz 1,000.3 ms + ARM padding/copies 32.3 ms, i.e. the DMA handshake overhead would have to vanish; upper end = prediction + 2 ms); max - min <= 3 ms; output fnv as in the T2 row |
+| T7 (ARM only, 1 frame) | `BYTE-EXACT: yes`, fnv as in the T2 row; time per frame **unknown** (never run) |
+
+| Artifact | Path | md5 |
+|---|---|---|
+| bitstream, sandbox build (tree default) | `/home/sreevenkat/Desktop/venkat/R0_125_artifacts/design_1_wrapper_R0_125.bit` | `ecceb98270f5cf1a0ba4b413f26ee11d` |
+| xsa | `/home/sreevenkat/Desktop/venkat/R0_125_artifacts/design_1_wrapper_R0_125.xsa` | `42266f06c844a03cb4e57a817ccbaf3b` |
+| ELF T1 golden tile (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R0_125/software/board/build/sr_app_t1.elf` | `64a235f65af1e652025fd78fdf567745` |
+| ELF T2 full frame (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R0_125/software/board/build/sr_app_t2.elf` | `6e5906e29cc88a65b67ccaf271a48df6` |
+| ELF T3 timing, 20 frames (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R0_125/software/board/build/sr_app_t3_20f.elf` | `c1c1c638a65ecfd1ef838fedec0f0bf1` |
+| ELF T3 timing, 200 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R0_125/software/board/build/sr_app_t3_200f.elf` | `28a7b68303f83d68e8157f74ddca1883` |
+| ELF T7 ARM only, 1 frame (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R0_125/software/board/build/sr_app_t11.elf` | `a37f3b6ffff7597219fb08d7e2a76e66` |
+| ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_R0_125/software/board/build/sr_app_t11_20f.elf` | `484b82c1f8ef7015751cc858231d4723` |
 

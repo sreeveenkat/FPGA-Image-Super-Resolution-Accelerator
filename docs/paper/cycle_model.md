@@ -51,4 +51,13 @@ Same tiles as today (64x64 + 3 px halo, halo recomputed) and the same activation
 
 For comparison, today's four engines: 854,149 engine cycles per tile; measured frame 1,311.9 ms.
 
-Caveats: 125/150 MHz are NOT shown to close timing. Today's whole system has WNS +0.503 ns at 100 MHz, and a 152.38 MHz trial of the unchanged design failed by 1.693 ns (`docs/paper/timing_150mhz.md`; path: activation RAM -> split-RAM mux -> MAC DSP input), so every 125/150 MHz figure needs a pipelining change first. Do not mix the two 3.9 fps figures: Part 2's is the line-buffer pipeline at 100 MHz, Part 3's is the shared engine at 150 MHz with fully overlapped I/O. The 32-bit stream caps the pipeline at 3 cycles per LR pixel (64-bit would halve that); DSP packing of two INT8 multiplies is not modelled.
+## Part 4 - prediction: the r0_125 build (deployed network, one more register per engine run, fabric clock 125 MHz)
+
+Same architecture as today plus one register between the activation RAM mux and the MAC DSP (`docs/paper/fmax_plan.md`). The build exists (branch `r0_125`, routed WNS +0.632 ns at 125 MHz, 0 failing endpoints) and is simulated, but it has NOT run on the board: the frame times below are model predictions. Cycles per tile = board mean 926,220 + 4; ARM/DMA overhead held at 61.5 ms (as in Part 3).
+
+| Clock | Cycles per tile | Core time per frame | Frame time (predicted) | fps (predicted) |
+|---|---|---|---|---|
+| 100 MHz | 926,224 | 1,250.4 ms | 1,311.9 ms | 0.762 |
+| 125 MHz | 926,224 | 1,000.3 ms | 1,061.8 ms | 0.942 |
+
+Caveats: the 125 MHz build met timing in Vivado (post-route, not on the board); 150 MHz is NOT shown to close timing. Today's whole system has WNS +0.503 ns at 100 MHz, and a 152.38 MHz trial of the unchanged design failed by 1.693 ns (`docs/paper/timing_150mhz.md`; path: activation RAM -> split-RAM mux -> MAC DSP input), so the 150 MHz figures of Part 3 still need a pipelining change. Do not mix the two 3.9 fps figures: Part 2's is the line-buffer pipeline at 100 MHz, Part 3's is the shared engine at 150 MHz with fully overlapped I/O. The 32-bit stream caps the pipeline at 3 cycles per LR pixel (64-bit would halve that); DSP packing of two INT8 multiplies is not modelled.

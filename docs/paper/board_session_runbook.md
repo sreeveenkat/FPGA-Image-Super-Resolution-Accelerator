@@ -2,7 +2,7 @@
 
 Prepared 2026-10-24. **Nothing in this runbook has been run on the board yet.** Pass values: `docs/paper/board_expected.md` (generated from each tree's own integer model).
 Pass rules: `docs/paper/board_checklist.md` section 5b (PROPOSED merge criteria; the owner confirms). Known issues: `board_checklist.md` section 7.
-Order: **0** prepare -> **1** R0/0602 with the hang test (T1, T2) -> **2** T7 -> **3** R2q -> **4** R3q -> **5** power.
+Order: **0** prepare -> **1** R0/0602 with the hang test (T1, T2) -> **2** T7 -> **3** R2q -> **4** R3q -> **5** power -> **7** (OPTIONAL, last) R0 at 125 MHz.
 
 Conventions used below
 * `D=data/board/$(date +%F)` inside each tree: every log of the day goes there (`board_run.sh` creates it). Save **everything**: UART log, xsdb log, meta file, stats, outputs.
@@ -75,3 +75,14 @@ Write down: meter model and its stated accuracy, range, resolution, reading inte
 ## 6. What to bring back (all under `data/board/<date>/` of each tree)
 `*.log` (UART with time stamps), `*_xsdb.log`, `*_meta.txt` (git revision, bitstream and ELF md5), `*_stats.txt`, the `compare_raw.py` lines (also the negative controls), the hang-test texts of 1.1-1.3, the meter readings, and a list of every retry with its reason.
 After the session update the local project log, `docs/STATUS.md` and the merge decision; commit only on request.
+
+## 7. OPTIONAL last step: R0 at 125 MHz (tree `~/Desktop/venkat/sandbox_R0_125`, branch `r0_125`; VERSION 0x53524201)
+Only after sections 1-4 are done and only if time is left. Built 2026-10-25, Vivado WNS +0.632 ns at 125.000 MHz, simulation 88/88; **nothing on the board yet** (`docs/paper/fmax_plan.md` section 7, `results/utilization/m6_system_R0_125.md` in that branch). Expected answers: `docs/paper/board_expected.md`, section "R0 at 125 MHz".
+Same commands as section 1, from the sandbox root (the bitstream `~/Desktop/venkat/R0_125_artifacts/design_1_wrapper_R0_125.bit` is the tree default; the tree's driver refuses every other bitstream):
+```bash
+cd ~/Desktop/venkat/sandbox_R0_125; export SR_TREE=$PWD; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh
+$BR r125_t1 software/board/build/sr_app_t1.elf < /dev/null
+$BR r125_t2 software/board/build/sr_app_t2.elf data/board/div2k_img0193_lr_960x540.raw $D/r125_t2.raw < /dev/null
+$BR r125_t3 software/board/build/sr_app_t3_20f.elf data/board/div2k_img0193_lr_960x540.raw $D/r125_t3.raw < /dev/null
+```
+Pass: VERSION 0x53524201; T1 20/20 and CYCLES 926,214-926,245; T2 `BYTE-EXACT: yes`, fnv **0xcf947f22** (same weights as R0); T3 20-frame mean in the plausible range 1,033-1,064 ms (predicted 1,061.8 ms; **a prediction**). If T1 or T2 fails, record it and stop; do not retry silently. Do not compare power with the other designs (the clock differs).
