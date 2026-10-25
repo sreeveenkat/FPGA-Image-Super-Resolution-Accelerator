@@ -81,8 +81,9 @@ Only after sections 1-4 are done and only if time is left. Built 2026-10-25, Viv
 Same commands as section 1, from the sandbox root (the bitstream `~/Desktop/venkat/R0_125_artifacts/design_1_wrapper_R0_125.bit` is the tree default; the tree's driver refuses every other bitstream):
 ```bash
 cd ~/Desktop/venkat/sandbox_R0_125; export SR_TREE=$PWD; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh
-$BR r125_t1 software/board/build/sr_app_t1.elf < /dev/null
+$BR r125_t1 software/board/build/sr_app_t1.elf - - < /dev/null
 $BR r125_t2 software/board/build/sr_app_t2.elf data/board/div2k_img0193_lr_960x540.raw $D/r125_t2.raw < /dev/null
+~/Desktop/venkat/sem_project_all/.venv/bin/python software/host_tools/compare_raw.py $D/r125_t2.raw data/board/div2k_img0193_expected_1920x1080.raw; echo exit=$?
 $BR r125_t3 software/board/build/sr_app_t3_20f.elf data/board/div2k_img0193_lr_960x540.raw $D/r125_t3.raw < /dev/null
 ```
 Pass: VERSION 0x53524201; T1 20/20 and CYCLES 926,214-926,245; T2 `BYTE-EXACT: yes`, fnv **0xcf947f22** (same weights as R0); T3 20-frame mean in the plausible range 1,033-1,064 ms (predicted 1,061.8 ms; **a prediction**). If T1 or T2 fails, record it and stop; do not retry silently. Do not compare power with the other designs (the clock differs).
