@@ -26,7 +26,7 @@ We describe a $\times 2$ image super-resolution accelerator for a ZedBoard (XC7Z
 in 1.312\,s per frame (0.762\,fps, 20-frame mean, board-measured) with 68 DSP48 blocks at 100\,MHz.
 The output is byte-identical to a NumPy integer model on all 119 images of Set5, Set14 and BSD100 on the board.
 On these sets the INT8 network gains about 1.4, 1.1 and 1.0\,dB PSNR-Y over bicubic interpolation (Table~\ref{tab:quality}).
-TODO: contributions after the board session (utilization gap and its closure, mutation-tested RTL, energy against the on-chip ARM core).
+On average only 17.2\,\% of the DSPs perform a MAC per cycle because the four layer engines run one after the other; a cycle model matches the simulated cycles of each layer to within 24 cycles, and its alternatives are labelled as predictions. Twenty injected RTL faults are all caught by the regression, five of them invisible to an image-quality comparison. The unchanged design fails timing at 152\,MHz; one added register closes 125\,MHz in Vivado (WNS +0.632\,ns), which is not yet tested on the board. Board energy and the quantization-aware variants are pending board runs.
 \end{abstract}
 
 \begin{IEEEkeywords}
