@@ -50,3 +50,6 @@ software/ai/checkpoints/q/
 
 # Demo run sheet PDF (byline names a person; owner decision 2026-10-25)
 docs/*Demo Run Sheet*.pdf
+
+# LaTeX build output
+docs/paper/draft/build/

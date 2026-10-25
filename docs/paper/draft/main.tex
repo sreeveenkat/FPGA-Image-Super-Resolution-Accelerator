@@ -1,4 +1,4 @@
-% DRAFT skeleton, started 2026-10-24.  IEEE conference format (IEEEtran).  NOT compiled: no TeX distribution is installed on the development PC (see README.md).
+% DRAFT, started 2026-10-24.  IEEE conference format (IEEEtran).  Compiled with ./build.sh (see README.md).
 % Rules for this file: every number comes from a stored result file named in a comment next to it; anything not measured on the board is marked "pending board run".
 % Baseline everywhere = the DEPLOYED checkpoint (INT8 PSNR-Y 35.02 / 31.40 / 30.53 dB), not the 2-seed R0 mean of the ladder study.
 % Venue and deadline are not chosen; page limit and review type (single / double blind) are not known.  A public repository link must be anonymised for double-blind review.
@@ -52,6 +52,7 @@ It has 2{,}620 parameters and 2{,}560 multiply-accumulates (MACs) per input pixe
 \begin{table}[t]
 \caption{Layers of the network. Parameters include biases.}\label{tab:layers}
 \centering
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{llrr}
 \toprule
 Layer & Shape & Parameters & MACs / input pixel \\
@@ -63,7 +64,7 @@ L4 conv $3{\times}3$ & $16\to12$ & 1{,}740 & 1{,}728 \\
 \midrule
 Total & & 2{,}620 & 2{,}560 \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 % per-layer values computed from the layer shapes: L1 3*3*3*16 (+16), L2 16*9 (+16), L3 16*16 (+16), L4 16*9*12 (+12); totals equal the asserted 2,620 / 2,560.
 \end{table}
 
@@ -82,6 +83,7 @@ The percentile was chosen on 12 validation images (Table~\ref{tab:ptq}); post-tr
 \begin{table}[t]
 \caption{PTQ percentile sweep, per-layer weight scales, 12 validation images (FP32 reference 34.954\,dB PSNR-Y).}\label{tab:ptq}
 \centering
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{rrr}
 \toprule
 Percentile & PSNR-Y INT8 (dB) & Drop vs FP32 (dB) \\
@@ -91,7 +93,7 @@ Percentile & PSNR-Y INT8 (dB) & Drop vs FP32 (dB) \\
 \textbf{99.99} & \textbf{34.731} & \textbf{0.223} \\
 100.0 & 34.675 & 0.280 \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 % source: results/quality/m3_ptq_sweep.md (per-channel weights were slightly worse in the same file and were not used)
 \end{table}
 
@@ -113,6 +115,7 @@ Power is a Vivado estimate, not a measurement.
 \begin{table}[t]
 \caption{Image quality, $\times2$, PSNR-Y (dB) / SSIM-Y. FPGA = outputs read back from the board, byte-identical to the INT8 integer model.}\label{tab:quality}
 \centering
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lccc}
 \toprule
 Method & Set5 & Set14 & BSD100 \\
@@ -122,7 +125,7 @@ FP32 network & 35.21 / 0.9449 & 31.51 / 0.8975 & 30.60 / 0.8785 \\
 INT8 integer model & 35.02 / 0.9420 & 31.40 / 0.8948 & 30.53 / 0.8756 \\
 FPGA (board) & 35.02 / 0.9420 & 31.40 / 0.8948 & 30.53 / 0.8756 \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 % source: results/quality/table_a_x2.md (119 of 119 images byte-exact on the board; INT8 beats bicubic on 119 of 119 images)
 \end{table}
 
@@ -132,6 +135,7 @@ Fine random texture (gravel, fur, fabric) is not recovered by a network of this 
 \begin{table}[t]
 \caption{Candidate weight sets against the deployed design (R0). Quality: INT8 integer model, PSNR-Y (dB), the single built seed of each candidate. Resources and timing: Vivado post-implementation of the whole system at 100\,MHz, not board measurements.}\label{tab:candidates}
 \centering
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lcccc}
 \toprule
 Design & Set5 / Set14 / BSD100 & LUT & WNS (ns) & Board \\
@@ -140,7 +144,7 @@ R0 deployed & 35.02 / 31.40 / 30.53 & 5{,}296 & +0.503 & 0.762\,fps \\
 R2q (rep.\ + QAT) & 35.84 / 31.89 / 30.87 & 5{,}287 & +0.944 & pending board run \\
 R3q (anchor + QAT) & 36.20 / 32.12 / 31.01 & 5{,}323 & +0.683 & pending board run \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 % sources: R0 results/quality/table_a_x2.md, results/utilization/m6_system_0602.md, results/speed/m7_timing_20frames.md;
 %          R2q / R3q: results/utilization/m6_system_R2q.md (branch r2q), m6_system_R3q.md (branch r3q) -- INT8 lines and the build tables.
 % R2q needs only different constants (SHIFT 22/22/21/22); R3q adds a nearest-neighbour anchor (+33..45 LUT, +66 FF, no extra cycle: m6_system_R3q.md).
@@ -149,6 +153,7 @@ R3q (anchor + QAT) & 36.20 / 32.12 / 31.01 & 5{,}323 & +0.683 & pending board ru
 \begin{table}[t]
 \caption{Speed, resources and power of the deployed design (R0), $960\times540\to1920\times1080$.}\label{tab:system}
 \centering
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{ll}
 \toprule
 Item & Value \\
@@ -161,7 +166,7 @@ Timing at 100\,MHz (WNS / WHS) & +0.503 / +0.016\,ns \\
 Power, Vivado estimate (chip / accelerator) & 1.913 / 0.176\,W, confidence low \\
 ARM-only baseline (same chip, no accelerator) & pending board run \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 % sources: results/speed/m7_timing_20frames.md; results/utilization/m6_system_0602.md; results/utilization/m7_power.md.
 % 95.3 % of the frame is the core itself (1,250.4 ms of 1,311.9 ms, m7_timing_20frames.md).
 \end{table}
@@ -169,6 +174,7 @@ ARM-only baseline (same chip, no accelerator) & pending board run \\
 \begin{table}[t]
 \caption{The same network on a desktop PC (not a fair energy comparison; PC times are medians over repeated runs).}\label{tab:pc}
 \centering
+\resizebox{\columnwidth}{!}{%
 \begin{tabular}{lrr}
 \toprule
 Implementation & ms / frame & fps \\
@@ -178,7 +184,7 @@ FP32 PyTorch, GPU incl.\ host copies & 7.9 & 126.81 \\
 INT8 NumPy integer model, CPU (unoptimised) & 1{,}526.2 & 0.66 \\
 ZedBoard FPGA (board-measured) & 1{,}311.9 & 0.76 \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 % source: docs/paper/cpu_baseline.md (i5-13450HX, RTX 3050 6 GB laptop GPU, PyTorch 2.12.0+cu130; 2026-10-16).  CPU energy not measured; GPU 0.548 J per frame is GPU power only.
 \end{table}
 
