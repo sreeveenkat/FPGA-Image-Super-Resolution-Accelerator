@@ -33,15 +33,34 @@ super-resolution, FPGA, Zynq, INT8 quantization, bit-exact verification
 \end{IEEEkeywords}
 
 \section{Introduction}
-% TODO: motivation (low-cost edge FPGA, why a tiny network), problem statement, contributions (to be fixed AFTER the related-work reading; see docs/paper/related_work_and_venues.md:
-% the layer pipeline and bit-exact golden-model verification are NOT new ideas).
-TODO.
+% Contributions must be re-checked AFTER the related-work reading (docs/paper/related_work_and_venues.md): layer-pipelined SR accelerators and bit-exact golden-model verification are NOT new ideas.
+Image super-resolution turns a low-resolution picture into a larger one; small convolutional networks such as FSRCNN~\cite{dong2016fsrcnn} do this with far fewer parameters than the first deep models and are therefore candidates for low-cost embedded hardware.
+This paper reports a complete, small implementation on a ZedBoard (Zynq XC7Z020) and, more than the accelerator itself, what was measured about it: how fast it is, why it is not faster, how reliably it is verified, and what limits its clock frequency.
+
+The system upscales $960\times540$ RGB frames to $1920\times1080$ with a 2{,}620-parameter, four-layer network quantized to INT8. The network is trained and quantized on a PC, a NumPy integer model defines the exact result, a Verilog tile engine in the programmable logic reproduces it, and a bare-metal ARM program feeds it through an AXI DMA.
+The deliberate scope is a design that can be checked completely, not the highest throughput; the numbers below show what that choice costs.
+
+Our contributions are measurements and analyses of one design:
+\begin{itemize}
+\item \textbf{A board-verified INT8 accelerator.} Output on the ZedBoard is byte-identical to the integer model on all 119 images of Set5, Set14 and BSD100; a frame takes 1.312\,s (0.762\,fps, 20-frame mean) with 68 DSP48 blocks at 100\,MHz (Sections~\ref{sec:arch} and~\ref{sec:results}).
+\item \textbf{A quantified utilization gap.} On average only 17.2\,\% of the 68 DSPs perform a useful MAC per cycle, because the four layer engines run one after the other. A cycle model reproduces the simulated per-layer cycle counts to within 17--24 cycles per 64$\times$64 tile, and is then used, as a clearly labelled prediction, to estimate alternative organisations (Section~\ref{sec:discussion}).
+\item \textbf{A measured verification strength.} Twenty hand-written single-edit faults in the datapath and control RTL are all detected by the quick regression; five of them change the image quality by less than 0.01\,dB and would be invisible to a PSNR comparison (Section~\ref{sec:discussion}).
+\item \textbf{A localized negative timing result.} The unchanged design does not close timing at 152\,MHz (WNS $-1.693$\,ns); 434 of 580 failing endpoints are one path type, and a one-register change is analysed (Section~\ref{sec:discussion}).
+\end{itemize}
+Two further network variants (quantization-aware training and a nearest-neighbour anchor) are simulated bit-exactly but have not yet run on the board; they are reported as such (Section~\ref{sec:quant}).
 
 \section{Related Work}
-% TODO: read each paper in full before citing (docs/paper/related_work_and_venues.md section 1 lists the candidates: FPGA SR systems for UHD video, real-time SR on edge FPGAs,
-% energy-efficient deconvolution accelerators, CGRA4ML for bit parity, mutation testing of HDL).  Only FSRCNN has been read so far.
-Compact networks such as FSRCNN~\cite{dong2016fsrcnn} reach good quality with few parameters; our network follows the same idea at a smaller scale.
-TODO: FPGA super-resolution accelerators; layer-pipelined designs; verification against golden models.
+% TODO: read each paper in full before citing (docs/paper/related_work_and_venues.md section 1 lists the candidates).  Only FSRCNN has been read so far.
+\subsection{Compact super-resolution networks}
+Compact networks such as FSRCNN~\cite{dong2016fsrcnn} reach good quality with few parameters; our network follows the same idea at a smaller scale. TODO.
+\subsection{FPGA super-resolution accelerators}
+TODO.
+\subsection{Layer-pipelined and line-buffer designs}
+TODO.
+\subsection{Quantization and bit-exact verification of accelerators}
+TODO.
+\subsection{Testing the testbench: mutation testing of hardware}
+TODO.
 
 \section{Model}\label{sec:model}
 The network (\texttt{software/ai/models/srnet.py}) maps an RGB image to a $2\times$ larger one with four convolutions and a pixel shuffle:
