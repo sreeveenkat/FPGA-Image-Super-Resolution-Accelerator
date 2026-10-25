@@ -9,6 +9,7 @@
 \usepackage{booktabs}
 \usepackage{url}
 \usepackage{tikz}
+\emergencystretch=2em
 
 \begin{document}
 
@@ -63,11 +64,11 @@ TODO.
 TODO.
 
 \section{Model}\label{sec:model}
-The network (\texttt{software/ai/models/srnet.py}) maps an RGB image to a $2\times$ larger one with four convolutions and a pixel shuffle:
+The network (\texttt{software/\allowbreak{}ai/\allowbreak{}models/\allowbreak{}srnet.py}) maps an RGB image to a $2\times$ larger one with four convolutions and a pixel shuffle:
 $3\times3$ convolution $3\!\to\!16$ with ReLU, $3\times3$ depthwise convolution (16 channels) with ReLU, $1\times1$ convolution $16\!\to\!16$ with ReLU,
 $3\times3$ convolution $16\!\to\!12$, and a pixel shuffle with factor 2 (channel $k=4c+2\,dy+dx$).
 All convolutions are valid (no padding): the input carries a 3-pixel border (replicated for whole images, real neighbours for tiles).
-It has 2{,}620 parameters and 2{,}560 multiply-accumulates (MACs) per input pixel (asserted in \texttt{software/ai/evaluation/test\_model.py}).
+It has 2{,}620 parameters and 2{,}560 multiply-accumulates (MACs) per input pixel (asserted in \texttt{software/\allowbreak{}ai/\allowbreak{}evaluation/\allowbreak{}test\_model.py}).
 
 \begin{table}[t]
 \caption{Layers of the network. Parameters include biases.}\label{tab:layers}
@@ -88,9 +89,9 @@ Total & & 2{,}620 & 2{,}560 \\
 % per-layer values computed from the layer shapes: L1 3*3*3*16 (+16), L2 16*9 (+16), L3 16*16 (+16), L4 16*9*12 (+12); totals equal the asserted 2,620 / 2,560.
 \end{table}
 
-Training uses 180 DIV2K images with an L1 loss (the checkpoint \texttt{srnet\_fp32.pt}; \texttt{results/quality/m2\_training\_summary.md}).
+Training uses 180 DIV2K images with an L1 loss (the checkpoint \texttt{srnet\_fp32.pt}; \texttt{results/\allowbreak{}quality/\allowbreak{}m2\_training\_summary.md}).
 The low-resolution inputs are made by Pillow bicubic downscaling after cropping the high-resolution image to even sides; PSNR and SSIM are computed on the luma channel (BT.601)
-with a 2-pixel border shaved, SSIM with a Gaussian $11\times11$ window, $\sigma=1.5$ (\texttt{software/ai/evaluation/metrics.py}).
+with a 2-pixel border shaved, SSIM with a Gaussian $11\times11$ window, $\sigma=1.5$ (\texttt{software/\allowbreak{}ai/\allowbreak{}evaluation/\allowbreak{}metrics.py}).
 TODO: training details to be checked against \texttt{train.py} before submission.
 
 \section{Quantization}\label{sec:quant}
@@ -118,18 +119,18 @@ Percentile & PSNR-Y INT8 (dB) & Drop vs FP32 (dB) \\
 \end{table}
 
 On the test sets the INT8 model loses on average 0.182, 0.111 and 0.076\,dB PSNR-Y against the FP32 network on Set5, Set14 and BSD100
-(worst single image 0.314, 0.285 and 0.413\,dB; \texttt{results/quality/model\_int8\_x2.md}).
+(worst single image 0.314, 0.285 and 0.413\,dB; \texttt{results/\allowbreak{}quality/\allowbreak{}model\_int8\_x2.md}).
 The INT8 model is implemented as a NumPy integer model (\texttt{integer\_reference.py}); it is the golden reference of the hardware (Section~\ref{sec:arch}).
 
 \subsection{Hardware mapping of the requantizer}
 In hardware the requantization of one output value is a single DSP48E1 operation: the 32-bit accumulator times the 16-bit multiplier gives a signed product that needs about 40 bits (the DSP has 48), the rounding constant $2^{S-1}$ is added, the result is shifted right by $S$ and clamped to $[0,255]$.
-The requantizer is checked on its own with vectors for shifts 1, 2, 3, 8, 21, 23 and 24 and with randomized layers in which every output channel has a different multiplier (\texttt{hardware/verification}, \texttt{gen\_unit\_vectors.py}). A deliberately wrong shared multiplier is detected only by the randomized layers (Section~\ref{sec:discussion}), because the deployed weights give all channels of a layer the same $M$.
-For new weight sets an overflow analysis is part of the export: for the quantization-aware candidate R2q the largest possible $|acc\cdot M|$ plus rounding needs at most 35 bits (limit 48), and the accumulators keep 13--15 bits of headroom below 32 bits even under the worst-case bound (\texttt{results/quality/acc\_range\_R2q\_rep\_qat\_s1.txt}).
+The requantizer is checked on its own with vectors for shifts 1, 2, 3, 8, 21, 23 and 24 and with randomized layers in which every output channel has a different multiplier (\texttt{hardware/\allowbreak{}verification}, \texttt{gen\_unit\_vectors.py}). A deliberately wrong shared multiplier is detected only by the randomized layers (Section~\ref{sec:discussion}), because the deployed weights give all channels of a layer the same $M$.
+For new weight sets an overflow analysis is part of the export: for the quantization-aware candidate R2q the largest possible $|acc\cdot M|$ plus rounding needs at most 35 bits (limit 48), and the accumulators keep 13--15 bits of headroom below 32 bits even under the worst-case bound (\texttt{results/\allowbreak{}quality/\allowbreak{}acc\_range\_R2q\_rep\_qat\_s1.txt}).
 
 \subsection{Quantization-aware candidates (integer model; not yet on the board)}
-Post-training quantization is enough for the deployed network, but not for every network. A re-parameterized network (training-time blocks merged into plain convolutions) collapses under PTQ, and quantization-aware training (QAT) recovers $+3.40$, $+1.99$ and $+1.54$\,dB PSNR-Y on Set5, Set14 and BSD100 (R2q $-$ R2, mean of two seeds; \texttt{results/quality/image\_quality\_ladder.md}).
+Post-training quantization is enough for the deployed network, but not for every network. A re-parameterized network (training-time blocks merged into plain convolutions) collapses under PTQ, and quantization-aware training (QAT) recovers $+3.40$, $+1.99$ and $+1.54$\,dB PSNR-Y on Set5, Set14 and BSD100 (R2q $-$ R2, mean of two seeds; \texttt{results/\allowbreak{}quality/\allowbreak{}image\_quality\_ladder.md}).
 Against the mean of two trainings of the deployed recipe (R0), the QAT network R2q gains $+0.87$, $+0.50$ and $+0.36$\,dB, and R3q, which adds a nearest-neighbour anchor (the upscaled input is added to the last layer's output), $+1.12$, $+0.70$ and $+0.49$\,dB; R3q is $+0.26$, $+0.20$ and $+0.13$\,dB better than R2q (two seeds each, integer model, selection on validation images only).
-R2q needs no RTL change except different constants (shifts 22, 22, 21, 22); the anchor needs a small RTL change (the anchor pixel is added through the requantizer's rounding constant, no extra cycle; \texttt{results/utilization/m6\_system\_R3q.md} in the sandbox branch \texttt{r3q}).
+R2q needs no RTL change except different constants (shifts 22, 22, 21, 22); the anchor needs a small RTL change (the anchor pixel is added through the requantizer's rounding constant, no extra cycle; \texttt{results/\allowbreak{}utilization/\allowbreak{}m6\_system\_R3q.md} in the sandbox branch \texttt{r3q}).
 Both are simulated and netlist-simulated bit-exactly but \emph{pending board run}; every board statement in this paper refers to the deployed design R0.
 
 \section{Architecture}\label{sec:arch}
@@ -139,9 +140,9 @@ Everything in the PL uses one clock, \texttt{FCLK\_CLK0}, at 100\,MHz, so there 
 
 \subsection{Tiling and dataflow}
 The frame is processed in tiles of $64\times64$ input pixels (producing $128\times128$ output pixels). Because all convolutions are valid, each tile needs a 3-pixel halo: $70\times70\times3 = 14{,}700$ bytes go in and
-$128\times128\times3 = 49{,}152$ bytes come out per tile. The ARM pads the $960\times540$ frame by replication, which gives $15\times9 = 135$ tiles per frame; the halo makes the engines compute about 10\,\% more MACs than the untiled frame (1.460 vs.\ 1.327\,G; cycle model, \texttt{docs/paper/cycle\_model.md}).
+$128\times128\times3 = 49{,}152$ bytes come out per tile. The ARM pads the $960\times540$ frame by replication, which gives $15\times9 = 135$ tiles per frame; the halo makes the engines compute about 10\,\% more MACs than the untiled frame (1.460 vs.\ 1.327\,G; cycle model, \texttt{docs/\allowbreak{}paper/\allowbreak{}cycle\_model.md}).
 A tile is processed in four steps that do not overlap: (i) the ARM copies the 70$\times$70 patch to a DDR buffer and the DMA streams it into the core, (ii) the four convolution layers run one after the other, (iii) the pixel-shuffled result streams back through the DMA to a second buffer, and (iv) the ARM places it in the output frame.
-The ARM work (padding 5.9\,ms and tile copies 26.4\,ms per frame) is measured on the board (Table~\ref{tab:system} and \texttt{results/speed/m7\_timing\_20frames.md}).
+The ARM work (padding 5.9\,ms and tile copies 26.4\,ms per frame) is measured on the board (Table~\ref{tab:system} and \texttt{results/\allowbreak{}speed/\allowbreak{}m7\_timing\_20frames.md}).
 
 \begin{figure}[t]
 \centering
@@ -177,20 +178,20 @@ The schedule is data independent: a 64$\times$64 tile takes 124{,}872, 69{,}713,
 The difference of 72{,}052 cycles between the tile and the engines is byte-wide stream I/O (14{,}700 cycles to load, 49{,}152 bytes out, and fetch cycles; derived by subtraction).
 % sources: results/utilization/m4_*.md, m5_tile_core.md, docs/paper/cycle_model.md Part 1 (simulated column), results/speed/m7_timing_20frames.md (board CYCLES).
 The layer RAMs dominate the memory: a plain $4624\times128$-bit RAM maps to 32 RAMB36 because Vivado rounds the depth to a power of two, so the RAMs are split into a power-of-two part plus a remainder (18.5 RAMB36 for each 128-bit RAM). The whole core uses 70 of 140 block-RAM tiles and 68 of 220 DSPs
-(\texttt{results/utilization/m5\_tile\_core.md}); in the complete system (PS7, DMA, interconnect, our logic) the 100\,MHz build uses 5{,}296 LUT, 7{,}831 FF, 72 BRAM tiles and 68 DSP with WNS +0.503\,ns (Table~\ref{tab:system}).
+(\texttt{results/\allowbreak{}utilization/\allowbreak{}m5\_tile\_core.md}); in the complete system (PS7, DMA, interconnect, our logic) the 100\,MHz build uses 5{,}296 LUT, 7{,}831 FF, 72 BRAM tiles and 68 DSP with WNS +0.503\,ns (Table~\ref{tab:system}).
 One register stage between the engine's result mux and the requantizer (added after a first timing run) costs one cycle per engine run and nothing in throughput.
 
 \subsection{AXI interface, registers and driver}
 The wrapper (\texttt{sr\_axis\_wrapper.v}) converts a 32-bit AXI4-Stream (little-endian) into the core's byte stream and packs the output bytes into 32-bit beats with \texttt{TLAST} on the last one. It accepts input only during the core's load phase, so the DMA can be armed before the start pulse.
 It flags an early \texttt{TLAST}, a missing \texttt{TLAST} on the last input beat and a start while busy; the top module adds a \texttt{TKEEP} check. The first error of a tile is kept in \texttt{ERROR\_CODE}.
-The AXI4-Lite block (\texttt{sr\_accel\_top.v}) has CONTROL, STATUS, TILE\_SIZE, the core's CYCLES counter, ERROR\_CODE, VERSION and seven read-only debug registers (\texttt{docs/REGISTER\_MAP.md}).
+The AXI4-Lite block (\texttt{sr\_accel\_top.v}) has CONTROL, STATUS, TILE\_SIZE, the core's CYCLES counter, ERROR\_CODE, VERSION and seven read-only debug registers (\texttt{docs/\allowbreak{}REGISTER\_MAP.md}).
 The driver programs the DMA in simple mode, polls with a timeout of about one second, and on any error resets the core, then the DMA, then the core again before it checks that STATUS and ERROR\_CODE are clear. It never retries a failed tile silently.
-On the board this was exercised with deliberate faults (input too short, input too long, output buffer too short) and with 8{,}000 back-to-back initialisation-and-tile cycles without an error (\texttt{results/speed/m6\_board.md}, tests T5 and T6).
+On the board this was exercised with deliberate faults (input too short, input too long, output buffer too short) and with 8{,}000 back-to-back initialisation-and-tile cycles without an error (\texttt{results/\allowbreak{}speed/\allowbreak{}m6\_board.md}, tests T5 and T6).
 The early first-tile failures of 2026-10-11 were traced to reprogramming the PL while a DMA transfer was in flight; the programming scripts now isolate the PL first. Two single failures remain unexplained (Section~\ref{sec:discussion}).
 
 \subsection{Verification chain}
-The reference chain is PyTorch FP32 $\to$ NumPy integer model $\to$ RTL, and the RTL is compared with the integer model byte for byte. The regression (\texttt{hardware/verification/run\_tests.sh full}, Icarus Verilog, 88 runs) checks every engine layer by layer against golden tile dumps, randomized layers with distinct multipliers per channel, the whole core at the real tile size, a 4-tile seam test, the AXI wrapper and the register block (with random stalls), and one-cycle-reset aborts; post-synthesis netlists are simulated in xsim.
-On the board, the output of all 119 test images (Set5, Set14, BSD100) is byte-identical to the integer model (\texttt{results/quality/m7\_board\_testsets\_run.log}).
+The reference chain is PyTorch FP32 $\to$ NumPy integer model $\to$ RTL, and the RTL is compared with the integer model byte for byte. The regression (\texttt{hardware/\allowbreak{}verification/\allowbreak{}run\_tests.sh full}, Icarus Verilog, 88 runs) checks every engine layer by layer against golden tile dumps, randomized layers with distinct multipliers per channel, the whole core at the real tile size, a 4-tile seam test, the AXI wrapper and the register block (with random stalls), and one-cycle-reset aborts; post-synthesis netlists are simulated in xsim.
+On the board, the output of all 119 test images (Set5, Set14, BSD100) is byte-identical to the integer model (\texttt{results/\allowbreak{}quality/\allowbreak{}m7\_board\_testsets\_run.log}).
 How well this regression detects bugs is measured in Section~\ref{sec:discussion}.
 
 \section{Results}\label{sec:results}
@@ -274,12 +275,40 @@ ZedBoard FPGA (board-measured) & 1{,}311.9 & 0.76 \\
 \end{table}
 
 \section{Discussion}\label{sec:discussion}
-% TODO after the board session and the fmax decision.  Facts to discuss (all stored):
-%  - utilization gap: only one of the four engines works at a time, 17.2 % of the 68 DSPs busy (cycle MODEL, docs/paper/cycle_model.md Part 1); layer 4 is 64 % of the cycles.
-%  - predictions (not built): line-buffer layer pipeline about 3.9 fps at 68 DSP, 100 MHz (Part 2); shared engine 2.2 / 2.8 fps (Part 3).  Label as predictions.
-%  - 150 MHz does not close timing without a pipeline register (docs/paper/timing_150mhz.md; reproduction status there).
-%  - limits: 0.76 fps is not real time; load, compute and output are not overlapped; power is an estimate; images go in over JTAG; two single first-tile failures of 2026-10-11 remain unexplained.
-TODO.
+% Every number is from a stored file named in a comment; predictions are labelled "predicted"/"model" in the text.
+
+\subsection{Why 0.76\,fps: the utilization gap}
+The design is slow for a structural reason, and the reason can be computed. A frame needs 1.327\,G MACs (2{,}560 per input pixel), 1.460\,G as tiled. At 68 DSPs and 100\,MHz the ideal time would be 0.195\,s; the board needs 1.312\,s.
+Inside the tile core the average is 11.7 MACs per cycle, \textbf{17.2\,\%} of the 68 DSPs, and over the whole frame including the ARM and DMA part 11.1 MACs per cycle (16.4\,\%).
+The cause is not idle lanes inside an engine (lane utilization is 100\,\% in L1, L3 and L4 and 56\,\% in L2) but that only one of the four engines runs at a time, so on average about three quarters of the DSPs wait.
+Layer 4 alone takes 589{,}844 of the 926{,}201 cycles of a tile (63.7\,\%): it has 144 steps per output pixel and only 12 lanes.
+The core itself accounts for 95.3\,\% of the frame time (1{,}250.4 of 1{,}311.9\,ms); the ARM and DMA overhead is 61.5\,ms (\texttt{results/\allowbreak{}speed/\allowbreak{}m7\_timing\_20frames.md}, \texttt{docs/\allowbreak{}paper/\allowbreak{}cycle\_model.md} Part~1).
+The cycle model reproduces the simulated cycles of each layer to within 17 to 24 cycles per tile (+24, +17, +24, +20 for L1--L4), so it is a fair basis for the predictions below, but the predictions themselves are \emph{not} measurements.
+
+\textbf{Predictions (model only, nothing built).} A line-buffer pipeline in which all four layers work at once, with the same 68 DSPs, would need about 25.2\,M cycles per frame, i.e.\ \emph{predicted} 258\,ms (3.9\,fps) at 100\,MHz, assuming no stalls, a 32-bit output stream and no tile halo (Part~2 of the cycle model).
+A single shared engine that uses all DSPs for one layer at a time would be \emph{predicted} at 2.2\,fps (I/O as today) or 2.8\,fps (I/O overlapped) at 100\,MHz (Part~3). Such figures omit stalls and control cost, and layer-pipelined designs already exist in the literature (to be cited in the related-work section), so we claim the measured gap and its cause, not the pipeline as a contribution.
+
+\subsection{What limits the clock}
+The unchanged design does not close timing at 152.38\,MHz (the nearest frequency the PS7 PLL gave to a 150\,MHz request): worst negative slack $-1.693$\,ns, total negative slack $-421.053$\,ns, 580 of 23{,}943 endpoints failing, while the 100\,MHz board build has WNS $+0.503$\,ns (\texttt{results/\allowbreak{}utilization/\allowbreak{}timing\_150mhz/\allowbreak{}}, \texttt{docs/\allowbreak{}paper/\allowbreak{}timing\_150mhz.md}; the run was repeated and every number reproduced).
+The failures are concentrated: 434 endpoints (worst $-1.693$\,ns) are one path type, an activation RAM $\to$ channel-select multiplexer $\to$ the A input of a MAC DSP48E1, which has no input register in the current RTL and therefore needs 1.928\,ns of setup against 0.362\,ns for an input with its own register.
+The next classes are inside the Xilinx AXI DMA (106 endpoints, worst $-0.885$\,ns), the requantizer feed (21, $-0.392$\,ns), our AXI-Lite registers (9, $-0.174$\,ns), the weight ROM $\to$ DSP B input (8, $-0.153$\,ns) and the last RAM $\to$ output word (2, $-0.091$\,ns).
+A one-register change was derived from these paths (\texttt{docs/\allowbreak{}paper/\allowbreak{}fmax\_plan.md}): the activation is registered once more before the MAC, and the weight address and control signals follow one cycle later. The register costs one cycle per engine run, i.e.\ 4 cycles per tile: the tile core takes 926{,}205 instead of 926{,}201 cycles in simulation (the same real-size golden tiles in both trees; \texttt{results/\allowbreak{}utilization/\allowbreak{}r0\_125\_sim\_cycles.txt} in branch \texttt{r0\_125}). Whether Vivado places the register inside the DSP's own input register does not change this count; it changes only the setup time at that pin.
+With this change the whole system was rebuilt at 125.000\,MHz (branch \texttt{r0\_125}, \texttt{results/\allowbreak{}utilization/\allowbreak{}m6\_system\_R0\_125.md} in that branch): post-route WNS $+0.632$\,ns, WHS $+0.032$\,ns, no failing endpoint of 24{,}167, 5{,}251 LUT, 7{,}979 FF (+148), 72 BRAM tiles and 68 DSPs, and the full regression (88 runs) passes.
+The plan had estimated about $+1.3$\,ns for the worst RAM-to-MAC path; the built design has $+0.63$\,ns on the same path type, so the estimate was optimistic by about 0.7\,ns because the placement changed. 43 of the 60 MAC DSPs use their internal input register; the other 17 keep a fabric register.
+At 150\,MHz the same single register is not enough by the plan's arithmetic (about $-0.02$\,ns for the RAM path and about $-0.8$\,ns in the DMA IP), and this was not built.
+The \emph{predicted} frame time at 125\,MHz, with the ARM and DMA overhead held at 61.5\,ms, is 1{,}061.8\,ms (0.942\,fps; \texttt{docs/\allowbreak{}paper/\allowbreak{}cycle\_model.md} Part~4); the 125\,MHz bitstream is \emph{pending board run}, and board power at the higher clock is not measured.
+
+\subsection{How strong is the verification?}
+A bit-exact regression passes if the design is right, but it says little about whether it would fail if the design were wrong. We therefore injected 20 single-edit faults into the RTL (7 in the requantizer, 4 in the MAC, 3 in the engine, 3 in the tile core, 3 in the control path) and ran the quick regression (36 runs) on each; an unmutated control passes 36 of 36.
+\textbf{All 20 are detected; none survives} (\texttt{docs/\allowbreak{}paper/\allowbreak{}mutation\_study.md}). The result is more informative than the count. Five faults change the output quality by less than 0.01\,dB PSNR-Y on the 119 test images and would pass any quality comparison: a bias that is one too large (A3, $+0.0020$\,dB mean), a requantizer valid-pipeline reset gate (K1), a busy flag that is not reset (K2), a cycle counter that is not reset (K3), and a bug that gives every channel the multiplier of channel~0 (E1).
+E1 changes no output at all on the deployed weights, because all channels of a layer share one multiplier. These faults are seen only by specific tests: E1 only by the randomized layers with distinct multipliers per channel, K1 and K2 only by the reset and abort sweeps of the conv-engine sections, K3 by the wrapper, core and seam sections. Removing any one of these tests would let a fault survive.
+The limits are as important: the mutants are hand-written and sit in the requantizer, MAC, engine and tile core, not in the AXI wrapper, the top module, the weight ROM or the split RAM; 18 of the 20 image-quality columns rest on a Python twin that reproduced the RTL output byte for byte (C3 is not verified, E3 has no twin); only the quick suite was run on the mutants (the full suite contains it); and everything is simulation, not board.
+
+\subsection{Limits}
+0.76\,fps is not real time. Load, compute and output of a tile are not overlapped. The power figure in Table~\ref{tab:system} is a Vivado estimate with low confidence; a board-level measurement (12\,V input, multimeter on the current-sense resistor) is \emph{pending board run}, and it will not be comparable to the on-chip estimate.
+The timing run uses one image and one board; the ARM-only baseline (T7) and the R2q and R3q candidates are \emph{pending board run}.
+Images go in over JTAG, not from a video source. Two single first-tile failures on 2026-10-11 remain unexplained (the 8{,}000-tile test afterwards showed none; \texttt{results/\allowbreak{}speed/\allowbreak{}m6\_board.md}).
+No comparison with other FPGA super-resolution results is made here (related work is still to be written).
 
 \section*{Acknowledgment}
 TODO.
