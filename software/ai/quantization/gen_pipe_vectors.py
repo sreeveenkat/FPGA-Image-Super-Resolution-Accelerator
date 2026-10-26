@@ -162,6 +162,15 @@ def main() -> int:
         emit(net, "gtile", z["tile"].astype(np.uint8), z["out"].astype(np.uint8))
     else:
         print("SKIP gtile: data/golden/real0.npz missing (run export_rtl.py)")
+    raw = Path("data/board/div2k_img0193_lr_960x540.raw")
+    if raw.exists():                                                          # > 8,192 anchor pixels: the FIFO pointers wrap (2026-10-26 deadlock)
+        big = np.frombuffer(raw.read_bytes()[16:], dtype=np.uint8).reshape(540, 960, 3)
+        frame(net, "p192", np.ascontiguousarray(big[200:392, 300:492]))       # 192 x 192 = the area of 3 x 3 tiles of 64: all edges and corners
+        frame(net, "pw960x24", np.ascontiguousarray(big[0:24]))               # full width, top edge
+        frame(net, "pmaxw", np.ascontiguousarray(np.concatenate([big[300:304], big[300:304, :58]], axis=1)))   # W = 1018 = MAX_W: last line-buffer / bank addresses
+        frame(net, "ptall", rng.integers(0, 256, (4096, 1, 3), dtype=np.uint8))  # W = 1, H = 4096 = MAX_H: row counters past 12 bits
+    else:
+        print("SKIP p192/pw960x24: data/board/div2k_img0193_lr_960x540.raw missing (make_test_images.py)")
     if "--full" in sys.argv:
         raw = Path("data/board/div2k_img0193_lr_960x540.raw")
         frame(net, "pfull", np.frombuffer(raw.read_bytes()[16:], dtype=np.uint8).reshape(540, 960, 3))   # SRIM: 16-byte header

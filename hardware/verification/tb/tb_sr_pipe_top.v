@@ -158,8 +158,9 @@ module tb_sr_pipe_top;
     end
 
     // ---- independent cycle count: from the accepted start (1) while the core is busy, until done (the CYCLES register must equal it)
-    integer tcyc = 0;
+    integer tcyc = 0, amax = 0;
 `ifndef POSTSYNTH
+    always @(posedge aclk) if (frame_live && dut.core.u_anc.cnt > amax) amax = dut.core.u_anc.cnt;   // highest anchor-FIFO occupancy of the frame
     always @(posedge aclk) begin
         if (dut.start_ok) tcyc <= 1;
         else if (dut.core.busy && !dut.core.done) tcyc <= tcyc + 1;
@@ -195,7 +196,7 @@ module tb_sr_pipe_top;
     task run_frame(input integer inj_kind, input integer exp_code, input integer abort_at);
         begin
             ib = 0; ob = 0; inj = inj_kind; k1 = 0; k2 = 0; k3 = 0; k4 = 0;
-            srst_seen = 0;
+            srst_seen = 0; amax = 0;
             dma_on = 1; rx_on = 1;
             repeat (5 + ($random(seed2) & 15)) @(negedge aclk);            // the DMA is armed before start: nothing may be accepted yet
             if (ib != 0) begin $display("FAIL input accepted before start"); errors = errors + 1; end
@@ -212,9 +213,24 @@ module tb_sr_pipe_top;
                 repeat (300) begin @(negedge aclk); if (m_tvalid || s_tready) begin $display("FAIL stream activity after the soft reset"); errors = errors + 1; end end
                 expect_reg(6'h04, 32'd0, "STATUS after soft reset");
             end else begin
-                if (ob != nbo) begin $display("FAIL %s: %0d of %0d output beats (timeout)", fname, ob, nbo); errors = errors + 1; end
+                if (ob != nbo) begin
+                    $display("FAIL %s: %0d of %0d output beats (timeout)", fname, ob, nbo); errors = errors + 1;
+`ifndef POSTSYNTH
+                    // where it stopped: input side, each stage (next input x/y, waiting window, slot counter), the FIFOs, the anchor FIFO, the output banks
+                    $display("  in: beats %0d/%0d pixels %0d/%0d un %0d tready %b | anchor FIFO wp-rp %0d full %b",
+                             dut.core.in_beats, dut.core.nbi, dut.core.pcnt, dut.core.npix, dut.core.un, s_tready, dut.core.u_anc.wp - dut.core.u_anc.rp, dut.core.u_anc.full);
+                    $display("  s1 x %0d y %0d hold %b win %b run %b in_done %b | f1 res %0d | s2 x %0d y %0d hold %b win %b in_done %b | f2 res %0d",
+                             dut.core.s1.ix, dut.core.s1.iy, dut.core.s1.hold, dut.core.s1.win_rdy, dut.core.s1.run, dut.core.s1.in_done, dut.core.f1.res,
+                             dut.core.s2.ix, dut.core.s2.iy, dut.core.s2.hold, dut.core.s2.win_rdy, dut.core.s2.in_done, dut.core.f2.res);
+                    $display("  s3 x %0d y %0d hold %b win %b | f3 res %0d | s4 x %0d y %0d hold %b win %b run %b in_done %b | out sx %0d wx %0d free %b full %b st %0d rb %b dy %b",
+                             dut.core.s3.ix, dut.core.s3.iy, dut.core.s3.hold, dut.core.s3.win_rdy, dut.core.f3.res,
+                             dut.core.s4.ix, dut.core.s4.iy, dut.core.s4.hold, dut.core.s4.win_rdy, dut.core.s4.run, dut.core.s4.in_done,
+                             dut.core.u_out.sx, dut.core.u_out.wx, dut.core.u_out.free, dut.core.u_out.full, dut.core.u_out.st, dut.core.u_out.rb, dut.core.u_out.dy);
+`endif
+                end
                 axil_read(6'h04);
-                while (rd[0]) axil_read(6'h04);
+                t = 0;
+                while (rd[0] && t < 50) begin axil_read(6'h04); t = t + 1; end   // bounded: after a timeout the core may stay busy
                 frame_live = 0;
                 if (rd[1] !== 1'b1) begin $display("FAIL STATUS.done not set (0x%h)", rd); errors = errors + 1; end
                 if (rd[2] !== (exp_code != 0)) begin $display("FAIL STATUS.error %b, expected %0d", rd[2], exp_code != 0); errors = errors + 1; end
@@ -226,6 +242,9 @@ module tb_sr_pipe_top;
                     if (layers && (k1 != n1 || k2 != n2 || k3 != n3 || k4 != n4)) begin $display("FAIL stage output counts %0d %0d %0d %0d", k1, k2, k3, k4); errors = errors + 1; end
                 end
                 axil_read(6'h0C); cyc_reg = rd;
+`ifndef POSTSYNTH
+                $display("INFO %s: highest anchor FIFO occupancy %0d of 4096 (full from 4092)", fname, amax);
+`endif
 `ifndef POSTSYNTH
                 if (cyc_reg != tcyc) begin $display("FAIL CYCLES register %0d, independent count %0d", cyc_reg, tcyc); errors = errors + 1; end
 `endif
@@ -295,6 +314,9 @@ module tb_sr_pipe_top;
             axil_write(6'h00, 32'd2, 4'h1, 0);
             axil_write(6'h08, 32'd5, 4'hF, 0); axil_write(6'h18, 32'd0, 4'hF, 0); axil_write(6'h00, 32'd1, 4'h1, 0);
             repeat (20) @(negedge aclk); expect_reg(6'h10, 32'd4, "ERROR_CODE (H = 0)");
+            axil_write(6'h00, 32'd2, 4'h1, 0);
+            axil_write(6'h18, 32'd4097, 4'hF, 0); axil_write(6'h00, 32'd1, 4'h1, 0);
+            repeat (20) @(negedge aclk); expect_reg(6'h10, 32'd4, "ERROR_CODE (H = 4097)");
             if (s_tready) begin $display("FAIL s_axis_tready after a refused start"); errors = errors + 1; end
             axil_write(6'h00, 32'd2, 4'h1, 0);
             run_frame(0, 0, 0);

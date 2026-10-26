@@ -50,6 +50,10 @@ MUTANTS = [
      "wire [23:0] pix1 = {rq[8*(1 + 2*dy) +: 8], rq[8*(5 + 2*dy) +: 8], rq[8*(9 + 2*dy) +: 8]};", "colour order reversed (BGR) for dx = 1"),
     ("O3", "pipe/pipe_out.v", "assign ok = (sx != 16'd0) || free[sb];", "assign ok = 1'b1;", "output bank overwritten while it is read"),
     ("O4", "pipe/pipe_out.v", "ow <= pb[31:0]; ov <= 1'b1; olast <= (beats == n_beats - 1);", "ow <= pb[31:0]; ov <= 1'b1; olast <= (beats == n_beats - 2);", "TLAST one beat early"),
+    ("F2", "pipe/anchor_fifo.v", "    wire [AW:0] cnt  = wp - rp;", "    wire [31:0] cnt  = wp - rp;", "anchor FIFO occupancy in 32-bit context (the 2026-10-26 deadlock bug)"),
+    ("F3", "pipe/anchor_fifo.v", "            full <= (cnt >= DEPTH - 4);", "            full <= (cnt >= DEPTH - 1100);", "anchor FIFO stops early (2,996 entries < the 3,066 a max-width frame needs)"),
+    ("A3", "top/sr_accel_top.v", " && (frame_h <= MAXH);", ";", "frame height cap missing (H > 4096 accepted)"),
+    ("S15", "pipe/pipe_stage.v", "        d1_x    <= ix[AW-1:0];", "        d1_x    <= ix[AW-2:0];", "line-buffer write address one bit short (only W > 506 notices)"),
     ("F1", "pipe/pipe_fifo.v", "assign ok        = (res < DEPTH);", "assign ok        = (res <= DEPTH);", "FIFO accepts one reservation too many"),
     ("A1", "top/sr_accel_top.v", "(frame_w <= MAXW - 6)", "(frame_w <= MAXW - 5)", "frame width one above MAX_W accepted"),
     ("A2", "top/sr_accel_top.v", "else if (core_flags[2])  err_code <= 3'd3;", "else if (core_flags[2])  err_code <= 3'd2;", "TKEEP error reported as code 2"),
@@ -60,7 +64,8 @@ TOPF = FILES + ["top/sr_accel_top.v"]
 
 # (name, rtl files, testbench, iverilog params, plusargs, timeout s); fast first
 TESTS = (
-    [(f"stage L{L} random", FILES, "tb_pipe_stage.v", [f"tb_pipe_stage.LAYER={L}", "tb_pipe_stage.REAL=0"], ["+STALL=1", "+SWEEP=2"], 120) for L in (1, 2, 3, 4)]
+    [("fifos (pointer wrap)", ["pipe/anchor_fifo.v", "pipe/pipe_fifo.v"], "tb_fifos.v", [], [], 120)]
+    + [(f"stage L{L} random", FILES, "tb_pipe_stage.v", [f"tb_pipe_stage.LAYER={L}", "tb_pipe_stage.REAL=0"], ["+STALL=1", "+SWEEP=2"], 120) for L in (1, 2, 3, 4)]
     + [(f"stage L{L} random, slow consumer", FILES, "tb_pipe_stage.v", [f"tb_pipe_stage.LAYER={L}", "tb_pipe_stage.REAL=0"], ["+STALL=2"], 120) for L in (1, 4)]
     + [("adder tree N=27", ["pipe/adder_tree.v"], "tb_adder_tree.v", ["tb_adder_tree.N=27"], [], 60),
        ("adder tree N=9", ["pipe/adder_tree.v"], "tb_adder_tree.v", ["tb_adder_tree.N=9"], [], 60)]
@@ -68,7 +73,8 @@ TESTS = (
     + [("top small frames + stage outputs", TOPF, "tb_sr_pipe_top.v", [], ["+F0=p13x7", "+F1=p1x1", "+F2=p2x3", "+F3=psat", "+F4=p5x4", "+LAYERS=1"], 300),
        ("top errors + soft-reset aborts", TOPF, "tb_sr_pipe_top.v", [], ["+F0=p5x4", "+ERR=1", "+SWEEP=3"], 300),
        ("top stalls", TOPF, "tb_sr_pipe_top.v", [], ["+F0=pramp", "+F1=p2x3", "+STALL=1"], 300),
-       ("top slow output sink", TOPF, "tb_sr_pipe_top.v", [], ["+F0=pramp", "+F1=p13x7", "+STALL=2"], 600)]
+       ("top slow output sink", TOPF, "tb_sr_pipe_top.v", [], ["+F0=pramp", "+F1=p13x7", "+STALL=2"], 600),
+       ("top max width 1018 (anchor FIFO and line buffers at their limit)", TOPF, "tb_sr_pipe_top.v", [], ["+F0=pmaxw"], 900)]
 )
 
 

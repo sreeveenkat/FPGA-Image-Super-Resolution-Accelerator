@@ -8,7 +8,7 @@ cd "$(dirname "$0")/../.."
 source "$HOME/Desktop/vivado_install/Vivado/2024.1/settings64.sh" > /dev/null 2>&1
 FR="${1:-pfull}"; shift || true
 [ -f data/golden/pipe/pfull_meta.txt ] || .venv/bin/python software/ai/quantization/gen_pipe_vectors.py --full > /dev/null || exit 1
-W=hardware/vivado/build/xsim_fullframe; rm -rf $W; mkdir -p $W
+W=hardware/vivado/build/xsim_frame_$FR; rm -rf $W; mkdir -p $W          # one folder per frame: parallel runs must not delete each other's build
 ( cd $W && xvlog -sv -i ../../../.. ../../../rtl/common/requant.v ../../../rtl/pipe/*.v ../../../rtl/top/sr_accel_top.v ../../../verification/tb/tb_sr_pipe_top.v \
       > xvlog.log 2>&1 && xelab -O3 -timescale 1ns/1ps tb_sr_pipe_top -s fullframe > xelab.log 2>&1 ) || { echo "FAIL xvlog/xelab (see $W)"; exit 1; }
 start=$(date +%s)

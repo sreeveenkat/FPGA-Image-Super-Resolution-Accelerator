@@ -7,7 +7,7 @@
 #                    C tiling + frame padding)                                                                                    (~8 min)
 #   full           : everything in quick, the stages on the 64x48 real frame, the top on 64x48 / 37x29 / the golden tile with stalls, the board program
 #                    build, and the pipeline mutation test (mutate_pipe.py)                                                       (~45 min)
-#   The 960x540 frame is simulated separately in xsim (hardware/verification/run_fullframe.sh, ~30 min; Icarus would take ~90 min).
+#   The 960x540 frame is simulated separately in xsim (hardware/verification/run_fullframe.sh, ~10 min; Icarus would take ~90 min).
 # Needs: iverilog 12, data/golden/unit/*.hex (gen_unit_vectors.py), data/golden/pipe/* (gen_pipe_vectors.py; made here if missing).
 # There are no tiles, so there is no seam test: every top frame is compared with integer_reference.upscale() on the WHOLE frame, borders included.
 # Exit code 0 only if every test printed PASS and nothing printed FAIL.
@@ -41,6 +41,7 @@ echo "== unit tests: requantizer (also the anchor add mode), adder tree, weight 
 for s in 1 2 3 8 21 22 23 24 25; do build rq$s -P tb_requant.SHIFT=$s hardware/rtl/common/requant.v $TB/tb_requant.v && run rq$s; done
 for s in 21 22 25; do build rqa$s -P tb_requant_add.SHIFT=$s hardware/rtl/common/requant.v $TB/tb_requant_add.v && run rqa$s; done
 for n in 2 3 5 9 16 27; do build at$n -P tb_adder_tree.N=$n hardware/rtl/pipe/adder_tree.v $TB/tb_adder_tree.v && run at$n; done
+build fifos hardware/rtl/pipe/anchor_fifo.v hardware/rtl/pipe/pipe_fifo.v $TB/tb_fifos.v && run fifos       # far past the pointer wrap (the 2026-10-26 deadlock)
 out="$($PY software/ai/quantization/export_pipe.py --check)"; echo "$out"
 if echo "$out" | grep -q FAIL; then fail=$((fail+1)); echo "FAIL wpipe_L*.mem are not up to date (run export_pipe.py)"; else pass=$((pass+1)); echo "PASS wpipe_L1..4.mem match weights_L1..4.mem"; fi
 
@@ -82,8 +83,14 @@ if [ "$MODE" = full ]; then
     echo "== board program: compile + link with the Vitis ARM toolchain against the M0 platform BSP (skipped when the toolchain is not installed)"
     out="$(software/board/check_arm_build.sh 2>&1)"; echo "$out"
     if echo "$out" | grep -q '^SKIP'; then :; elif echo "$out" | grep -q '^PASS'; then pass=$((pass+1)); else fail=$((fail+1)); fi
+    echo "== frames at the counter limits in xsim: 192x192 and 960x24 (> 8,192 anchor pixels: FIFO pointer wrap), 1018x4 (MAX_W: last line-buffer/bank address), 1x4096 (MAX_H)"
+    for fr in p192 pw960x24 pmaxw ptall; do
+        out="$(hardware/verification/run_fullframe.sh $fr 2>&1)"; echo "$out" | grep -E '^(PASS|FAIL)'
+        if echo "$out" | grep -q '^PASS' && ! echo "$out" | grep -q '^FAIL'; then pass=$((pass+1)); else fail=$((fail+1)); fi
+    done
     echo "== pipeline mutation test: deliberate RTL defects, each must be caught (mutate_pipe.py exits 0 only then)"
-    runpy $PY hardware/verification/mutate_pipe.py
+    out="$($PY hardware/verification/mutate_pipe.py 2>&1)"; echo "$out"            # the whole mutant table (runpy would keep only the last lines)
+    if echo "$out" | grep -q '^PASS pipeline mutation test'; then pass=$((pass+1)); else fail=$((fail+1)); fi
 fi
 
 echo "== summary: $pass test runs passed, $fail failed ($MODE)"
