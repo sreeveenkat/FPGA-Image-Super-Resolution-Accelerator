@@ -1,6 +1,8 @@
 # Next compute architecture: whole-frame layer pipeline (design doc)
 
-Status: chosen 2026-10-26, implemented in the sandbox branch `pipe` (worktree `~/Desktop/venkat/sandbox_pipe`). Not on the board.
+Status: chosen 2026-10-26, implemented and verified on the PC 2026-10-27 in the sandbox branch `pipe` (worktree `~/Desktop/venkat/sandbox_pipe`):
+960x540 frame bit-exact in simulation (8,398,481 cycles), routed at 125 MHz (WNS +0.267 ns), 170 DSP, 27 BRAM, 9,888 LUT (`results/utilization/m6_system_pipe.md`
+in that branch). **Not on the board.**
 Main's deployed design (four folded engines over 64x64 tiles, `hardware/` on main) is unchanged.
 
 ## 1. Choice and why
@@ -43,7 +45,7 @@ DMA MM2S -> unpack 32b->24b px -> [L1 stage] -> FIFO -> [L2 stage] -> FIFO -> [L
 | L3 | conv1x1 16->16 | output-serial | 16 | output channel s = bias + sum over 16 input channels |
 | L4 | conv3x3 16->12 (+anchor) | input-serial | 108 = 12 x 9 | input channel s: 12 accumulators += sum over 9 taps |
 
-  Plus one requantizer (2 DSP) per stage: 160 + 8 = **168 DSP**.
+  Plus one requantizer (2 DSP) per stage: 160 + 8 = 168 DSP; as built **170** (2 more for the frame-size products in the core).
 * A stage = line buffer (2 rows in one simple dual-port RAM, K=3 only) + 3x3 window shift register + a window snapshot (so the
   next window loads while the current one computes) + MAC lanes (DSP) + pipelined adder trees + accumulator + `requant.v` (unchanged,
   `ADD_EN` for the anchor) + output word assembly. Weights per slot come from a 16-entry ROM (`wpipe_Ln.mem`, generated from the
@@ -56,8 +58,10 @@ DMA MM2S -> unpack 32b->24b px -> [L1 stage] -> FIFO -> [L2 stage] -> FIFO -> [L
   filling takes 16W.
 * Anchor: the L4 output (x,y) adds input pixel (x+3, y+3). Interior input pixels go into a FIFO in raster order and L4 pops one per
   output pixel. Bound: when L4 is at (x,y), the input can be at most ~3 rows + ~30 pixels ahead of the anchor it needs
-  (the line buffers hold 2 rows per 3x3 layer, the FIFOs 8 pixels each). So the 4096-entry FIFO cannot fill for W <= 1018. The
-  simulation checks overflow and underflow on every run.
+  (the line buffers hold 2 rows per 3x3 layer, the FIFOs 8 pixels each). So the 4096-entry FIFO cannot fill for W <= 1018: measured highest
+  occupancy 3,066 at W = 1018, 2,892 at W = 960. The simulation checks overflow and underflow on every run. **Bug found 2026-10-26:** the first
+  version computed the occupancy in 32 bits and reported full after the pointer wrap (8,192 pushes); see `docs/STATUS.md` and
+  `docs/PIPELINE_COUNTER_AUDIT.md` in the branch.
 
 ## 3. Registers (top module keeps the name `sr_accel_top`, so the block design is unchanged)
 
@@ -69,7 +73,7 @@ DMA MM2S -> unpack 32b->24b px -> [L1 stage] -> FIFO -> [L2 stage] -> FIFO -> [L
 | 0x0C | CYCLES | R | cycles from start to the last output beat of the frame |
 | 0x10 | ERROR_CODE | R | 1 TLAST early, 2 TLAST missing, 3 TKEEP != F, 4 frame size out of range (start refused) |
 | 0x14 | VERSION | R | 0x53525301 (pipeline, R3q weights + anchor, 125 MHz) |
-| 0x18 | FRAME_H | RW | LR frame height H (>= 1) |
+| 0x18 | FRAME_H | RW | LR frame height H (1..4096) |
 | 0x1C | MAX_W | R | 1018 |
 | 0x20 / 0x24 | DBG_IN_BEATS / DBG_OUT_BEATS | R | beats accepted / sent since the last start |
 
