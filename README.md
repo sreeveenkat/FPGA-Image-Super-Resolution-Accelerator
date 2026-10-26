@@ -236,6 +236,22 @@ Notes:
 * Training is statistically but not bit-for-bit reproducible (thread count changes the floating-point summation order: about 0.02 dB); that is
   why the checkpoint (14 KB) is committed and everything after it is checked byte for byte.
 
+## Designs in progress (built and simulated on the PC, **not yet run on a board**)
+
+All of them live in sandbox branches; `main`, its weights and its bitstream are unchanged. Every number is from simulation or Vivado; frame times
+are **predictions** until the board session. Expected board answers: [`docs/paper/board_expected.md`](docs/paper/board_expected.md); checklist:
+[`docs/paper/board_checklist.md`](docs/paper/board_checklist.md).
+
+| Design (branch) | What changes | Verified on the PC | Vivado (routed) | Frame time |
+|---|---|---|---|---|
+| R2q (`r2q`) | re-parameterized + QAT weights, same RTL | full regression, netlist simulation | 100 MHz, WNS +0.944 ns | as R0 (same cycles) |
+| R3q (`r3q`) | anchor network (+1.12 / +0.70 / +0.49 dB PSNR-Y over R0's 2-seed mean on Set5 / Set14 / BSD100, `docs/STATUS.md`), small RTL change | full regression, 26 anchor mutants, netlist simulation | 100 MHz, WNS +0.683 ns | as R0 |
+| r0_125, r3q_125 (`r0_125`, `r3q_125`) | one more register per MAC lane, 125 MHz | full regressions, netlist simulation | 125 MHz, WNS +0.632 / +0.393 ns | predicted ~1,062 ms |
+| **pipe** (`pipe`) | **new architecture**: whole-frame layer pipeline, all four layers at once, 16 cycles per pixel, no tiles ([`docs/ARCHITECTURE_PIPELINE.md`](docs/ARCHITECTURE_PIPELINE.md)) | 65-run regression, 34-mutant study, netlist simulation, **960×540 frame bit-exact (8,398,481 cycles)** | 125 MHz, WNS +0.267 ns; 170 DSP (77 %), 27 BRAM, 9,888 LUT | **predicted 73-102 ms (≈10-14 fps)** vs 1,312 ms measured for R0 |
+
+The pipeline's first full-size simulation found a FIFO bug that the whole regression and the mutation study had missed (a counter that no test
+wrapped); it is fixed, and every counter now has a test that crosses its wrap point (`docs/STATUS.md`).
+
 ## Verification chain
 
 `PyTorch FP32` → `NumPy integer model (golden)` → `RTL (Icarus, xsim, synthesized netlists)` → `board`. The RTL and the board are compared
@@ -245,17 +261,18 @@ golden tile, whole frames and all 119 test images.
 ## Limitations (honest list)
 
 * **0.76 fps, not real time.** The four layer engines run one after another and are folded (L4 alone is 64 % of the cycles); tile load, compute and
-  output are not overlapped. A faster version needs more parallel MACs in L4 and tile-level double buffering.
+  output are not overlapped. The whole-frame pipeline above is the answer to this; it is not on the board yet.
 * **Power is a Vivado estimate** (confidence Low); nothing was measured with an instrument. 82 % of the estimate is the ARM side (PS7).
 * **2 single first-tile failures** seen on 2026-10-11 are still unexplained (`results/speed/m6_board.md`); none happened in the thousands of tiles after
   the PL-isolation fix in the loading script.
 * Images are moved in and out over JTAG (debugger memory access), not from an SD card or a video input: fine for measuring, not a product.
 * The INT8 model loses 0.08-0.18 dB against FP32; fine random texture (gravel, fur, fabric) is not recovered by a 2,620-parameter network.
-* No comparison of speed with a CPU/GPU implementation was made.
+* PC comparison (measured, [`docs/paper/cpu_baseline.md`](docs/paper/cpu_baseline.md)): the same network in FP32 PyTorch takes 129 ms per frame on one
+  CPU thread of an i5-13450HX and 7.9 ms on an RTX 3050 laptop GPU (incl. copies); the deployed FPGA design (1,312 ms) is slower than both.
 
 ## Future work
 
-* Speed: parallelize L4, overlap load/compute/output, wider stream (target ~5-10 fps from the plan).
+* Speed: run the whole-frame pipeline (branch `pipe`) on the board; it is predicted at 73-102 ms per frame.
 * SAIF-based power estimate and a measured board power figure.
 * M8 options: HDMI output, ×4, luma-only network, ray-traced input.
 
