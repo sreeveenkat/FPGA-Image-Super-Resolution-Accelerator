@@ -6,7 +6,7 @@ Board on the PROG/JTAG USB (J17), boot jumpers on JTAG. Run every `xsdb` command
 
 Companion files (2026-10-24): `docs/paper/board_session_runbook.md` (the order of the day and every command), `docs/paper/board_expected.md` (what the board must print for each design, generated from each tree's integer model), `software/board/board_run.sh` (run + UART log capture, PC-tested only).
 
-## 0. The four designs and how to tell them apart
+## 0. The six designs and how to tell them apart
 
 | Name | Weights | Bitstream (outside the repo) | Tree to run from | 960x540 expected fnv1a32 | 128x128 baboon fnv1a32 |
 |---|---|---|---|---|---|
@@ -14,6 +14,8 @@ Companion files (2026-10-24): `docs/paper/board_session_runbook.md` (the order o
 | **R2q** (re-param + QAT, SHIFT 22/22/21/22) | branch `r2q` | `~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit` | `~/Desktop/venkat/sandbox_R2q` | 0x2afbc9ae | 0x272bafbb |
 | **R3q** (plain + anchor + QAT, SHIFT 22/22/21/25, RTL change) | branch `r3q` | `~/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.bit` | `~/Desktop/venkat/sandbox_R3q` | 0x45dd4e2d | 0xa1d2f75c |
 | **r0_125** (R0 weights, one more register per engine run, 125 MHz) | branch `r0_125` | `~/Desktop/venkat/R0_125_artifacts/design_1_wrapper_R0_125.bit` | `~/Desktop/venkat/sandbox_R0_125` | 0xcf947f22 (same weights as R0) | 0x91a4506d |
+| **r3q_125** (R3q weights + anchor, the r0_125 register, 125 MHz; the owner's final tiled target) | branch `r3q_125` | `~/Desktop/venkat/R3q_125_artifacts/design_1_wrapper_R3q_125.bit` | `~/Desktop/venkat/sandbox_R3q_125` | 0x45dd4e2d (same weights as R3q) | 0xa1d2f75c |
+| **pipe** (whole-frame layer pipeline, R3q weights + anchor, 125 MHz, `docs/ARCHITECTURE_PIPELINE.md`) | branch `pipe` | `~/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.bit` | `~/Desktop/venkat/sandbox_pipe` | 0x45dd4e2d (same weights as R3q) | 0xa1d2f75c |
 
 **Each design has its own VERSION register value** (read by the ARM driver and printed as `version=` in the stats of every run):
 
@@ -23,6 +25,8 @@ Companion files (2026-10-24): `docs/paper/board_session_runbook.md` (the order o
 | R2q | `0x53522201` |
 | R3q | `0x53523201` |
 | r0_125 | `0x53524201` |
+| r3q_125 | `0x53524301` |
+| pipe | `0x53525301` (other register map: FRAME_W/FRAME_H instead of TILE_SIZE, `docs/REGISTER_MAP.md` in that branch) |
 
 Each tree's driver accepts only its own family (`VERSION & 0xFFFFFF00`), so an ELF built in the R2q tree **refuses** to run on any other bitstream (`SR: VERSION 0x..., expected 0x53522201`, result != 0): a loud, free negative control. `run_board.tcl`, `demo.sh`, `run_testsets.sh` and `fresh_load_soak.sh` of the R2q/R3q trees default to their own bitstream and VERSION (override with `SR_BIT` / `SR_EXPECT_VERSION`). The golden tile (T1) and the checksum of the 960x540 output (T2) still prove the weights: each tree has its own `golden_tile.h`, `sr_weights.h` and `data/board/*expected*` made from its own weights. As a second negative control, the first R2q T2 output should also be compared against the R0 expected file: `compare_raw.py` must say `BYTE-EXACT: no`.
 
@@ -62,7 +66,7 @@ Input files `data/board/div2k_img0193_lr_960x540.raw` (R2q/R3q trees have it; ex
 If T1 fails on R2q: check that the right bitstream was loaded (`SR_BIT`), then run `SR_BIT=~/Desktop/venkat/TESTED_0602.bit` with the R0 T1 to prove the board and
 the tooling are fine; then report the failing tile and the `t1_r2q.txt` stats.
 
-## 4. Power measurement (every bitstream: R0, R2q, R3q, r0_125; plus ARM only)
+## 4. Power measurement (every bitstream: R0, R2q, R3q, r0_125, r3q_125, pipe; plus ARM only)
 
 **What to measure:** the ZedBoard's 12 V input power (whole board: Zynq, DDR, regulators, USB-UART, LEDs). The board overhead is the same in every state, so the
 **differences** between states are the useful numbers. The synthesis power estimates are 1.913 W (0602) and 1.910 W (R2q, current VERSION 0x53522201 build; `m6_system_R2q.md:45` in branch `r2q`; the 1.912 W on its line 6 is the superseded first build), both "low confidence"; the measurement
@@ -131,6 +135,37 @@ Only after R3q (section 5). Built 2026-10-25: routed WNS +0.632 ns at 125.000 MH
 | power | idle and processing for r0_125 (P1-125, P2-125, section 4) |
 
 If T1 or T2 fails: record it, stop, do not retry silently. The final target (R3q at 125 MHz) is built only after R3q and r0_125 both pass on the board (`docs/STATUS.md`).
+
+## 5c. After r0_125: r3q_125 (R3q at 125 MHz), from `~/Desktop/venkat/sandbox_R3q_125` (bitstream `~/Desktop/venkat/R3q_125_artifacts/design_1_wrapper_R3q_125.bit`, VERSION 0x53524301; the tree's default)
+Built 2026-10-26: routed WNS +0.393 ns at 125 MHz, quick 42/42, full 95/95, netlist simulation 5/5, 926,205 cycles per tile in simulation; **never run on a board**
+(`results/utilization/m6_system_R3q_125.md` in branch `r3q_125`). Commands: `board_session_runbook.md` section 8. Expected values: `board_expected.md`, section "R3q at 125 MHz".
+
+| Step | Pass when |
+|---|---|
+| T1 | `result=0`, **`version=0x53524301`**, stat6 = 20, CYCLES each within **926,214-926,245** |
+| T2 | `BYTE-EXACT: yes`, fnv1a32 **0x45dd4e2d** (same as R3q) |
+| 119 test images | `run_testsets.sh` from that tree: 119/119 byte-exact |
+| negative control | the R3q-tree ELF must refuse this bitstream (0x535243xx vs 0x535232xx) |
+| frame time | 20-frame mean in **1,033-1,064 ms** (prediction as for r0_125), max - min <= 3 ms |
+| power | idle and processing (section 4) |
+
+## 5d. The pipeline (`pipe`), from `~/Desktop/venkat/sandbox_pipe` (bitstream `~/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.bit`, VERSION 0x53525301; the tree's default)
+Built 2026-10-27: routed WNS +0.267 / WHS +0.014 ns at 125 MHz, 170 DSP / 27 BRAM / 9,888 LUT; quick 48/48, full (see `results/utilization/m6_system_pipe.md` in branch
+`pipe`), netlist simulation 4/4, 960x540 frame bit-exact in xsim (8,398,481 cycles); **never run on a board**. Different register map and driver (one DMA transfer per frame,
+no tiles): run ONLY the ELFs of this tree. Commands: `board_session_runbook.md` section 9. Expected values: `board_expected.md`, section "Pipeline".
+
+| Step | Pass when |
+|---|---|
+| T1 (golden tile as a 64 x 64 frame) | `result=0`, **`version=0x53525301`**, stat6 = 20, CYCLES each within **74,641-74,700** (simulation 74,641; window PROPOSED) |
+| T2 (960x540, one frame) | `BYTE-EXACT: yes`, fnv1a32 **0x45dd4e2d**; stat4..6 = frame CYCLES within **8,398,481-8,440,473** (simulation + 0.5 %, PROPOSED) |
+| T5 error recovery | `T5 PASS` (4 bad frames, each followed by a byte-exact good one) |
+| 119 test images | `run_testsets.sh` from that tree: 119/119 byte-exact (first whole-frame run on many sizes: a failure here is the most informative result of the session) |
+| negative controls | (a) the R3q-tree ELF must refuse this bitstream (VERSION); (b) this tree's T2 output compared with the R0 expected file must say `BYTE-EXACT: no` |
+| frame time | 20-frame mean in **73.1-102.3 ms** (PREDICTED from the simulated cycles + R0's measured padding; cache maintenance and DMA set-up not modelled), max - min <= 3 ms; per-frame times saved. The headline number of the session if it passes (R0: 1,311.9 ms) |
+| power | idle and processing (section 4); the PL runs with 170 of 220 DSPs busy, so this is the design where the processing - idle difference should be largest |
+
+If T1 fails here but passed for the tiled designs: the driver/register map is new (FRAME_W/H, one transfer per frame), so first check `version=` and ERROR_CODE in the stats
+(4 = size refused, 5 = internal FIFO error), and the UART log. Do not retry silently.
 
 ## 5b. Merge criteria (PROPOSED, the owner confirms; same text as `docs/STATUS.md`)
 A branch goes into `main` only if, with its own bitstream: (1) T1 passes with its own VERSION and T2 is byte-exact with its fnv1a32 (R2q 0x2afbc9ae, R3q 0x45dd4e2d);

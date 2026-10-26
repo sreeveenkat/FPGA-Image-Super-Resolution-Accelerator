@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Expected board answers for the three designs (R0 / 0602, R2q, R3q), recomputed from each tree's OWN integer model and checked against the files the board test will use.
+"""Expected board answers for every design (R0 / 0602, R2q, R3q, r0_125, r3q_125, pipe), recomputed from each tree's OWN integer model and checked against the files the board test will use.
 
     .venv/bin/python software/analysis/board_expected.py [--md docs/paper/board_expected.md]      (project root of main; ~40 s)
 
@@ -18,6 +18,19 @@ import sys
 from pathlib import Path
 
 V = Path.home() / "Desktop/venkat"
+# Pipeline (branch pipe) frame rule, from the 960x540 frame simulated in xsim (hardware/verification/run_fullframe.sh in that branch); PREDICTIONS, not board values.
+PIPE_SIM_CYCLES = 8_398_481     # 960x540 frame in xsim, 2026-10-27 (results/utilization/m6_system_pipe.md in branch pipe)
+if PIPE_SIM_CYCLES:
+    _core = PIPE_SIM_CYCLES / 125e6 * 1e3
+    _pred, _hi = _core + 5.9, _core + 5.9 + 29.2
+    PIPE_T2_CYCLES = f"960x540 frame CYCLES: simulation {PIPE_SIM_CYCLES:,}; window **{PIPE_SIM_CYCLES:,}-{int(PIPE_SIM_CYCLES * 1.005):,}** (+0.5 % for DMA back-pressure, PROPOSED)"
+    PIPE_T3 = (f"PREDICTED from the simulated frame cycles: core {_core:,.1f} ms at 125 MHz + ARM padding 5.9 ms (measured on R0) = **{_pred:,.1f} ms**; cache maintenance of the "
+               f"1.6 MB input and 6.2 MB output buffers and the DMA set-up are NOT modelled, so the plausible range is **{_pred:,.1f}-{_hi:,.1f} ms** (upper end = + the 29.2 ms "
+               "of R0's per-frame overhead that is neither padding nor tile copy); max - min <= 3 ms; output fnv as in the T2 row; stat9..11 = frame CYCLES")
+else:
+    PIPE_T2_CYCLES = "960x540 frame CYCLES: simulation pending"
+    PIPE_T3 = "pending (960x540 simulation not finished)"
+
 TREES = {
     "R0 / 0602": dict(tree=V / "sem_project_all", version_expected="0x53520602",
                       bits=[("tested copy (read-only)", V / "TESTED_0602.bit"), ("Vivado project output (run_board.tcl default)", V / "vitis/m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit")],
@@ -31,6 +44,17 @@ TREES = {
                                    xsa=V / "R0_125_artifacts/design_1_wrapper_R0_125.xsa",
                                    cycles="926,214-926,245 (the R0 window of 926,210-926,241 plus the 4 extra cycles per tile of simulation: 926,201 -> 926,205)",
                                    t3="PREDICTED 1,061.8 ms (model, `docs/paper/fmax_plan.md`); plausible range **1,033-1,064 ms** (lower end = core cycles at 125 MHz 1,000.3 ms + ARM padding/copies 32.3 ms, i.e. the DMA handshake overhead would have to vanish; upper end = prediction + 2 ms); max - min <= 3 ms; output fnv as in the T2 row"),
+    # 2026-10-26, branch r3q_125: R3q weights + anchor with the r0_125 register and clock.  Same cycles per tile as r0_125 (simulation 926,205), so the same windows.
+    "R3q at 125 MHz (r3q_125)": dict(tree=V / "sandbox_R3q_125", version_expected="0x53524301", bits=[("sandbox build (tree default)", V / "R3q_125_artifacts/design_1_wrapper_R3q_125.bit")],
+                                     xsa=V / "R3q_125_artifacts/design_1_wrapper_R3q_125.xsa",
+                                     cycles="926,214-926,245 (as r0_125: simulation 926,205 per tile, `results/utilization/m6_system_R3q_125.md` in branch r3q_125)",
+                                     t3="PREDICTED about 1,062 ms (as r0_125, same cycles per tile); plausible range **1,033-1,064 ms**; max - min <= 3 ms; output fnv as in the T2 row"),
+    # 2026-10-26, branch pipe: whole-frame layer pipeline (docs/ARCHITECTURE_PIPELINE.md), R3q weights + anchor, 125 MHz.  ONE DMA transfer per frame, no tiles.
+    "Pipeline (pipe)": dict(tree=V / "sandbox_pipe", version_expected="0x53525301", bits=[("sandbox build (tree default)", V / "pipe_artifacts/design_1_wrapper_pipe.bit")],
+                            xsa=V / "pipe_artifacts/design_1_wrapper_pipe.xsa",
+                            cycles="74,641-74,700 for the golden tile as a 64 x 64 frame (simulation 74,641, `tb_sr_pipe_top.v +F0=gtile`; +60 allowed for DMA back-pressure, PROPOSED window: the board has never run this design)",
+                            t2="one frame, no tiles; stat4..6 = frame CYCLES; " + PIPE_T2_CYCLES,
+                            t3=PIPE_T3),
 }
 ELFS = [("T1 golden tile", "sr_app_t1.elf"), ("T2 full frame", "sr_app_t2.elf"), ("T3 timing, 20 frames", "sr_app_t3_20f.elf"),
         ("T3 timing, 200 frames (power)", "sr_app_t3_200f.elf"), ("T7 ARM only, 1 frame", "sr_app_t11.elf"), ("T7 ARM only, 20 frames (power)", "sr_app_t11_20f.elf")]
@@ -91,8 +115,8 @@ def main():
                   f"| `version=` in every stats file / `init ok: VERSION` on the UART | **{d['version_expected']}** |",
                   f"| T1 golden tile: `result=0`, stat6 (identical repeats) | 0 and **20**; the ARM compares {p['t1_out_bytes']} output bytes with the golden tile itself (FNV-1a 32 of that tile: `0x{p['t1_model_fnv']:08x}`) |",
                   f"| T1 CYCLES (stat0..2 = min/max/mean) | each within **{d.get('cycles', '926,210-926,241 (simulation 926,201 + 1 for the wrapper = 926,202)')}** |",
-                  f"| T2 960x540 -> 1920x1080 (135 tiles): `fnv1a32=` in marker and stats, `compare_raw.py` | **0x{p['t2_model_fnv']:08x}**, `BYTE-EXACT: yes`, `bytes=6220816` (16-byte header + 6,220,800) |",
-                  f"| 128x128 -> 256x256 baboon (4 tiles) | **0x{p['baboon_model_fnv']:08x}** |",
+                  f"| T2 960x540 -> 1920x1080 ({d.get('t2', '135 tiles')}): `fnv1a32=` in marker and stats, `compare_raw.py` | **0x{p['t2_model_fnv']:08x}**, `BYTE-EXACT: yes`, `bytes=6220816` (16-byte header + 6,220,800) |",
+                  f"| 128x128 -> 256x256 baboon ({'one frame' if 't2' in d else '4 tiles'}) | **0x{p['baboon_model_fnv']:08x}** |",
                   "| T3 20 frames | " + d.get("t3", "mean within +-2 ms of 1,311.9 ms, max - min <= 3 ms, CYCLES 926,210-926,241, output fnv as in the T2 row") + " |",
                   "| T7 (ARM only, 1 frame) | `BYTE-EXACT: yes`, fnv as in the T2 row; time per frame **unknown** (never run) |", ""]
         lines += ["| Artifact | Path | md5 |", "|---|---|---|"]

@@ -66,7 +66,7 @@ wrong-bitstream control with the R2q bitstream (`SR_BIT=~/Desktop/venkat/R2q_art
 
 ## 5. Power (after the functional steps of each design)
 Procedure: `board_checklist.md` section 4. **Primary: inline DC power meter between the 12 V adapter and the barrel jack. Cross-check: J21** (10 mOhm, 1 W sense resistor in series with the 12 V input, per forum quotes of the ZedBoard Hardware User's Guide; page citation to be added): I = V_J21 / 0.010 Ohm, P = I x V_in. Measure V_in in every state.
-For **each bitstream** (R0, R2q, R3q, r0_125): idle (T1 finished, ARM in its idle loop) and processing (`sr_app_t3_200f.elf` of that tree, read during the run); plus P0 (PL not programmed) and P3 (ARM only, `sr_app_t11_20f.elf`). Wait 30 s per state, then at least 5 readings over at least 30 s, both meters in the same window; report mean/min/max/count. Repeat R0 idle/processing at the end (drift).
+For **each bitstream** (R0, R2q, R3q, r0_125, r3q_125, pipe): idle (T1 finished, ARM in its idle loop) and processing (`sr_app_t3_200f.elf` of that tree, read during the run); plus P0 (PL not programmed) and P3 (ARM only, `sr_app_t11_20f.elf`). Wait 30 s per state, then at least 5 readings over at least 30 s, both meters in the same window; report mean/min/max/count. Repeat R0 idle/processing at the end (drift).
 Start the long runs with `board_run.sh` (it prints the start time), e.g. `software/board/board_run.sh p2_r0 software/board/build/sr_app_t3_200f.elf data/board/div2k_img0193_lr_960x540.raw $D/p2_r0.raw` (R0 tree); in a sandbox `export SR_TREE=$PWD; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh` and `$BR p2_r2q ...`.
 Board-level power: not comparable to Vivado's on-chip estimate; compare deltas only. Write down both meter models, accuracy, range, resolution, and every reading with its time in `$D/power_readings.txt`.
 
@@ -85,3 +85,34 @@ $BR r125_t2 software/board/build/sr_app_t2.elf data/board/div2k_img0193_lr_960x5
 $BR r125_t3 software/board/build/sr_app_t3_20f.elf data/board/div2k_img0193_lr_960x540.raw $D/r125_t3.raw < /dev/null
 ```
 Pass: VERSION 0x53524201; T1 20/20 and CYCLES 926,214-926,245; T2 `BYTE-EXACT: yes`, fnv **0xcf947f22** (same weights as R0); T3 20-frame mean in the plausible range 1,033-1,064 ms (predicted 1,061.8 ms; **a prediction**). If T1 or T2 fails, record it and stop; do not retry silently. Do not compare power with the other designs (the clock differs).
+
+## 8. r3q_125, R3q at 125 MHz (tree `~/Desktop/venkat/sandbox_R3q_125`, branch `r3q_125`; VERSION 0x53524301)
+After section 7 (checklist section 5c). Same commands as section 7, from this tree, with the names `r3q125_*`; plus the 119 test images and the negative control:
+```bash
+cd ~/Desktop/venkat/sandbox_R3q_125; export SR_TREE=$PWD; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh
+$BR r3q125_t1 software/board/build/sr_app_t1.elf - - < /dev/null
+$BR r3q125_t2 software/board/build/sr_app_t2.elf data/board/div2k_img0193_lr_960x540.raw $D/r3q125_t2.raw < /dev/null
+~/Desktop/venkat/sem_project_all/.venv/bin/python software/host_tools/compare_raw.py $D/r3q125_t2.raw data/board/div2k_img0193_expected_1920x1080.raw; echo exit=$?
+$BR r3q125_t3 software/board/build/sr_app_t3_20f.elf data/board/div2k_img0193_lr_960x540.raw $D/r3q125_t3.raw < /dev/null
+software/board/run_testsets.sh < /dev/null                      # 119 images, ~11 min
+SR_BIT=~/Desktop/venkat/R3q_125_artifacts/design_1_wrapper_R3q_125.bit SR_TREE=~/Desktop/venkat/sandbox_R3q $BR r3q125_neg ~/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t1.elf - - < /dev/null   # must FAIL with a VERSION message
+```
+Pass: VERSION 0x53524301; T1 20/20, CYCLES 926,214-926,245; T2 fnv **0x45dd4e2d**; 119/119; T3 mean 1,033-1,064 ms (prediction).
+
+## 9. pipe, the whole-frame pipeline (tree `~/Desktop/venkat/sandbox_pipe`, branch `pipe`; VERSION 0x53525301)
+After section 8 (checklist section 5d). **Other register map and driver**: only this tree's ELFs. The same scripts (`run_board.tcl`, `board_run.sh`) work unchanged
+(VERSION at the same offset; the stats block has the same layout, with frame CYCLES instead of tile CYCLES).
+```bash
+cd ~/Desktop/venkat/sandbox_pipe; export SR_TREE=$PWD; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh
+$BR pipe_t1 software/board/build/sr_app_t1.elf - - < /dev/null                                    # golden tile as a 64x64 frame
+$BR pipe_t2 software/board/build/sr_app_t2.elf data/board/div2k_img0193_lr_960x540.raw $D/pipe_t2.raw < /dev/null
+~/Desktop/venkat/sem_project_all/.venv/bin/python software/host_tools/compare_raw.py $D/pipe_t2.raw data/board/div2k_img0193_expected_1920x1080.raw; echo exit=$?
+~/Desktop/venkat/sem_project_all/.venv/bin/python software/host_tools/compare_raw.py $D/pipe_t2.raw ~/Desktop/venkat/sem_project_all/data/board/div2k_img0193_expected_1920x1080.raw; echo exit=$?   # negative control: must be NOT byte-exact (R0 weights)
+$BR pipe_t5 software/board/build/sr_app_t5.elf - - < /dev/null                                    # error recovery
+$BR pipe_t3 software/board/build/sr_app_t3_20f.elf data/board/div2k_img0193_lr_960x540.raw $D/pipe_t3.raw < /dev/null
+software/board/run_testsets.sh < /dev/null                                                        # 119 images: many frame sizes, first time on hardware
+SR_BIT=~/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.bit SR_TREE=~/Desktop/venkat/sandbox_R3q $BR pipe_neg ~/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t1.elf - - < /dev/null   # must FAIL with a VERSION message
+```
+Pass: VERSION 0x53525301; T1 20/20, CYCLES 74,641-74,700; T2 fnv **0x45dd4e2d** and frame CYCLES 8,398,481-8,440,473; T5 PASS; 119/119; negative controls fail as expected;
+T3 20-frame mean in **73.1-102.3 ms** (prediction; R0 1,311.9 ms). Then power (section 5) with `sr_app_t3_200f.elf` of this tree (200 frames take only ~15-20 s here: read the
+meters during the run or start it twice).
