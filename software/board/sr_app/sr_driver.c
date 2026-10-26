@@ -11,7 +11,7 @@
 
 /* NOTE: in this BSP COUNTS_PER_SECOND expands to "XPAR_CPU_CORE_CLOCK_FREQ_HZ/2" WITHOUT outer parentheses, so wrap it before dividing by it. */
 #define SR_TICKS_PER_SEC     ((uint64_t)(COUNTS_PER_SECOND))
-#define SR_TIMEOUT_TICKS     SR_TICKS_PER_SEC            /* about 1 second */
+#define SR_TIMEOUT_TICKS     (2u * SR_TICKS_PER_SEC)     /* about 2 seconds (a 960x540 frame takes ~70 ms in the pipeline, simulation)  */
 
 /* Cortex-A9 global timer, read directly.  XTime_GetTime() of this SDT BSP gave 0 on the board (first run: "tile time 0 us"); the cause was not isolated (most likely the timer
  * was never started).  Reading the global timer directly, after setting its enable bit, works (checked against CYCLES).  With a dead timer the 1 s timeouts
@@ -48,21 +48,20 @@ static uint32_t dma_sr(const sr_dev_t *d, int dir)       /* dir: XAXIDMA_DMA_TO_
     return XAxiDma_ReadReg(d->dma.RegBase, ch + XAXIDMA_SR_OFFSET);
 }
 
-uint32_t sr_dbg[SR_DBG_WORDS];   /* FIRST sr_dump() since start: STATUS, ERROR_CODE, CYCLES, MM2S_SR, S2MM_SR, number of dumps, then (VERSION >= 0x53520602) the
-                                    debug registers IN_BEATS, TLAST_AT, START2BEAT, PRE_BEATS, STARTS, ERR_BEATS, ERR_CYCLES (main.c copies it into the DDR marker) */
+uint32_t sr_dbg[SR_DBG_WORDS];   /* FIRST sr_dump() since start: STATUS, ERROR_CODE, CYCLES, MM2S_SR, S2MM_SR, number of dumps, then the pipeline's
+                                    DBG_IN_BEATS, DBG_OUT_BEATS (words 6, 7; 8..12 stay 0) (main.c copies it into the DDR marker) */
 
 void sr_dump(const sr_dev_t *d, const char *why)
 {
     if (sr_dbg[5] == 0) {
         sr_dbg[0] = reg_rd(d, SR_REG_STATUS); sr_dbg[1] = reg_rd(d, SR_REG_ERROR_CODE); sr_dbg[2] = reg_rd(d, SR_REG_CYCLES);
         sr_dbg[3] = dma_sr(d, XAXIDMA_DMA_TO_DEVICE); sr_dbg[4] = dma_sr(d, XAXIDMA_DEVICE_TO_DMA);
-        if (d->version >= 0x53520602u)
-            for (uint32_t k = 0; k < 7; k++) sr_dbg[6 + k] = reg_rd(d, SR_REG_DBG_IN_BEATS + 4u * k);
+        sr_dbg[6] = reg_rd(d, SR_REG_DBG_IN_BEATS); sr_dbg[7] = reg_rd(d, SR_REG_DBG_OUT_BEATS);
     }
     sr_dbg[5]++;
-    xil_printf("SR DUMP (%s): STATUS=0x%08x ERROR_CODE=%u CYCLES=%u MM2S_SR=0x%08x S2MM_SR=0x%08x\r\n", why,
+    xil_printf("SR DUMP (%s): STATUS=0x%08x ERROR_CODE=%u CYCLES=%u MM2S_SR=0x%08x S2MM_SR=0x%08x IN_BEATS=%u OUT_BEATS=%u\r\n", why,
                reg_rd(d, SR_REG_STATUS), reg_rd(d, SR_REG_ERROR_CODE), reg_rd(d, SR_REG_CYCLES),
-               dma_sr(d, XAXIDMA_DMA_TO_DEVICE), dma_sr(d, XAXIDMA_DEVICE_TO_DMA));
+               dma_sr(d, XAXIDMA_DMA_TO_DEVICE), dma_sr(d, XAXIDMA_DEVICE_TO_DMA), reg_rd(d, SR_REG_DBG_IN_BEATS), reg_rd(d, SR_REG_DBG_OUT_BEATS));
 }
 
 /* wait until (STATUS & mask) == value, at most about 1 s */
@@ -139,8 +138,8 @@ int sr_init(sr_dev_t *d)
         xil_printf("SR: VERSION 0x%08x, expected 0x%08x (wrong SR_BASE 0x%08x or wrong bitstream)\r\n", ver, (unsigned)SR_VERSION, (unsigned)SR_BASE);
         return SR_RC_VERSION;
     }
-    const uint32_t hc = reg_rd(d, SR_REG_TILE_SIZE);
-    if (hc != SR_HC) { xil_printf("SR: TILE_SIZE %u, expected %u\r\n", hc, (unsigned)SR_HC); return SR_RC_TILE_SIZE; }
+    const uint32_t mw = reg_rd(d, SR_REG_MAX_W);
+    if (mw != SR_MAX_W) { xil_printf("SR: MAX_W %u, expected %u\r\n", mw, (unsigned)SR_MAX_W); return SR_RC_TILE_SIZE; }
     return sr_reset_all(d);                                           /* (XAxiDma_CfgInitialize resets the DMA too, but with a loop-count timeout and before the core) */
 }
 
@@ -149,18 +148,30 @@ int sr_last_recover = SR_RC_OK;
 int sr_start_order = 0;      /* 0: arm S2MM, arm MM2S, write START (normal);  1: arm S2MM, write START, arm MM2S (T6 experiment) */
 static void recover(sr_dev_t *d) { sr_last_recover = sr_reset_all(d); }
 
-int sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out) { return sr_run_tile_len(d, in, out, SR_TILE_IN_BYTES, SR_TILE_OUT_BYTES); }
+/* The golden tile (70 x 70 padded input, 128 x 128 output) is a 64 x 64 frame of the pipeline: T1, T5 and T6 keep their tile calls. */
+int sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out) { return sr_run_frame_len(d, in, out, SR_HC, SR_HC, SR_TILE_IN_BYTES, SR_TILE_OUT_BYTES); }
+int sr_run_tile_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t in_len, uint32_t out_len) { return sr_run_frame_len(d, in, out, SR_HC, SR_HC, in_len, out_len); }
 
-/* in_len / out_len other than the tile sizes only for the recovery test (main.c SR_TEST=5): they make the stream or the DMA fail on purpose */
-int sr_run_tile_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t in_len, uint32_t out_len)
+/* One whole frame: `in` = the replicate-padded (w+6) x (h+6) x 3 frame (the DMA reads whole 32-bit beats, so up to 3 bytes past its end are read too),
+ * `out` = 2w x 2h x 3 bytes.  Both in DDR, 4-byte aligned. */
+int sr_run_frame(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint32_t h)
+{
+    return sr_run_frame_len(d, in, out, w, h, 4u * SR_FRAME_IN_BEATS(w, h), SR_FRAME_OUT_BYTES(w, h));
+}
+
+/* in_len / out_len other than the frame sizes only for the recovery test (main.c SR_TEST=5): they make the stream or the DMA fail on purpose */
+int sr_run_frame_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint32_t h, uint32_t in_len, uint32_t out_len)
 {
     int rc;
+    const uint32_t in_bytes = 4u * SR_FRAME_IN_BEATS(w, h), out_bytes = SR_FRAME_OUT_BYTES(w, h);
     if (reg_rd(d, SR_REG_STATUS) & SR_STATUS_BUSY) { sr_dump(d, "core busy before start"); recover(d); return SR_RC_BUSY; }
+    reg_wr(d, SR_REG_FRAME_W, w);
+    reg_wr(d, SR_REG_FRAME_H, h);
 
     /* Caches: the DMA reads/writes DDR directly.  FLUSH (clean + invalidate) the input so the DMA sees the ARM's bytes, and flush the OUTPUT buffer too, so no
      * dirty line of it can be evicted later on top of the DMA's data; invalidate it again after the DMA is done so the ARM reads DDR, not stale cache lines. */
-    Xil_DCacheFlushRange((UINTPTR)in, SR_TILE_IN_BYTES);
-    Xil_DCacheFlushRange((UINTPTR)out, SR_TILE_OUT_BYTES);
+    Xil_DCacheFlushRange((UINTPTR)in, in_bytes > in_len ? in_bytes : in_len);
+    Xil_DCacheFlushRange((UINTPTR)out, out_bytes);
 
     /* arm the receiver first, then the sender; the core takes no data before CONTROL.START, so the order of these three steps is free except that START comes last */
     if (XAxiDma_SimpleTransfer(&d->dma, (UINTPTR)out, out_len, XAXIDMA_DEVICE_TO_DMA) != XST_SUCCESS) { sr_dump(d, "S2MM start refused"); recover(d); return SR_RC_DMA_START; }
@@ -172,7 +183,7 @@ int sr_run_tile_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t in_le
         if (XAxiDma_SimpleTransfer(&d->dma, (UINTPTR)in, in_len, XAXIDMA_DMA_TO_DEVICE) != XST_SUCCESS) { sr_dump(d, "MM2S start refused"); recover(d); return SR_RC_DMA_START; }
     }
 
-    /* wait: core DONE (or ERROR) and both DMA channels idle, one shared timeout of about 1 s */
+    /* wait: core DONE (or ERROR) and both DMA channels idle, one shared timeout of about 2 s */
     uint64_t t0, t;
     t0 = sr_now_ticks();
     for (;;) {
@@ -187,7 +198,7 @@ int sr_run_tile_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t in_le
     if (st & SR_STATUS_ERROR) { d->last_error_code = reg_rd(d, SR_REG_ERROR_CODE); sr_dump(d, "core reported an error"); recover(d); return SR_RC_HW_ERROR; }
     if ((dma_sr(d, XAXIDMA_DMA_TO_DEVICE) | dma_sr(d, XAXIDMA_DEVICE_TO_DMA)) & XAXIDMA_ERR_ALL_MASK) { sr_dump(d, "DMA error bits"); recover(d); return SR_RC_DMA_ERROR; }
 
-    Xil_DCacheInvalidateRange((UINTPTR)out, SR_TILE_OUT_BYTES);
+    Xil_DCacheInvalidateRange((UINTPTR)out, out_bytes);
     d->last_cycles = reg_rd(d, SR_REG_CYCLES);
     rc = SR_RC_OK;
     return rc;

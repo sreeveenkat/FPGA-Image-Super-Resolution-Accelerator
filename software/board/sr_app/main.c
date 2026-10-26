@@ -1,4 +1,6 @@
-/* Super-resolution accelerator test program (bare metal, ZedBoard).  T1-T6 run on the board since 2026-10-11; T7 (ARM-only) is checked on the PC only.
+/* Super-resolution accelerator test program (bare metal, ZedBoard), whole-frame PIPELINE version (branch `pipe`, VERSION 0x53525301; NOT run on a board).
+ * Differences to the tiled program: T2/T3 pad the frame to (W+6) x (H+6) and send it with ONE DMA transfer each way (no tile loop, no ARM tile copy; the
+ * output lands directly in the output image); CYCLES is per frame.  T1/T5/T6 use the golden tile as a 64 x 64 frame.  T7 (ARM only) keeps the tile loop.
  *
  * Select the test at build time (-DSR_TEST=n) or leave SR_TEST = 0 for a menu over the UART (115200 baud, /dev/ttyACM0):
  *   T1 golden tile   : the real0 tile from golden_tile.h goes through DMA + core; all 49,152 output bytes are compared; CYCLES is printed; then the same tile
@@ -36,6 +38,9 @@
 #endif
 #ifndef SR_T3_FRAMES
 #define SR_T3_FRAMES 5
+#endif
+#ifndef SR_T1_SIM_CYCLES
+#define SR_T1_SIM_CYCLES 74641u   /* CYCLES of the golden tile as a 64 x 64 frame in tb_sr_pipe_top.v (+F0=gtile, no stalls), 2026-10-26 */
 #endif
 
 #define SR_MAYBE_UNUSED __attribute__((unused))   /* a build with -DSR_TEST=n uses only one of the three tests */
@@ -90,7 +95,7 @@ SR_MAYBE_UNUSED static int test1(void)
     uint64_t t1 = now_ticks();
     if (rc != SR_RC_OK) { xil_printf("T1 FAIL: sr_run_tile returned %d\r\n", rc); return rc; }
     const int bad = compare_tile(out, sr_golden_out, SR_TILE_OUT_BYTES, "golden");
-    xil_printf("T1: CYCLES = %u (expected 926202 in simulation), tile time %u us (DMA + compute)\r\n", dev.last_cycles, ticks_to_us(t1 - t0));
+    xil_printf("T1: CYCLES = %u (expected %u in simulation), tile time %u us (DMA + compute)\r\n", dev.last_cycles, (unsigned)SR_T1_SIM_CYCLES, ticks_to_us(t1 - t0));
     if (bad) {
         xil_printf("T1 FAIL: %d of %u bytes differ from the golden output\r\n", bad, (unsigned)SR_TILE_OUT_BYTES);
         g_stats[20] = (uint32_t)bad; g_stats[0] = dev.last_cycles;
@@ -120,7 +125,7 @@ SR_MAYBE_UNUSED static int test1(void)
         tsum += r1 - r0;
     }
     xil_printf("T1: %d of 20 repeated runs identical to the first\r\n", identical);
-    xil_printf("T1: CYCLES over 21 runs: min %u, max %u, mean %u (simulation: 926202)\r\n", cmin, cmax, (uint32_t)(csum / 21u));
+    xil_printf("T1: CYCLES over 21 runs: min %u, max %u, mean %u (simulation: %u)\r\n", cmin, cmax, (uint32_t)(csum / 21u), (unsigned)SR_T1_SIM_CYCLES);
     xil_printf("T1: tile time over 21 runs (DMA + compute + cache ops): min %u us, max %u us, mean %u us\r\n",
                ticks_to_us(tmin), ticks_to_us(tmax), ticks_to_us(tsum / 21u));
     g_stats[0] = cmin; g_stats[1] = cmax; g_stats[2] = (uint32_t)(csum / 21u);
@@ -132,25 +137,13 @@ SR_MAYBE_UNUSED static int test1(void)
 }
 
 /* ------------------------------------------------------------------ T2 / T3 helpers */
-typedef struct { sr_dev_t *d; uint32_t cyc_min, cyc_max; uint64_t cyc_sum; uint32_t n; } tile_ctx_t;
-static int tile_cb(void *ctx, const uint8_t *in, uint8_t *out)
-{
-    tile_ctx_t *c = ctx;
-    int rc = sr_run_tile(c->d, in, out);
-    if (rc == SR_RC_OK) {
-        const uint32_t cy = c->d->last_cycles;
-        if (c->n == 0 || cy < c->cyc_min) c->cyc_min = cy;
-        if (c->n == 0 || cy > c->cyc_max) c->cyc_max = cy;
-        c->cyc_sum += cy;
-        c->n++;
-    }
-    return rc;
-}
-
 static int image_fits(uint32_t w, uint32_t h, sr_geom_t *g)
 {
     if (w == 0 || h == 0 || w > 8192 || h > 8192) return 0;
-    sr_geom(w, h, g);
+#if SR_TEST != 11
+    if (w > SR_MAX_W) return 0;                                   /* the pipeline's line buffers (MAX_W register) */
+#endif
+    sr_geom(w, h, g);                                             /* tiled geometry (T7); the pipeline's padded frame is smaller in both directions */
     return (16u + 3u * (uint64_t)w * h <= SR_IN_SIZE) && (16u + (uint64_t)sr_out_bytes(g) <= SR_OUT_SIZE) && (sr_padded_bytes(g) <= SR_PAD_SIZE);
 }
 
@@ -183,17 +176,32 @@ static void write_marker(uint32_t result, uint32_t bytes, uint32_t fnv, uint32_t
     Xil_DCacheFlushRange((UINTPTR)SR_MARK_ADDR, SR_MARK_SIZE);
 }
 
-/* one frame; fills the timing split.  Returns 0 or an error code. */
+/* one frame; fills the timing split.  Returns 0 or an error code.
+ * fn == NULL: the pipeline (pad to (W+6) x (H+6), one sr_run_frame: DMA in, compute, DMA out directly into the output image; tm->t_run = that wait, cut/place 0).
+ * fn != NULL: the tile loop with fn as the tile runner (T7, ARM only). */
 static int process_frame(const sr_geom_t *g, sr_tile_fn fn, void *ctx, uint64_t *t_pad, sr_timing_t *tm, uint64_t *t_total)
 {
     const uint8_t *lr = (const uint8_t *)(SR_IN_ADDR + 16);
     uint8_t *padded = (uint8_t *)SR_PAD_ADDR;
     uint8_t *out = (uint8_t *)(SR_OUT_ADDR + 16);
+    int rc;
     const uint64_t t0 = now_ticks();
-    sr_pad_image(lr, g, padded);
-    const uint64_t t1 = now_ticks();
-    const int rc = sr_upscale_padded(padded, g, out, (uint8_t *)SR_TILE_IN_ADDR, (uint8_t *)SR_TILE_OUT_ADDR, fn, ctx, now_ticks, tm);
-    const uint64_t t2 = now_ticks();
+    uint64_t t1, t2;
+    if (fn == NULL) {
+        sr_geom_t gf;
+        sr_geom_frame(g->w, g->h, &gf);
+        sr_pad_image(lr, &gf, padded);
+        t1 = now_ticks();
+        rc = sr_run_frame(&dev, padded, out, g->w, g->h);
+        t2 = now_ticks();
+        tm->t_cut = 0; tm->t_place = 0; tm->t_run = t2 - t1; tm->tiles = rc ? 0u : 1u;
+        (void)ctx;
+    } else {
+        sr_pad_image(lr, g, padded);
+        t1 = now_ticks();
+        rc = sr_upscale_padded(padded, g, out, (uint8_t *)SR_TILE_IN_ADDR, (uint8_t *)SR_TILE_OUT_ADDR, fn, ctx, now_ticks, tm);
+        t2 = now_ticks();
+    }
     *t_pad = t1 - t0;
     *t_total = t2 - t0;
     return rc;
@@ -224,15 +232,14 @@ SR_MAYBE_UNUSED static int test2(void)
     write_marker(0, 0, 0, 0, 0); ((volatile uint32_t *)SR_MARK_ADDR)[SR_MARK_W_MAGIC] = 0; Xil_DCacheFlushRange((UINTPTR)SR_MARK_ADDR, SR_MARK_SIZE); g_marker_written = 0;   /* clear the marker */
     int rc = read_input_header(&g);
     if (rc) { write_marker((uint32_t)rc, 0, 0, 0, 2); return rc; }
-    xil_printf("T2: %ux%u -> %ux%u, %u x %u = %u tiles\r\n", g.w, g.h, 2 * g.w, 2 * g.h, g.tiles_x, g.tiles_y, g.tiles_x * g.tiles_y);
-    tile_ctx_t tc = { &dev, 0, 0, 0, 0 };
+    xil_printf("T2: %ux%u -> %ux%u, one frame (pipeline)\r\n", g.w, g.h, 2 * g.w, 2 * g.h);
     sr_timing_t tm; uint64_t tp, tt;
     write_output_header(&g);
-    rc = process_frame(&g, tile_cb, &tc, &tp, &tm, &tt);
-    if (rc) { xil_printf("T2 FAIL: tile %u returned %d\r\n", tm.tiles, rc); write_marker((uint32_t)rc, 0, 0, tm.tiles, 2); return rc; }
-    xil_printf("T2: %u tiles done in %u ms, CYCLES per tile min/max %u/%u\r\n", tm.tiles, ticks_to_us(tt) / 1000u, tc.cyc_min, tc.cyc_max);
-    g_stats[0] = ticks_to_us(tt); g_stats[1] = ticks_to_us(tp); g_stats[2] = ticks_to_us(tm.t_cut + tm.t_place); g_stats[3] = ticks_to_us(tm.t_run);
-    g_stats[4] = tc.cyc_min; g_stats[5] = tc.cyc_max; g_stats[6] = tc.n ? (uint32_t)(tc.cyc_sum / tc.n) : 0u;
+    rc = process_frame(&g, NULL, NULL, &tp, &tm, &tt);
+    if (rc) { xil_printf("T2 FAIL: frame returned %d\r\n", rc); write_marker((uint32_t)rc, 0, 0, 0, 2); return rc; }
+    xil_printf("T2: frame done in %u ms (pad %u us, DMA + compute %u us), CYCLES %u\r\n", ticks_to_us(tt) / 1000u, ticks_to_us(tp), ticks_to_us(tm.t_run), dev.last_cycles);
+    g_stats[0] = ticks_to_us(tt); g_stats[1] = ticks_to_us(tp); g_stats[2] = 0u; g_stats[3] = ticks_to_us(tm.t_run);
+    g_stats[4] = dev.last_cycles; g_stats[5] = dev.last_cycles; g_stats[6] = dev.last_cycles;   /* frame CYCLES (min = max = mean: one frame) */
     return finish_output(&g, tm.tiles, 2);
 }
 
@@ -249,10 +256,10 @@ SR_MAYBE_UNUSED static int test3(void)
     uint32_t cyc_min = 0xFFFFFFFFu, cyc_max = 0, cyc_n = 0, fnv0 = 0, tiles = 0;
     int same = 1;
     for (int f = 0; f < SR_T3_FRAMES; f++) {
-        tile_ctx_t tc = { &dev, 0, 0, 0, 0 };
         sr_timing_t tm; uint64_t tp, tt;
-        rc = process_frame(&g, tile_cb, &tc, &tp, &tm, &tt);
-        if (rc) { xil_printf("T3 FAIL: frame %d, tile %u returned %d\r\n", f, tm.tiles, rc); write_marker((uint32_t)rc, 0, 0, tm.tiles, 3); return rc; }
+        rc = process_frame(&g, NULL, NULL, &tp, &tm, &tt);
+        if (rc) { xil_printf("T3 FAIL: frame %d returned %d\r\n", f, rc); write_marker((uint32_t)rc, 0, 0, 0, 3); return rc; }
+        const uint32_t cy = dev.last_cycles;
         const uint32_t us_tot = ticks_to_us(tt), us_pad = ticks_to_us(tp), us_copy = ticks_to_us(tm.t_cut + tm.t_place), us_run = ticks_to_us(tm.t_run);
         xil_printf("  frame %d: total %u us = pad %u + ARM tile copy %u + DMA/compute wait %u (+ loop overhead %d)\r\n", f, us_tot, us_pad, us_copy, us_run,
                    (int)us_tot - (int)(us_pad + us_copy + us_run));
@@ -261,9 +268,9 @@ SR_MAYBE_UNUSED static int test3(void)
         if (us_tot > tot_max) tot_max = us_tot;
         if (us_run < run_min) run_min = us_run;
         if (us_run > run_max) run_max = us_run;
-        if (tc.cyc_min < cyc_min) cyc_min = tc.cyc_min;
-        if (tc.cyc_max > cyc_max) cyc_max = tc.cyc_max;
-        cyc_sum += tc.cyc_sum; cyc_n += tc.n; tiles = tm.tiles;
+        if (cy < cyc_min) cyc_min = cy;
+        if (cy > cyc_max) cyc_max = cy;
+        cyc_sum += cy; cyc_n++; tiles = tm.tiles;
         Xil_DCacheFlushRange((UINTPTR)SR_OUT_ADDR, 16u + (uint32_t)sr_out_bytes(&g));
         const uint32_t fnv = sr_fnv1a32((const uint8_t *)(SR_OUT_ADDR + 16), sr_out_bytes(&g));
         if (f == 0) fnv0 = fnv; else if (fnv != fnv0) same = 0;
@@ -272,7 +279,7 @@ SR_MAYBE_UNUSED static int test3(void)
     xil_printf("T3: per frame mean %u us (%u ms), min %u us, max %u us; mean split: pad %u us, ARM copy %u us, DMA+compute %u us\r\n", mean_us, mean_us / 1000u,
                tot_min, tot_max, (uint32_t)(pad_sum / SR_T3_FRAMES), (uint32_t)(copy_sum / SR_T3_FRAMES), (uint32_t)(run_sum / SR_T3_FRAMES));
     xil_printf("T3: DMA+compute per frame min/max %u/%u us; frames per second x1000 (mean): %u\r\n", run_min, run_max, mean_us ? (uint32_t)(1000000000ull / mean_us) : 0u);
-    xil_printf("T3: CYCLES per tile min %u, max %u, mean %u (%u tiles x %d frames); all frames gave the same output: %s\r\n", cyc_min, cyc_max,
+    xil_printf("T3: CYCLES per frame min %u, max %u, mean %u (%u frame x %d frames); all frames gave the same output: %s\r\n", cyc_min, cyc_max,
                cyc_n ? (uint32_t)(cyc_sum / cyc_n) : 0u, tiles, SR_T3_FRAMES, same ? "yes" : "NO");
     if (!same) { xil_printf("T3 FAIL: outputs differ between frames\r\n"); write_marker(100, 0, 0, tiles, 3); return -1; }
     g_stats[0] = SR_T3_FRAMES; g_stats[1] = mean_us; g_stats[2] = tot_min; g_stats[3] = tot_max;
@@ -412,7 +419,7 @@ int main(void)
 #else
     int rc = sr_init(&dev);
     if (rc != SR_RC_OK) { xil_printf("sr_init failed: %d\r\n", rc); write_marker((uint32_t)rc, 0, 0, 0, 0); return rc; }
-    xil_printf("init ok: VERSION 0x%08x, TILE_SIZE %u\r\n", sr_reg_read(&dev, SR_REG_VERSION), sr_reg_read(&dev, SR_REG_TILE_SIZE));
+    xil_printf("init ok: VERSION 0x%08x, MAX_W %u\r\n", sr_reg_read(&dev, SR_REG_VERSION), sr_reg_read(&dev, SR_REG_MAX_W));
 #if SR_TEST >= 6 && SR_TEST <= 9
     /* stale-state programs for software/board/stale_test.sh: leave the DMA / core in a half-finished state, then spin (they never finish).
      *   9 = MM2S started with the full tile, core NOT started: the DMA stays blocked in the middle of its transfer
@@ -424,6 +431,7 @@ int main(void)
     if (SR_TEST == 8) XAxiDma_SimpleTransfer(&dev.dma, (UINTPTR)SR_TILE_OUT_ADDR, SR_TILE_OUT_BYTES, XAXIDMA_DEVICE_TO_DMA);
     if (SR_TEST == 6) XAxiDma_SimpleTransfer(&dev.dma, (UINTPTR)SR_TILE_OUT_ADDR, 20000u, XAXIDMA_DEVICE_TO_DMA);
     XAxiDma_SimpleTransfer(&dev.dma, (UINTPTR)sr_golden_in, SR_TEST == 7 ? 4000u : SR_TILE_IN_BYTES, XAXIDMA_DMA_TO_DEVICE);
+    Xil_Out32(SR_BASE + SR_REG_FRAME_W, SR_HC); Xil_Out32(SR_BASE + SR_REG_FRAME_H, SR_HC);   /* the golden tile = a 64 x 64 frame */
     if (SR_TEST != 9) Xil_Out32(SR_BASE + SR_REG_CONTROL, SR_CTRL_START);
     xil_printf("stale-state program %d: transfers started, not waiting\r\n", SR_TEST);
     for (;;) { }

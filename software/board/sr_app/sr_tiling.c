@@ -11,6 +11,16 @@ void sr_geom(uint32_t w, uint32_t h, sr_geom_t *g)
     g->padded_h = g->tiles_y * SR_HC + 2u * SR_HALO;
 }
 
+void sr_geom_frame(uint32_t w, uint32_t h, sr_geom_t *g)
+{
+    g->w = w;
+    g->h = h;
+    g->tiles_x = 1u;
+    g->tiles_y = 1u;
+    g->padded_w = w + 2u * SR_HALO;
+    g->padded_h = h + 2u * SR_HALO;
+}
+
 size_t sr_padded_bytes(const sr_geom_t *g) { return (size_t)g->padded_w * g->padded_h * 3u; }
 size_t sr_out_bytes(const sr_geom_t *g)    { return (size_t)(2u * g->w) * (2u * g->h) * 3u; }
 

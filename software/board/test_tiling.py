@@ -90,6 +90,24 @@ def check_image(exe, tmp, name, lr, whole=None):
     return ok and ck_ok
 
 
+def check_frame(exe, tmp, name, lr):
+    """Pipeline (branch pipe): the C frame padding (sr_geom_frame + sr_pad_image) must equal integer_reference.pad_replicate byte for byte;
+    the pipeline then computes forward_layers() of exactly that frame, which is upscale() by definition."""
+    global fails
+    d = Path(tmp) / f"frame_{name}"
+    d.mkdir()
+    src, dst = d / "in.raw", d / "padded.bin"
+    write_srim(src, lr)
+    r = subprocess.run([exe, "padframe", str(src), str(dst)], capture_output=True, text=True)
+    exp = np.pad(lr, ((HALO, HALO), (HALO, HALO), (0, 0)), mode="edge")
+    got = np.frombuffer(dst.read_bytes(), dtype=np.uint8) if dst.exists() else np.zeros(0, np.uint8)
+    ok = r.returncode == 0 and got.size == exp.size and np.array_equal(got.reshape(exp.shape), exp)
+    h, w = lr.shape[:2]
+    print(f"{'PASS' if ok else 'FAIL'} frame {name}: {w}x{h} -> padded {w + 6}x{h + 6}, C padding {'==' if ok else '!='} pad_replicate")
+    if not ok:
+        fails += 1
+
+
 def main():
     quick = "--quick" in sys.argv
     rng = np.random.default_rng(1234)
@@ -103,6 +121,8 @@ def main():
             sys.exit(1)
         for (h, w) in [(64, 64), (65, 65), (1, 1), (37, 29), (100, 90), (70, 130), (129, 63)]:        # one tile, one pixel over, tiny, non-multiples, non-square
             check_image(exe, tmp, f"random_{w}x{h}", rng.integers(0, 256, (h, w, 3), dtype=np.uint8))
+        for (h, w) in [(1, 1), (3, 2), (4, 5), (540, 960), (29, 37), (1, 1018)]:                         # pipeline frame padding
+            check_frame(exe, tmp, f"random_{w}x{h}", rng.integers(0, 256, (h, w, 3), dtype=np.uint8))
         if not quick:
             raw = board / "div2k_img0193_lr_960x540.raw"
             if not raw.exists():
@@ -112,7 +132,7 @@ def main():
     if fails:
         print(f"FAIL test_tiling: {fails} image(s) failed")
         sys.exit(1)
-    print("PASS test_tiling: C tiling code (cut + place + checksum) is bit-exact with the integer model on all images")
+    print("PASS test_tiling: C tiling code (cut + place + checksum) is bit-exact with the integer model on all images; C frame padding == pad_replicate")
 
 
 if __name__ == "__main__":

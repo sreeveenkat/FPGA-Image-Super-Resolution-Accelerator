@@ -1,41 +1,40 @@
-# Register map of `sr_accel_top` (AXI4-Lite) - the one document
+# Register map of `sr_accel_top` (AXI4-Lite), pipeline version - the one document
 
 Source of truth: `hardware/rtl/top/sr_accel_top.v` (header comment + code). C view: `software/board/sr_regs.h`.
-`software/board/test_regs.py` (part of `hardware/verification/run_tests.sh quick`) fails when the header and the Verilog disagree.
-Status: offsets 0x00-0x14 (VERSION 0x53520601) **run on the ZedBoard since 2026-10-11**; the debug registers 0x18-0x30 (VERSION 0x53520602) **run on the ZedBoard since 2026-10-12** (bitstream 0602, `results/utilization/m6_system_0602.md`). The AXI base address of the block comes from the Vivado Address Editor (see "Address map of the block design" below; `SR_BASE` in `software/board/sr_app/sr_driver.h`).
+`software/board/test_regs.py` (part of `hardware/verification/run_tests.sh quick`) fails when the header, the Verilog and this table disagree.
+**This is the whole-frame PIPELINE version (branch `pipe`, VERSION 0x53525301, `docs/ARCHITECTURE_PIPELINE.md`). It has NOT run on a board.**
+The tiled designs (R0 0x53520602, R2q 0x53522201, R3q 0x53523201, r0_125 0x53524201, r3q_125 0x53524301) keep the old map (TILE_SIZE at 0x08, debug
+registers 0x18-0x30). Each tree's driver accepts only its own VERSION family (`VERSION & 0xFFFFFF00`).
 
 32-bit registers, 6-bit byte address (64-byte window). Reads of other addresses return 0; writes to read-only or unmapped addresses are accepted
 (response OKAY) and ignored. AW and W may arrive in any order. A write needs the matching `wstrb`.
 
 | Offset | Name | Access | Bits / meaning |
 |---|---|---|---|
-| 0x00 | CONTROL | W (reads 0) | bit0 **START**: one-cycle pulse into the core (ignored while busy; an accepted start clears sticky DONE and ERROR). bit1 **SRESET**: one-cycle soft reset of core + wrapper, also clears DONE and ERROR. Only bits written with `wstrb[0]` = 1 take effect. |
+| 0x00 | CONTROL | W (reads 0) | bit0 **START**: start one frame (ignored while busy; refused with ERROR_CODE 4 if FRAME_W/FRAME_H are out of range; an accepted start clears sticky DONE and ERROR). bit1 **SRESET**: soft reset of the core, clears DONE and ERROR, aborts a frame. Only bits written with `wstrb[0]` = 1 take effect. |
 | 0x04 | STATUS | R | bit0 **BUSY**, bit1 **DONE** (sticky), bit2 **ERROR** (sticky, = ERROR_CODE != 0) |
-| 0x08 | TILE_SIZE | R | HC (64): core tile edge in input pixels. Input tile = HC+6 = 70, output tile = 2*HC = 128 |
-| 0x0C | CYCLES | R | core clock cycles from start to the last output byte of the last / current tile (cleared by start and reset; holds its value afterwards) |
-| 0x10 | ERROR_CODE | R | 0 none, 1 early `tlast` (on an input beat that is not the last), 2 last input beat without `tlast`, 3 `tkeep` != 0xF on an accepted input beat. The FIRST error of a tile is kept. |
-| 0x14 | VERSION | R | `0x53524301` (r3q_125 build: R3q at 125 MHz; the deployed R0 bitstream reads `0x53520602`, the first board bitstream, before the debug registers, `0x53520601`). Each design has its own VERSION: R0 0x53520602, R2q 0x53522201, R3q 0x53523201, R0 at 125 MHz 0x53524201, R3q at 125 MHz 0x53524301; the driver of each tree accepts only its own family (`VERSION & 0xFFFFFF00`) |
-| 0x18 | DBG_IN_BEATS | R | debug: input beats accepted since the last accepted START |
-| 0x1C | DBG_TLAST_AT | R | debug: 1 + index (since START) of the first accepted input beat with `tlast`; 0 = none yet. Correct tile: 3,675 |
-| 0x20 | DBG_START2BEAT | R | debug: bits 30:0 cycles from the accepted START to the first accepted input beat (saturating); bit 31 = `s_axis_tvalid` was high in the START cycle |
-| 0x24 | DBG_PRE_BEATS | R | debug: input beats accepted while no tile was running, since the PL reset (must stay 0) |
-| 0x28 | DBG_STARTS | R | debug: bits 15:0 accepted STARTs, bits 31:16 ignored STARTs (written while busy), since the PL reset |
-| 0x2C | DBG_ERR_BEATS | R | debug: DBG_IN_BEATS when the first error of the tile was recorded (0 = no error; cleared by START / SRESET like ERROR_CODE) |
-| 0x30 | DBG_ERR_CYCLES | R | debug: CYCLES when the first error of the tile was recorded |
+| 0x08 | FRAME_W | RW | LR frame width W, 1..MAX_W; bits 15:0 (byte lanes 0 and 1); sampled at START; 0 after reset |
+| 0x0C | CYCLES | R | clock cycles from the accepted START to the last output beat of the frame (counts while busy, holds its value afterwards) |
+| 0x10 | ERROR_CODE | R | 0 none, 1 early `tlast` (on an input beat that is not the last), 2 last input beat without `tlast`, 3 `tkeep` != 0xF on an accepted input beat, 4 frame size out of range (START refused, nothing runs, DONE unchanged), 5 internal FIFO error (never expected). The FIRST error is kept. |
+| 0x14 | VERSION | R | `0x53525301` (pipeline, R3q weights + anchor, 125 MHz) |
+| 0x18 | FRAME_H | RW | LR frame height H, 1..65535; bits 15:0; sampled at START; 0 after reset |
+| 0x1C | MAX_W | R | largest W: MAXW - 6 = 1018 (line-buffer depth 1024) |
+| 0x20 | DBG_IN_BEATS | R | input beats accepted in the current / last frame |
+| 0x24 | DBG_OUT_BEATS | R | output beats sent in the current / last frame |
 
 ## Behaviour as implemented (read this before writing driver code)
-* **busy** is high from one cycle after a START write until the last output beat has been taken by the DMA. It is high in the cycle of the done pulse too, so there
-  is never a cycle where STATUS reads busy = 0 and done = 0 during a tile (checked by a monitor in `tb_sr_accel_top.v`).
-* **done** means "the last output beat was accepted by the DMA S2MM channel" (not merely "the core finished computing"). It stays set until the next ACCEPTED start or a
-  soft reset. A START written while busy is ignored completely (it does not clear DONE/ERROR and does not restart anything).
-* **error** is only reported. The tile is still processed to the end (the DMA transfers still complete). Recovery is a soft reset (CONTROL = 2) and a new tile.
-* The input stream is not accepted before START: `s_axis_tready` stays low until the core is in its load phase, so the DMA may be armed first (the driver arms
-  S2MM, then MM2S, then writes START).
-* A soft reset needs a few cycles to take effect; after writing it, wait (the driver reads STATUS back) before arming a new transfer. The DMA itself is not
-  reset by this (use `XAxiDma_Reset` after a DMA error).
-* Streams: 32-bit beats, little endian (byte 0 = `tdata[7:0]`). Input tile = 14,700 bytes = 3,675 beats (RGB raster `[y][x][c]`, 70 x 70 with halo),
-  output tile = 49,152 bytes = 12,288 beats (RGB raster of the 128 x 128 tile). `m_axis_tlast` is on the last output beat; the DMA MM2S generates `tlast` on the last input beat.
-* Measured in simulation (not on a board): CYCLES = 926,202 per tile at HC = 64 without stalls (`results/utilization/m6_top.md`).
+* **One frame per START.** Input: the replicate-padded LR frame, (W+6) x (H+6) pixels, RGB raster `[y][x][c]`, little-endian 32-bit beats
+  (byte 0 = `tdata[7:0]`), `ceil(3 (W+6)(H+6) / 4)` beats; the last beat may carry 1-3 unused bytes; `tlast` on the last beat.
+  Output: the 2W x 2H x 3 HR frame in raster order, `3 W H` beats, `m_axis_tlast` on the last beat. 960 x 540: 395,577 beats in, 1,555,200 beats out.
+* **busy** is high from one cycle after a START write until the last output beat has been taken by the DMA, and in the cycle of the done pulse
+  (no cycle where busy = 0 and done = 0 during a frame).
+* **done** means "the last output beat was accepted by the DMA S2MM channel". It stays set until the next ACCEPTED start or a soft reset.
+* **error** codes 1-3 are only reported; the frame is still processed to the end. Recovery is a soft reset (CONTROL = 2), then a new frame.
+* `s_axis_tready` stays low until a frame has started (a few cycles after START), so the DMA may be armed first (the driver arms S2MM, then MM2S, then
+  writes START), and low again after the last input beat.
+* A soft reset needs a few cycles; the driver reads STATUS back. The DMA itself is not reset by it (use `XAxiDma_Reset`).
+* The golden tile of T1 (70 x 70 padded input of `real0`) is a valid 64 x 64 frame: 14,700 bytes in, 49,152 bytes out, the same bytes as the tiled design.
+* Measured in simulation (not on a board): CYCLES = 1,337 for a 5 x 4 frame and 57,233 for 64 x 48 (`tb_sr_pipe_top.v`); about 16 cycles per output pixel of layer 1.
 
 ## Address map of the block design (Vivado project `/home/sreevenkat/Desktop/venkat/vitis/m6_sr`, from the Address Editor, as reported by the owner)
 | Master | Slave | Base | Range |

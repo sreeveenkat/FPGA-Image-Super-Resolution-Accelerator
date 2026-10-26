@@ -2,6 +2,7 @@
  *   tiling_tool cut      in.raw dir            writes dir/in_<ty>_<tx>.bin (70x70x3 each); the tile "output" is zeros
  *   tiling_tool assemble in.raw dir out.raw    reads dir/out_<ty>_<tx>.bin (128x128x3 each) instead of running the core, writes the SRIM result
  *   tiling_tool fnv file                       prints the FNV-1a 32 of the PAYLOAD of an SRIM file (the checksum the board prints)
+ *   tiling_tool padframe in.raw out.bin        pipeline: the (w+6) x (h+6) replicate-padded frame the DMA streams (sr_geom_frame + sr_pad_image)
  * SRIM = 16-byte header (magic SRIM, u32 w, u32 h, u32 reserved, little endian) + RGB payload. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,8 +57,20 @@ int main(int argc, char **argv)
         free(px - 16);
         return 0;
     }
+    if (argc == 4 && !strcmp(argv[1], "padframe")) {
+        uint32_t w, h; uint8_t *lr = read_srim(argv[2], &w, &h);
+        sr_geom_t g; sr_geom_frame(w, h, &g);
+        uint8_t *padded = malloc(sr_padded_bytes(&g));
+        if (!padded) return 2;
+        sr_pad_image(lr, &g, padded);
+        FILE *f = fopen(argv[3], "wb"); if (!f) return 2;
+        fwrite(padded, 1, sr_padded_bytes(&g), f); fclose(f);
+        printf("%ux%u -> padded %ux%u (%u bytes)\n", w, h, g.padded_w, g.padded_h, (unsigned)sr_padded_bytes(&g));
+        free(lr - 16); free(padded);
+        return 0;
+    }
     if (!((argc == 4 && !strcmp(argv[1], "cut")) || (argc == 5 && !strcmp(argv[1], "assemble")))) {
-        fprintf(stderr, "usage: tiling_tool cut in.raw dir | assemble in.raw dir out.raw | fnv file.raw\n");
+        fprintf(stderr, "usage: tiling_tool cut in.raw dir | assemble in.raw dir out.raw | fnv file.raw | padframe in.raw out.bin\n");
         return 2;
     }
     uint32_t w, h; uint8_t *lr = read_srim(argv[2], &w, &h);

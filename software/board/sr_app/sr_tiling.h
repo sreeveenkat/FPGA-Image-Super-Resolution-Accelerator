@@ -19,6 +19,7 @@ typedef struct {
 } sr_geom_t;
 
 void   sr_geom(uint32_t w, uint32_t h, sr_geom_t *g);
+void   sr_geom_frame(uint32_t w, uint32_t h, sr_geom_t *g);  /* pipeline (whole frame): padded = (w+6) x (h+6), no tile extension; tiles_x = tiles_y = 1 */
 size_t sr_padded_bytes(const sr_geom_t *g);                 /* padded_w * padded_h * 3 */
 size_t sr_out_bytes(const sr_geom_t *g);                    /* (2w) * (2h) * 3 */
 

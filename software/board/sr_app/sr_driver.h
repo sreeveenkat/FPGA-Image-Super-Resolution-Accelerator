@@ -1,5 +1,5 @@
-/* Driver for sr_accel_top (AXI4-Lite registers + AXI DMA) - bare metal, Vitis 2024.1 SDT flow.  Register layout: ../sr_regs.h, docs/REGISTER_MAP.md.
- * NOT RUN ON A BOARD YET: it compiles against the zed_platform BSP, nothing more is verified. */
+/* Driver for sr_accel_top, whole-frame PIPELINE version (branch `pipe`; AXI4-Lite registers + AXI DMA) - bare metal, Vitis 2024.1 SDT flow.
+ * Register layout: ../sr_regs.h, docs/REGISTER_MAP.md.  The tiled driver it is derived from runs on the board since 2026-10-11; THIS version has not. */
 #ifndef SR_DRIVER_H
 #define SR_DRIVER_H
 
@@ -29,7 +29,7 @@ typedef enum {
     SR_RC_OK = 0,
     SR_RC_DMA_INIT = 1,      /* XAxiDma_LookupConfig / CfgInitialize failed, or the DMA is not in simple mode */
     SR_RC_VERSION = 2,       /* VERSION register differs from SR_VERSION: wrong SR_BASE or wrong bitstream */
-    SR_RC_TILE_SIZE = 3,     /* TILE_SIZE register differs from SR_HC */
+    SR_RC_TILE_SIZE = 3,     /* MAX_W register differs from SR_MAX_W (name kept from the tiled driver) */
     SR_RC_BUSY = 4,          /* core busy before the tile was started */
     SR_RC_DMA_START = 5,     /* XAxiDma_SimpleTransfer refused the transfer */
     SR_RC_TIMEOUT = 6,       /* STATUS.done or the DMA did not finish within about 1 second */
@@ -47,9 +47,11 @@ typedef struct {
     uint32_t version;        /* VERSION register read by sr_init */
 } sr_dev_t;
 
-int      sr_init(sr_dev_t *d);                                   /* DMA init, VERSION / TILE_SIZE check, DMA reset, core soft reset, STATUS idle + ERROR_CODE 0 */
+int      sr_init(sr_dev_t *d);                                   /* DMA init, VERSION / MAX_W check, DMA reset, core soft reset, STATUS idle + ERROR_CODE 0 */
 int      sr_soft_reset(sr_dev_t *d);                             /* CONTROL.SRESET and wait until STATUS is idle */
-int      sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out); /* in: 14,700 B, out: 49,152 B, both 64-byte aligned, in DDR; resets DMA + core after any error */
+int      sr_run_frame(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint32_t h);  /* in: padded (w+6)x(h+6)x3, out: 2w x 2h x 3; resets DMA + core after any error */
+int      sr_run_frame_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint32_t h, uint32_t in_len, uint32_t out_len);   /* test only: wrong lengths on purpose */
+int      sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out); /* the golden tile as a 64 x 64 frame: in 14,700 B, out 49,152 B */
 int      sr_run_tile_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t in_len, uint32_t out_len);   /* test only: wrong lengths on purpose */
 int      sr_reset_all(sr_dev_t *d);                              /* core soft reset, DMA reset (wait), core soft reset, STATUS idle + ERROR_CODE 0 */
 extern int sr_start_order;                                       /* 0 normal (MM2S armed before START), 1 START first (T6 experiment) */
