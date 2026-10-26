@@ -2,7 +2,7 @@
 //   LAYER 1..4 selects the shape: 1 conv3x3 3->16 (MODE 0), 2 depthwise3x3 16 (MODE 1), 3 conv1x1 16->16 (MODE 0), 4 conv3x3 16->12 + anchor (MODE 2).
 //   REAL = 0: random weights / distinct M per channel (data/golden/pipe/rand/randL<n>_*), REAL = 1: the network weights (hardware/rtl/weights/wpipe_L<n>.mem),
 //            input = the previous layer's golden output of frame +FRAME=<name> (L1: the padded input pixels), expected = this layer's golden output.
-//   Plusargs: +STALL=1 random input gaps and a random consumer (reservations, 8 places), +SWEEP=<n> n one-cycle-reset aborts, each followed by a quiet check
+//   Plusargs: +STALL=1 random input gaps and a random consumer (reservations, 8 places), +STALL=2 the same with a slow consumer, +SWEEP=<n> n one-cycle-reset aborts, each followed by a quiet check
 //             and an exact run, +FRAME=<name> (REAL=1).
 // Checks: every output word in order and bit-exact, the number of outputs and px_start pulses, out_valid only with a reservation, nothing after the frame,
 //         an immediate re-run, cycles per output pixel (= 16 without stalls; printed).
@@ -53,10 +53,13 @@ module tb_pipe_stage;
     // state is updated with non-blocking assignments: out_ok changes after the edge, never during it (no race with the DUT)
     always @(posedge clk) begin
         r2 = res; o2 = occ;
-        consume = (o2 > 0) && (!stall || ($random(seed) & 3) != 0);
+        consume = (o2 > 0) && ((stall == 2) ? ($random(seed) % 24 == 0) : (!stall || ($random(seed) & 3) != 0));   // STALL=2: a slow consumer (the 8 places fill up)
         if (rst) begin r2 = 0; o2 = 0; end
         else begin
-            if (px_start) begin r2 = r2 + 1; nstart = nstart + 1; if (!armed) begin $display("FAIL px_start outside a frame"); fail = fail + 1; end end
+            if (px_start) begin
+                if (r2 >= 8) begin $display("FAIL pixel started without room for its result (8 places reserved)"); fail = fail + 1; end
+                r2 = r2 + 1; nstart = nstart + 1; if (!armed) begin $display("FAIL px_start outside a frame"); fail = fail + 1; end
+            end
             if (out_valid) begin
                 if (!armed) begin $display("FAIL out_valid outside a frame"); fail = fail + 1; end
                 else if (o2 >= r2) begin $display("FAIL out_valid without a reservation"); fail = fail + 1; end
@@ -75,14 +78,14 @@ module tb_pipe_stage;
     always @(posedge clk) if (anc_pop) begin anc_data <= anc_mem[ai]; ai <= ai + 1; end
 
     // input driver
+    reg in_ready_q;
+    always @(posedge clk) in_ready_q <= in_ready;          // sampled at the rising edge the transfer happens on
     integer ii = 0;
     always @(negedge clk) begin
         if (in_valid && in_ready_q) ii = ii + 1;
         in_valid <= armed && (ii < n_in) && (!stall || ($random(seed) % 3) != 0);
         in_data  <= in_mem[(ii < n_in) ? ii : 0];
     end
-    reg in_ready_q;
-    always @(posedge clk) in_ready_q <= in_ready;          // sampled at the rising edge the transfer happens on
 
     task run_frame(input integer abort_at, output integer cyc);
         integer t;
@@ -154,7 +157,8 @@ module tb_pipe_stage;
         end
         if (REAL) what = {"frame ", frame}; else what = "random weights";
         extra = "";
-        if (stall) extra = ", random stalls";
+        if (stall == 1) extra = ", random stalls";
+        if (stall == 2) extra = ", slow consumer";
         if (sweep) extra = $sformatf("%s, %0d reset aborts + quiet checks", extra, sweep);
         if (fail == 0)
             $display("PASS pipe_stage L%0d %s: %0dx%0d -> %0d outputs x %0d ch bit-exact, %0d cycles (%0d.%02d per output)%s, re-run OK",

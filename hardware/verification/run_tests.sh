@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# RTL regression for M4 (Icarus Verilog).   Run from anywhere:  hardware/verification/run_tests.sh [quick|full]
-#   quick (default): unit tests + conv engine (all 4 layers on small12 and one real 70x70 tile + randomized layers) + the full tile core on the
-#                    small tiles (HC=6) + the 20-tile seam test (HC=8)                                                  (~1 min)
-#   full           : everything in quick, the conv engine on every golden tile, the full tile core at the real size (HC=64) on every golden
-#                    tile with and without stalls, and the real-size seam test (2x2 tiles)                               (~20 min)
-# Needs: iverilog 12, data/golden/*.hex (software/ai/quantization/export_rtl.py), data/golden/unit/*.hex (gen_unit_vectors.py).
+# RTL regression of the whole-frame PIPELINE (branch `pipe`, docs/ARCHITECTURE_PIPELINE.md; Icarus Verilog).  Run from anywhere:
+#   hardware/verification/run_tests.sh [quick|full]
+#   quick (default): requantizer + adder-tree unit tests; every stage with random weights (distinct M per channel, non-square frames) with stalls and
+#                    reset aborts; every stage with the network weights on small frames; the accelerator top (AXI-Lite + AXI-Stream) on 9 frames back to
+#                    back incl. every stage's output, with random stalls, error codes 1-4 and soft-reset aborts; board software (register header, host tools,
+#                    C tiling + frame padding)                                                                                    (~8 min)
+#   full           : everything in quick, the stages on the 64x48 real frame, the top on 64x48 / 37x29 / the golden tile with stalls, the board program
+#                    build, and the pipeline mutation test (mutate_pipe.py)                                                       (~45 min)
+#   The 960x540 frame is simulated separately in xsim (hardware/verification/run_fullframe.sh, ~30 min; Icarus would take ~90 min).
+# Needs: iverilog 12, data/golden/unit/*.hex (gen_unit_vectors.py), data/golden/pipe/* (gen_pipe_vectors.py; made here if missing).
+# There are no tiles, so there is no seam test: every top frame is compared with integer_reference.upscale() on the WHOLE frame, borders included.
 # Exit code 0 only if every test printed PASS and nothing printed FAIL.
 set -u
 cd "$(dirname "$0")/../.."
@@ -12,127 +17,73 @@ MODE="${1:-quick}"
 PY=.venv/bin/python
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-RTL="hardware/rtl/common/mac_unit.v hardware/rtl/common/requant.v hardware/rtl/common/tile_ram.v hardware/rtl/common/weight_rom.v hardware/rtl/conv_engine/conv_engine.v"
 TB=hardware/verification/tb
+PIPE="hardware/rtl/common/requant.v $(ls hardware/rtl/pipe/*.v | tr '\n' ' ')"
 pass=0; fail=0
 
-[ -f data/golden/small12_in.hex ] || $PY software/ai/quantization/export_rtl.py > /dev/null || exit 1
 [ -f data/golden/unit/randL4_out.hex ] || $PY software/ai/quantization/gen_unit_vectors.py > /dev/null || exit 1
+[ -f data/golden/pipe/gtile_meta.txt ] && [ -f data/golden/pipe/rand/randL4_meta.txt ] || $PY software/ai/quantization/gen_pipe_vectors.py > /dev/null || exit 1
 
 run() {  # run <name> <vvp-args...> ; counts PASS/FAIL lines
-    out="$(vvp "$TMP/$1.vvp" "${@:2}" 2>&1 | grep -v 'finish called\|Not enough words')"
+    out="$(vvp -n "$TMP/$1.vvp" "${@:2}" 2>&1 | grep -v 'finish called\|Not enough words')"
     echo "$out"
     if echo "$out" | grep -q '^FAIL' || ! echo "$out" | grep -q '^PASS'; then fail=$((fail+1)); else pass=$((pass+1)); fi
 }
 build() {  # build <name> <iverilog-args...>
     iverilog -g2012 -Wall -I . -o "$TMP/$1.vvp" "${@:2}" 2>"$TMP/$1.err" || { cat "$TMP/$1.err"; fail=$((fail+1)); return 1; }
 }
-
-echo "== unit tests"
-for s in 1 2 3 8 21 22 23 24 25; do build rq$s -P tb_requant.SHIFT=$s hardware/rtl/common/requant.v $TB/tb_requant.v && run rq$s; done
-for s in 21 22 25; do build rqa$s -P tb_requant_add.SHIFT=$s hardware/rtl/common/requant.v $TB/tb_requant_add.v && run rqa$s; done   # anchor mode of the requantizer
-build mac hardware/rtl/common/mac_unit.v $TB/tb_mac_unit.v && run mac
-build ram hardware/rtl/common/tile_ram.v $TB/tb_tile_ram.v && run ram
-for L in 1 2 3 4; do build wr$L -P tb_weight_rom.LAYER=$L hardware/rtl/common/weight_rom.v $TB/tb_weight_rom.v && run wr$L; done
-
-echo "== conv engine, layer by layer against the golden hex dumps"
-if [ "$MODE" = full ]; then
-    TILES64="$(ls data/golden/*_in.hex | xargs -n1 basename | sed 's/_in.hex//' | grep -v '^small12')"
-else
-    TILES64="real_corner"
-fi
-for L in 1 2 3 4; do
-    build c6_$L -P tb_conv_layer.LAYER=$L -P tb_conv_layer.HC=6 $RTL $TB/tb_conv_layer.v && run c6_$L +TILE=small12
-    build c64_$L -P tb_conv_layer.LAYER=$L -P tb_conv_layer.HC=64 $RTL $TB/tb_conv_layer.v || continue
-    for t in $TILES64; do run c64_$L +TILE=$t; done
-done
-
-echo "== conv engine, randomized parameters (distinct M per channel, extreme values, NON-square 12x10 style tiles)"
-for L in 1 2 3 4; do
-    build r$L -P tb_conv_layer.LAYER=$L -P tb_conv_layer.HC=6 -P tb_conv_layer.HH=4 -P tb_conv_layer.RAND=1 $RTL $TB/tb_conv_layer.v && run r$L
-done
-build ra4 -P tb_conv_layer.LAYER=4 -P tb_conv_layer.HC=6 -P tb_conv_layer.HH=4 -P tb_conv_layer.RAND=1 -P tb_conv_layer.ANCHOR=1 $RTL $TB/tb_conv_layer.v && run ra4   # anchor engine, random anchor image, residual saturating at both ends
-
-echo "== tile_ram_split"
-build splitram hardware/rtl/common/tile_ram_split.v $TB/tb_tile_ram_split.v && run splitram
-
-echo "== full tile core (sr_tile_core): stream in -> 4 layers -> pixel shuffle -> stream out"
-CORE="hardware/rtl/common/mac_unit.v hardware/rtl/common/requant.v hardware/rtl/common/weight_rom.v hardware/rtl/common/tile_ram_split.v hardware/rtl/conv_engine/conv_engine.v hardware/rtl/sr_core/sr_tile_core.v"
-build core6 -P tb_sr_tile.HC=6 $CORE $TB/tb_sr_tile.v && {
-    run core6 +TILE=small12 +TILE2=small12b
-    run core6 +TILE=small12b +TILE2=small12 +STALL=1
-}
-
-echo "== AXI-Stream wrapper (sr_axis_wrapper): 32-bit DMA streams around the tile core"
-AXIS="$CORE hardware/rtl/axi_wrapper/sr_axis_wrapper.v"
-build axis6 -P tb_sr_axis.HC=6 $AXIS $TB/tb_sr_axis.v && {
-    run axis6 +TILE=small12 +TILE2=small12b
-    run axis6 +TILE=small12b +TILE2=small12 +STALL=1
-}
-
-echo "== accelerator top (sr_accel_top): AXI4-Lite registers + AXI-Stream, driven like the ARM/DMA"
-TOP="$AXIS hardware/rtl/top/sr_accel_top.v"
-build top6 -P tb_sr_accel_top.HC=6 $TOP $TB/tb_sr_accel_top.v && {
-    run top6 +TILE=small12 +TILE2=small12b
-    run top6 +TILE=small12b +TILE2=small12 +STALL=1
-    if [ "$MODE" = full ]; then run top6 +TILE=small12 +NOEXTRA +OFFSWEEP=20; fi   # full only: START vs first input beat, -20..+20 cycles, 3 AW/W orders, gaps off/on (~3 min)
-}
-
-echo "== board software (no board): register header vs Verilog, host tools, C tiling code"
-[ -f data/board/set14_baboon_lr_128x128.raw ] || $PY software/host_tools/make_test_images.py > /dev/null || fail=$((fail+1))
 runpy() {  # runpy <cmd...> : one run, PASS when the output has a PASS line and no FAIL line
     out="$("$@" 2>&1)"; echo "$out" | tail -4
     if echo "$out" | grep -q '^FAIL' || ! echo "$out" | grep -q '^PASS'; then fail=$((fail+1)); else pass=$((pass+1)); fi
 }
+
+echo "== unit tests: requantizer (also the anchor add mode), adder tree, weight ROM files"
+for s in 1 2 3 8 21 22 23 24 25; do build rq$s -P tb_requant.SHIFT=$s hardware/rtl/common/requant.v $TB/tb_requant.v && run rq$s; done
+for s in 21 22 25; do build rqa$s -P tb_requant_add.SHIFT=$s hardware/rtl/common/requant.v $TB/tb_requant_add.v && run rqa$s; done
+for n in 2 3 5 9 16 27; do build at$n -P tb_adder_tree.N=$n hardware/rtl/pipe/adder_tree.v $TB/tb_adder_tree.v && run at$n; done
+out="$($PY software/ai/quantization/export_pipe.py --check)"; echo "$out"
+if echo "$out" | grep -q FAIL; then fail=$((fail+1)); echo "FAIL wpipe_L*.mem are not up to date (run export_pipe.py)"; else pass=$((pass+1)); echo "PASS wpipe_L1..4.mem match weights_L1..4.mem"; fi
+
+echo "== pipeline stages, random weights (distinct M per channel, both clamp ends, non-square frames), with stalls, 8 reset aborts, a slow consumer"
+for L in 1 2 3 4; do
+    build sr$L -P tb_pipe_stage.LAYER=$L -P tb_pipe_stage.REAL=0 $PIPE $TB/tb_pipe_stage.v && { run sr$L; run sr$L +STALL=1 +SWEEP=8; run sr$L +STALL=2; }
+done
+
+echo "== pipeline stages, network weights, against each layer's golden output of whole frames"
+if [ "$MODE" = full ]; then FR="p13x7 preal2 preal"; else FR="p13x7"; fi
+for L in 1 2 3 4; do
+    build sn$L -P tb_pipe_stage.LAYER=$L -P tb_pipe_stage.REAL=1 $PIPE $TB/tb_pipe_stage.v || continue
+    for f in $FR; do run sn$L +FRAME=$f; done
+    run sn$L +FRAME=pramp +STALL=1
+done
+
+echo "== accelerator top (sr_accel_top + sr_pipe_core): AXI4-Lite registers + AXI-Stream, driven like the ARM/DMA, whole frames vs integer_reference.upscale"
+SMALL="+F0=p13x7 +F1=p1x1 +F2=p2x3 +F3=p5x4 +F4=pramp +F5=psat +F6=preal2 +F7=p2x3"
+build top $PIPE hardware/rtl/top/sr_accel_top.v $TB/tb_sr_pipe_top.v && {
+    run top $SMALL +LAYERS=1
+    run top $SMALL +STALL=1
+    run top +F0=p13x7 +ERR=1 +SWEEP=6
+    run top +F0=gtile
+    run top +F0=pramp +F1=p13x7 +STALL=2                    # slow DMA sink: output banks and FIFOs fill, back-pressure through every stage
+    if [ "$MODE" = full ]; then
+        run top +F0=preal +F1=gtile +LAYERS=1
+        run top +F0=preal +F1=preal2 +STALL=1
+        run top +F0=preal2 +SWEEP=12 +STALL=1
+    fi
+}
+
+echo "== board software (no board): register header vs Verilog, host tools, C tiling code + frame padding"
+[ -f data/board/set14_baboon_lr_128x128.raw ] || $PY software/host_tools/make_test_images.py > /dev/null || fail=$((fail+1))
 runpy python3 software/board/test_regs.py
 runpy $PY software/host_tools/test_host_tools.py
-runpy $PY software/board/test_tiling.py --quick
-
-seam() {  # seam <hc> <lr_h> <lr_w> : tiled RTL output must equal the whole-image integer model
-    local hc=$1 h=$2 w=$3 d=data/golden/seam
-    $PY software/ai/quantization/seam_test.py gen --hc $hc --h $h --w $w > /dev/null || { fail=$((fail+1)); return; }
-    build seam$hc -P tb_sr_tile.HC=$hc $CORE $TB/tb_sr_tile.v || return
-    local bad=0 n=0
-    for f in $d/hc${hc}_t*_in.hex; do
-        b=$(basename $f _in.hex)
-        out="$(vvp "$TMP/seam$hc.vvp" +NOEXTRA +IN=$f +OUT=$d/${b}_out.hex +DUMP=$d/${b}_rtl.hex 2>&1 | grep -v 'finish called\|Not enough words')"
-        echo "$out" | grep -q '^PASS' && ! echo "$out" | grep -q '^FAIL' || { echo "$b: $out"; bad=$((bad+1)); }
-        n=$((n+1))
-    done
-    echo "[seam hc=$hc] $n tiles simulated, $bad failed"
-    if [ $bad -eq 0 ]; then
-        out="$($PY software/ai/quantization/seam_test.py check --hc $hc)"; echo "$out"
-        if echo "$out" | grep -q '^PASS'; then pass=$((pass+1)); else fail=$((fail+1)); fi
-    else fail=$((fail+1)); fi
-}
-seam 8 37 29
+if [ "$MODE" = full ]; then runpy $PY software/board/test_tiling.py; else runpy $PY software/board/test_tiling.py --quick; fi
 
 if [ "$MODE" = full ]; then
-    echo "== full tile core at the real size (HC=64)"
-    build core64 -P tb_sr_tile.HC=64 $CORE $TB/tb_sr_tile.v && {
-        for t in $TILES64; do run core64 +TILE=$t; done
-        run core64 +TILE=real0 +STALL=1
-        run core64 +TILE=noise +STALL=1
-    }
-    seam 64 100 90
-    echo "== C tiling code on the 960x540 test image (cut + integer model per tile + assemble == whole-image integer model)"
-    runpy $PY software/board/test_tiling.py
     echo "== board program: compile + link with the Vitis ARM toolchain against the M0 platform BSP (skipped when the toolchain is not installed)"
     out="$(software/board/check_arm_build.sh 2>&1)"; echo "$out"
     if echo "$out" | grep -q '^SKIP'; then :; elif echo "$out" | grep -q '^PASS'; then pass=$((pass+1)); else fail=$((fail+1)); fi
-    echo "== AXI-Stream wrapper at the real size (HC=64)"
-    build axis64 -P tb_sr_axis.HC=64 $AXIS $TB/tb_sr_axis.v && {
-        run axis64 +TILE=real0 +STALL=1
-        run axis64 +TILE=noise
-    }
-    echo "== accelerator top at the real size (HC=64)"
-    build top64 -P tb_sr_accel_top.HC=64 $TOP $TB/tb_sr_accel_top.v && {
-        run top64 +TILE=real0 +TILE2=noise
-        run top64 +TILE=real0 +STALL=1
-        run top64 +TILE=real0 +NOEXTRA +OFFFEW                  # START vs first input beat at 6 points, real size
-    }
-    echo "== anchor mutation test: 26 deliberate RTL defects, each must be caught (mutate_anchor.py exits 0 only then)"
-    runpy $PY hardware/verification/mutate_anchor.py --seam
+    echo "== pipeline mutation test: deliberate RTL defects, each must be caught (mutate_pipe.py exits 0 only then)"
+    runpy $PY hardware/verification/mutate_pipe.py
 fi
 
 echo "== summary: $pass test runs passed, $fail failed ($MODE)"

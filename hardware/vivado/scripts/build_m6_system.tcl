@@ -1,4 +1,4 @@
-# Build the whole M6 system (PS7 + AXI DMA + sr_accel_top + the M0 GPIOs / adder_ip) from THIS repository into a NEW Vivado project, then
+# Build the whole M6 system (PS7 + AXI DMA + sr_accel_top + the M0 GPIOs / adder_ip; branch pipe: sr_accel_top = the whole-frame pipeline) from THIS repository into a NEW Vivado project, then
 # synthesis, implementation, bitstream, reports and the XSA.  Batch only; ~6 min with 2 jobs on a 16-thread / 15 GB PC.
 #   vivado -mode batch -nojournal -log <out_dir>.log -source hardware/vivado/scripts/build_m6_system.tcl -tclargs <out_dir> [jobs=2]
 # Inputs (all in the repo): hardware/rtl/** (+ rtl/weights/*.mem), hardware/vivado/bd/design_1_m6.tcl (write_bd_tcl of the board-tested
@@ -11,8 +11,8 @@ set jobs [expr {[llength $argv] > 1 ? [lindex $argv 1] : 2}]
 set root [file normalize [file dirname [info script]]/../../..]
 if {[file exists $out]} { error "$out already exists: choose a new folder (this script never overwrites a project)" }
 set wdir $root/hardware/rtl/weights/
-foreach f {weights_L1.mem wrom_L4.mem bias_L4.mem mult_L4.mem} {
-    if {![file exists $wdir$f]} { error "missing $wdir$f (run software/ai/quantization/export_rtl.py)" }
+foreach f {wpipe_L1.mem wpipe_L2.mem wpipe_L3.mem wpipe_L4.mem bias_L4.mem mult_L4.mem} {
+    if {![file exists $wdir$f]} { error "missing $wdir$f (run software/ai/quantization/export_rtl.py and export_pipe.py)" }
 }
 
 create_project m6_sr $out -part xc7z020clg484-1
@@ -20,8 +20,7 @@ set_property BOARD_PART digilentinc.com:zedboard:part0:1.1 [current_project]
 set_property ip_repo_paths [list $root/hardware/vivado/ip_repo] [current_project]
 update_ip_catalog
 set rtl $root/hardware/rtl
-add_files -norecurse [list $rtl/top/sr_accel_top.v $rtl/axi_wrapper/sr_axis_wrapper.v $rtl/sr_core/sr_tile_core.v $rtl/conv_engine/conv_engine.v \
-    $rtl/common/mac_unit.v $rtl/common/requant.v $rtl/common/tile_ram.v $rtl/common/tile_ram_split.v $rtl/common/weight_rom.v]
+add_files -norecurse [concat [list $rtl/top/sr_accel_top.v $rtl/common/requant.v] [glob $rtl/pipe/*.v]]   ;# branch pipe: the whole-frame pipeline
 update_compile_order -fileset sources_1
 
 source $root/hardware/vivado/bd/design_1_m6.tcl

@@ -46,11 +46,16 @@ def write(path: Path, lines: list[str]) -> None:
 
 
 def frame(net: QNet, name: str, lr_hwc: np.ndarray) -> None:
-    h, w = lr_hwc.shape[:2]
     padded = pad_replicate(lr_hwc)
+    hr = upscale(net, lr_hwc)
+    emit(net, name, padded, hr)
+
+
+def emit(net: QNet, name: str, padded: np.ndarray, hr: np.ndarray) -> None:
+    """padded: (H+6, W+6, 3) uint8 = what the DMA streams (replicate padding, or a real-neighbour tile); hr: the expected (2H, 2W, 3) output."""
+    h, w = padded.shape[0] - 6, padded.shape[1] - 6
     x = np.ascontiguousarray(padded.transpose(2, 0, 1))
     outs = forward_layers(net, x)
-    hr = upscale(net, lr_hwc)
     assert np.array_equal(hr.transpose(2, 0, 1), outs[-1])
     l4 = outs[3]
     if net.anchor:
@@ -151,9 +156,15 @@ def main() -> int:
         frame(net, "preal2", np.ascontiguousarray(img[400:429, 100:137]))    # 37x29 (odd)
     else:
         print("SKIP preal/preal2: data/train/HR is empty")
+    gold = Path("data/golden/real0.npz")                                      # the golden tile of T1 (real neighbours, not replicate padding)
+    if gold.exists():
+        z = np.load(gold)
+        emit(net, "gtile", z["tile"].astype(np.uint8), z["out"].astype(np.uint8))
+    else:
+        print("SKIP gtile: data/golden/real0.npz missing (run export_rtl.py)")
     if "--full" in sys.argv:
         raw = Path("data/board/div2k_img0193_lr_960x540.raw")
-        frame(net, "pfull", np.frombuffer(raw.read_bytes(), dtype=np.uint8).reshape(540, 960, 3))
+        frame(net, "pfull", np.frombuffer(raw.read_bytes()[16:], dtype=np.uint8).reshape(540, 960, 3))   # SRIM: 16-byte header
     for cfg in RAND:
         rand_stage(rng, *cfg)
     return 0
