@@ -242,7 +242,67 @@ def report() -> str:
       "pipeline at 100 MHz, Part 3's is the shared engine at 150 MHz with fully overlapped I/O. "
       "The 32-bit stream caps the pipeline at 3 cycles per LR pixel (64-bit would halve that); "
       "DSP packing of two INT8 multiplies is not modelled.")
+    p(part5(cur, overhead_ms))
     return "\n".join(out) + "\n"
+
+
+# ---------------------------------------------------------------- Part 5: architecture choice for the next design
+PIPE_BUDGET = 168      # DSPs of the chosen layer pipeline (lanes 27/9/16/108 + 4 requantizers); best_pipeline(168) picks exactly these lanes
+
+
+def part5(cur: dict, overhead_ms: float) -> str:
+    out = []
+    p = out.append
+    p("\n## Part 5 - prediction: next architecture, (i) one shared engine with all DSPs vs (ii) a line-buffer layer pipeline\n")
+    p("Both with the R3q network (same layers; the anchor add sits in the last requantizer, no extra cycle). Model, NOT measured.\n")
+    p("(i) Shared engine: today's tiles (64x64 + 3 px halo, halo recomputed), layers one after another, every layer gets all lanes "
+      "(`shared_engine()`, Part 3 method). Frame time = 135 tiles x (engine + I/O cycles) / clock + today's ARM/DMA overhead "
+      f"({overhead_ms:,.1f} ms: the ARM still cuts and places tiles).\n")
+    p("(ii) Layer pipeline: whole frame streamed in raster order, no tiles, all four layers at the same time, 2-row line buffers "
+      "for the 3x3 layers (`best_pipeline()`, Part 2 method). Frame time = slowest stage + fill (2 rows per 3x3 layer) / clock + "
+      f"ARM padding {BOARD_PAD_MS} ms (no tile copy: the DMA reads the padded frame and writes the 1920x1080 output in place).\n")
+    p("| Design | DSP | Lanes L1/L2/L3/L4 | Cycles/px per layer | Cycles per frame | 100 MHz | 125 MHz |")
+    p("|---|---|---|---|---|---|---|")
+    rows = []
+    for dsp in (DSP_TOTAL,):
+        se = shared_engine(dsp)
+        used = max(se[2]) + REQ_DSP * se[1]           # widest layer's lanes + the requantizers
+        for io_name, io in (("I/O as today", cur["io"]), ("I/O overlapped", 0)):
+            cyc = cur["tiles"] * (se[0] + io)
+            cells = [f"{(ms := cyc / f * 1e3 + overhead_ms):,.0f} ms / {1e3 / ms:.1f} fps" for f in (100e6, 125e6)]
+            rows.append((f"(i) shared, {io_name}", used, se[2], se[3], cyc, cells))
+    (_, dsp), lanes, costs, stage = best_pipeline(PIPE_BUDGET)
+    cyc, _ = pipeline_frame_cycles(costs, stage, 4)
+    cells = [f"{(ms := cyc / f * 1e3 + BOARD_PAD_MS):,.0f} ms / {1e3 / ms:.1f} fps" for f in (100e6, 125e6)]
+    rows.append(("(ii) layer pipeline", dsp, lanes, [c[0] for c in costs], cyc, cells))
+    for name, dsp, ln, cpp, cyc, cells in rows:
+        p(f"| {name} | {dsp} | {'/'.join(map(str, ln))} | {'/'.join(map(str, cpp))} | {cyc / 1e6:.2f} M | " + " | ".join(cells) + " |")
+    p(f"\n(i) is given the whole device ({DSP_TOTAL} DSP) and picks its own number of requantizers (it uses {rows[0][1]}). (ii) uses 168 DSP: "
+      "16 cycles per output pixel in EVERY layer (rate-matched), which more DSPs cannot shorten without breaking that balance "
+      f"(best_pipeline at 200-220 DSP gives {best_pipeline(DSP_TOTAL)[0][0] / 1e6:.2f} M stage cycles, "
+      f"{1 - best_pipeline(DSP_TOTAL)[0][0] / max(stage):.1%} fewer, for 34 more DSPs and uneven layers).\n")
+    p("| | (i) shared engine | (ii) layer pipeline |")
+    p("|---|---|---|")
+    p(f"| Predicted fps at 125 MHz | {rows[0][5][1].split('/ ')[1]} (I/O as today) .. {rows[1][5][1].split('/ ')[1]} (I/O fully overlapped) | {rows[-1][5][1].split('/ ')[1]} |")
+    p(f"| BRAM36 (estimate) | ~70 (today's tile RAMs) + banking for multi-pixel reads | ~{line_buffer_bram36() + PIPE_EXTRA_BRAM} "
+      f"({line_buffer_bram36()} line buffers + {PIPE_EXTRA_BRAM} anchor FIFO / output row buffers) |")
+    p("| LUT (estimate, accelerator only) | ~4-6k: lane operand crossbar that differs per layer, address generators for 4 layer shapes | "
+      "~6-8k: adder trees (L4: 12 x 9-input), window registers, 16:1 channel selects, weight ROMs in LUTs |")
+    p("| MACs per cycle actually used | 144-192 lanes, but only while computing; tiles still recompute the 17 % halo | "
+      f"160 lanes, {2560 / (16 * 160):.0%} busy (L1 27, L2 9, L3 16, L4 108 lanes all at 16 cycles per pixel) |")
+    p("| ARM work per frame | pad + cut 135 tiles + place outputs (measured today: 32.3 ms) | pad only (measured today: 5.9 ms) |")
+    p("| Design risk | HIGH: the MAC operand mux grows with the lane count, on the path that already limits fmax "
+      "(RAM -> mux -> DSP, `timing_150mhz.md`); L1/L4 need 9 pixel reads per cycle (banked RAM or a window buffer); "
+      "tile I/O and halo stay | MEDIUM: four fixed-function stages, each with ONE operand pattern; new parts are line buffers, "
+      "per-pixel flow control between stages and a row buffer for the raster output; no tiles, no seams |")
+    p("| Verification reuse | engines + core tests largely replaced | integer model `upscale()` on whole frames is the golden "
+      "reference directly (no tiling step), small frames simulate quickly |")
+    p("\nChoice: (ii), see `docs/ARCHITECTURE_PIPELINE.md`. Not modelled for either: AXI/DDR stalls, cache maintenance of the "
+      "whole frame buffers on the ARM, DSP packing of two INT8 multiplies.")
+    return "\n".join(out)
+
+
+PIPE_EXTRA_BRAM = 9    # anchor FIFO 4096 x 24 bit (3 BRAM36) + double-buffered 2-HR-row output buffer (2 x 3 BRAM36); estimate
 
 
 def main() -> None:

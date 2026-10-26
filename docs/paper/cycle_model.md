@@ -61,3 +61,31 @@ Same architecture as today plus one register between the activation RAM mux and 
 | 125 MHz | 926,224 | 1,000.3 ms | 1,061.8 ms | 0.942 |
 
 Caveats: the 125 MHz build met timing in Vivado (post-route, not on the board); 150 MHz is NOT shown to close timing. Today's whole system has WNS +0.503 ns at 100 MHz, and a 152.38 MHz trial of the unchanged design failed by 1.693 ns (`docs/paper/timing_150mhz.md`; path: activation RAM -> split-RAM mux -> MAC DSP input), so the 150 MHz figures of Part 3 still need a pipelining change. Do not mix the two 3.9 fps figures: Part 2's is the line-buffer pipeline at 100 MHz, Part 3's is the shared engine at 150 MHz with fully overlapped I/O. The 32-bit stream caps the pipeline at 3 cycles per LR pixel (64-bit would halve that); DSP packing of two INT8 multiplies is not modelled.
+
+## Part 5 - prediction: next architecture, (i) one shared engine with all DSPs vs (ii) a line-buffer layer pipeline
+
+Both with the R3q network (same layers; the anchor add sits in the last requantizer, no extra cycle). Model, NOT measured.
+
+(i) Shared engine: today's tiles (64x64 + 3 px halo, halo recomputed), layers one after another, every layer gets all lanes (`shared_engine()`, Part 3 method). Frame time = 135 tiles x (engine + I/O cycles) / clock + today's ARM/DMA overhead (61.5 ms: the ARM still cuts and places tiles).
+
+(ii) Layer pipeline: whole frame streamed in raster order, no tiles, all four layers at the same time, 2-row line buffers for the 3x3 layers (`best_pipeline()`, Part 2 method). Frame time = slowest stage + fill (2 rows per 3x3 layer) / clock + ARM padding 5.9 ms (no tile copy: the DMA reads the padded frame and writes the 1920x1080 output in place).
+
+| Design | DSP | Lanes L1/L2/L3/L4 | Cycles/px per layer | Cycles per frame | 100 MHz | 125 MHz |
+|---|---|---|---|---|---|---|
+| (i) shared, I/O as today | 208 | 144/144/128/192 | 3/2/2/9 | 18.93 M | 251 ms / 4.0 fps | 213 ms / 4.7 fps |
+| (i) shared, I/O overlapped | 208 | 144/144/128/192 | 3/2/2/9 | 9.20 M | 154 ms / 6.5 fps | 135 ms / 7.4 fps |
+| (ii) layer pipeline | 168 | 27/9/16/108 | 16/16/16/16 | 8.48 M | 91 ms / 11.0 fps | 74 ms / 13.6 fps |
+
+(i) is given the whole device (220 DSP) and picks its own number of requantizers (it uses 208). (ii) uses 168 DSP: 16 cycles per output pixel in EVERY layer (rate-matched), which more DSPs cannot shorten without breaking that balance (best_pipeline at 200-220 DSP gives 8.29 M stage cycles, 1.1% fewer, for 34 more DSPs and uneven layers).
+
+| | (i) shared engine | (ii) layer pipeline |
+|---|---|---|
+| Predicted fps at 125 MHz | 4.7 fps (I/O as today) .. 7.4 fps (I/O fully overlapped) | 13.6 fps |
+| BRAM36 (estimate) | ~70 (today's tile RAMs) + banking for multi-pixel reads | ~27 (18 line buffers + 9 anchor FIFO / output row buffers) |
+| LUT (estimate, accelerator only) | ~4-6k: lane operand crossbar that differs per layer, address generators for 4 layer shapes | ~6-8k: adder trees (L4: 12 x 9-input), window registers, 16:1 channel selects, weight ROMs in LUTs |
+| MACs per cycle actually used | 144-192 lanes, but only while computing; tiles still recompute the 17 % halo | 160 lanes, 100% busy (L1 27, L2 9, L3 16, L4 108 lanes all at 16 cycles per pixel) |
+| ARM work per frame | pad + cut 135 tiles + place outputs (measured today: 32.3 ms) | pad only (measured today: 5.9 ms) |
+| Design risk | HIGH: the MAC operand mux grows with the lane count, on the path that already limits fmax (RAM -> mux -> DSP, `timing_150mhz.md`); L1/L4 need 9 pixel reads per cycle (banked RAM or a window buffer); tile I/O and halo stay | MEDIUM: four fixed-function stages, each with ONE operand pattern; new parts are line buffers, per-pixel flow control between stages and a row buffer for the raster output; no tiles, no seams |
+| Verification reuse | engines + core tests largely replaced | integer model `upscale()` on whole frames is the golden reference directly (no tiling step), small frames simulate quickly |
+
+Choice: (ii), see `docs/ARCHITECTURE_PIPELINE.md`. Not modelled for either: AXI/DDR stalls, cache maintenance of the whole frame buffers on the ARM, DSP packing of two INT8 multiplies.
