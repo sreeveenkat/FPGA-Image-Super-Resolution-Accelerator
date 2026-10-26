@@ -1,0 +1,35 @@
+# pipe: raw result lines on the final RTL (2026-10-27; quick, full incl. mutation test, netlist simulation, 960x540 frame)
+## run_tests.sh quick
+== summary: 48 test runs passed, 0 failed (quick)
+## run_tests.sh full: top-level frames, limit frames, mutation test
+PASS fifos: anchor_fifo 30,000 words through a 64-deep FIFO (pointers wrap 234 times), full exactly from DEPTH-4, err only on misuse; pipe_fifo 20,000 reserved words, ok/err correct
+PASS pipe_stage L4 frame preal2: 39x31 -> 1073 outputs x 12 ch bit-exact, 17275 cycles (16.09 per output), re-run OK
+PASS pipe_stage L4 frame preal: 66x50 -> 3072 outputs x 12 ch bit-exact, 49313 cycles (16.05 per output), re-run OK
+PASS sr_pipe_top p13x7(13x7, CYCLES 3241) p1x1(1x1, CYCLES 553) p2x3(2x3, CYCLES 833) p5x4(5x4, CYCLES 1337) pramp(16x9, CYCLES 4433) psat(6x5, CYCLES 1633) preal2(37x29, CYCLES 22089) p2x3(2x3, CYCLES 833): 8 frame(s) bit-exact via AXI-Lite + AXI-Stream, every stage output exact
+PASS sr_pipe_top p13x7(13x7, CYCLES 3248) p1x1(1x1, CYCLES 559) p2x3(2x3, CYCLES 840) p5x4(5x4, CYCLES 1345) pramp(16x9, CYCLES 4458) psat(6x5, CYCLES 1640) preal2(37x29, CYCLES 22128) p2x3(2x3, CYCLES 846): 8 frame(s) bit-exact via AXI-Lite + AXI-Stream, random stalls
+PASS sr_pipe_top p13x7(13x7, CYCLES 3241): 1 frame(s) bit-exact via AXI-Lite + AXI-Stream, error codes 1-4 + recovery, 6 soft-reset aborts + quiet checks
+PASS sr_pipe_top gtile(64x64, CYCLES 74641): 1 frame(s) bit-exact via AXI-Lite + AXI-Stream
+PASS sr_pipe_top pramp(16x9, CYCLES 5698) p13x7(13x7, CYCLES 4028): 2 frame(s) bit-exact via AXI-Lite + AXI-Stream, slow output sink
+PASS sr_pipe_top preal(64x48, CYCLES 57233) gtile(64x64, CYCLES 74641): 2 frame(s) bit-exact via AXI-Lite + AXI-Stream, every stage output exact
+PASS sr_pipe_top preal(64x48, CYCLES 57283) preal2(37x29, CYCLES 22131): 2 frame(s) bit-exact via AXI-Lite + AXI-Stream, random stalls
+PASS sr_pipe_top preal2(37x29, CYCLES 22115): 1 frame(s) bit-exact via AXI-Lite + AXI-Stream, random stalls, 12 soft-reset aborts + quiet checks
+PASS sr_pipe_top p192(192x192, CYCLES 616337): 1 frame(s) bit-exact via AXI-Lite + AXI-Stream, every stage output exact
+PASS sr_pipe_top pw960x24(960x24, CYCLES 439697): 1 frame(s) bit-exact via AXI-Lite + AXI-Stream, every stage output exact
+PASS sr_pipe_top pmaxw(1018x4, CYCLES 139105): 1 frame(s) bit-exact via AXI-Lite + AXI-Stream, every stage output exact
+PASS sr_pipe_top ptall(1x4096, CYCLES 328153): 1 frame(s) bit-exact via AXI-Lite + AXI-Stream, every stage output exact
+F1    CAUGHT          FIFO accepts one reservation too many  [fifos (pointer wrap): FAIL pipe_fifo: word 1500 is 19605]
+A1    CAUGHT          frame width one above MAX_W accepted  [top errors + soft-reset aborts: FAIL register STATUS (W = MAX_W + 1) (0x04): read 0x00000001, expected 0x00000004]
+A2    CAUGHT          TKEEP error reported as code 2  [top errors + soft-reset aborts: FAIL register ERROR_CODE (0x10): read 0x00000002, expected 0x00000003]
+== pipeline mutation test: deliberate RTL defects, each must be caught (mutate_pipe.py exits 0 only then)
+PASS pipeline mutation test: 34 mutants, 33 caught, 1 equivalent, 0 survived, 0 invalid; control CONTROL OK
+== summary: 65 test runs passed, 0 failed (full)
+## run_postsynth.sh
+netlist: 12 of 12 weight files read during synthesis, 170 DSP48E1 instances
+[netlist frames] PASS sr_pipe_top p13x7(13x7, CYCLES 3241) p1x1(1x1, CYCLES 553) p2x3(2x3, CYCLES 833) p5x4(5x4, CYCLES 1337) pramp(16x9, CYCLES 4433) psat(6x5, CYCLES 1633): 6 frame(s) bit-exact via AXI-Lite + AXI-Stream
+[netlist stalls] PASS sr_pipe_top p13x7(13x7, CYCLES 3248) p1x1(1x1, CYCLES 559) p2x3(2x3, CYCLES 840) p5x4(5x4, CYCLES 1345) pramp(16x9, CYCLES 4455) psat(6x5, CYCLES 1635): 6 frame(s) bit-exact via AXI-Lite + AXI-Stream, random stalls
+[netlist errors] PASS sr_pipe_top p5x4(5x4, CYCLES 1337): 1 frame(s) bit-exact via AXI-Lite + AXI-Stream, error codes 1-4 + recovery
+== post-synthesis summary: 4 passed, 0 failed
+## run_fullframe.sh pfull
+PASS sr_pipe_top pfull(960x540, CYCLES 8398481): 1 frame(s) bit-exact via AXI-Lite + AXI-Stream, every stage output exact
+(xsim wall time 441 s)
+INFO pfull: highest anchor FIFO occupancy 2892 of 4096 (full from 4092)
