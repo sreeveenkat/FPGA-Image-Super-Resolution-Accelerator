@@ -13,6 +13,7 @@ over seeds, "within noise" tags): `results/quality/image_quality_ladder.md` (gen
 4. Commit and push only when asked. Commit messages short, past tense, specific. **No Co-Authored-By or any other trailer.** No `gh`.
 5. Never symlink `hardware/` or `data/` into a Vivado project folder.
 6. Never claim a number that was not measured. Estimates are marked as estimates.
+7. **Freeze (2026-10-26): no new builds and no RTL changes in any tree until the board results are in.** Documentation and analysis of stored results only.
 
 ## Decisions so far
 
@@ -121,6 +122,8 @@ Then: R3q replaces R2q only if its cost (+33 to +45 LUT, +66 FF, 0 DSP/BRAM/cycl
 
 1. Done: final two-seed table, overlap check, crops, R3q vs R2q.
 2. Done (PC side): R2q sandbox, R3q sandbox, per-design VERSION, full regressions, netlist simulations.
-3. **NEXT: the board checklist, `docs/paper/board_checklist.md`**: T1/T2 re-run on the current design, T7 ARM baseline, R2q byte-exact + frame time, power (current and R2q), then R3q. Bitstreams, ELFs and expected checksums are ready (R0 0xcf947f22, R2q 0x2afbc9ae, R3q 0x45dd4e2d for the 960x540 frame).
+3. **NEXT: the board checklist, `docs/paper/board_checklist.md`**: T1/T2 re-run on the current design, T7 ARM baseline, R2q byte-exact + frame time, R3q, then r0_125 (R0 at 125 MHz, section 5a); power (idle and processing) for every bitstream, inline DC meter primary, J21 cross-check (section 4). Bitstreams, ELFs and expected checksums are ready (R0 0xcf947f22, R2q 0x2afbc9ae, R3q 0x45dd4e2d for the 960x540 frame).
 4. After the board results: apply the merge criteria above; the owner decides which branch is merged into `main` and installed as the deployed weights/bitstream.
 5. Later: cost of loading weights/qparams at runtime over AXI-Lite instead of `$readmemh`.
+6. **Final target (owner, 2026-10-26): R3q at 125 MHz** (the anchor network with the r0_125 register change and clock). It is built **only after both R3q and r0_125 pass on the board**; nothing of it exists yet.
+7. **Venue: most likely FPL 2027.** Deadline expected around late March 2027, **to be confirmed** when the call is published (`docs/paper/related_work_and_venues.md` had FPL 2027 as "expected ~Mar-Apr 2027, not announced").

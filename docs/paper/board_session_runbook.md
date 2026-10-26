@@ -2,7 +2,7 @@
 
 Prepared 2026-10-24. **Nothing in this runbook has been run on the board yet.** Pass values: `docs/paper/board_expected.md` (generated from each tree's own integer model).
 Pass rules: `docs/paper/board_checklist.md` section 5b (PROPOSED merge criteria; the owner confirms). Known issues: `board_checklist.md` section 7.
-Order: **0** prepare -> **1** R0/0602 with the hang test (T1, T2) -> **2** T7 -> **3** R2q -> **4** R3q -> **5** power -> **7** (OPTIONAL, last) R0 at 125 MHz.
+Order: **0** prepare -> **1** R0/0602 with the hang test (T1, T2) -> **2** T7 -> **3** R2q -> **4** R3q -> **7** r0_125 (R0 at 125 MHz) -> **5** power (idle and processing for every bitstream).
 
 Conventions used below
 * `D=data/board/$(date +%F)` inside each tree: every log of the day goes there (`board_run.sh` creates it). Save **everything**: UART log, xsdb log, meta file, stats, outputs.
@@ -64,20 +64,18 @@ R2q goes first; if any item fails, R3q is not tried before the cause is understo
 Same commands as section 3 with `t..._r3q` names in `~/Desktop/venkat/sandbox_R3q`; expected: T1 `version=0x53523201`; T2 `0x45dd4e2d`; negative controls: the R3q output must differ from the R2q expected file and from the R0 expected file (`BYTE-EXACT: no` for both);
 wrong-bitstream control with the R2q bitstream (`SR_BIT=~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit`): `SR: VERSION 0x53522201, expected 0x53523201`; 119 images; T7 fnv 0x45dd4e2d; 20-frame timing as in 3.5. This is the first real-hardware check of the anchor's halo-aligned read (135 tiles).
 
-## 5. Power (after the functional steps; needs the instrument)
-What is specified in `board_checklist.md` section 4: measure the **12 V board input** (whole ZedBoard) and use the **differences** between states; states P0 (PL not programmed), P1 (programmed, ARM idle), P2 (accelerator running, `sr_app_t3_200f.elf`, 200 frames about 4.4 min),
-P3 (ARM only, `sr_app_t11_20f.elf`); wait 30 s per state, at least 5 readings; order P0, P1a, P2a, P1b, P2b, P3, then repeat P1a, P2a, P1b, P2b in the opposite order (drift check). Start the long runs with `board_run.sh` (it prints the start time; read the meter during the run), e.g.
-`software/board/board_run.sh p2a_r0 software/board/build/sr_app_t3_200f.elf data/board/div2k_img0193_lr_960x540.raw $D/p2a_r0.raw` (R0 tree); in a sandbox use `export SR_TREE=$PWD; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh` and `$BR p2b_r2q ...`.
-**Instrument (owner decision 2026-10-25):** a multimeter in mV mode across the 12 V input current-sense resistor (header J21 per the owner), I = V / R, P = I x V_in, **and the actual input voltage measured in every state**. The resistor value and the page of the ZedBoard Hardware User's Guide are NOT verified yet (the guide could not be read from the PC; secondary sources say 10 mOhm): look them up first and write value, tolerance, guide version and page into `$D/power_readings.txt` before the first reading (details: `board_checklist.md` section 4).
-States to read: P0 (PL unconfigured, board idle), P1 (PL configured, idle), P2 (accelerator running T3). Report **P2 - P1** as the accelerator's delta (and P1 - P0). This is **board-level power**, not comparable to Vivado's on-chip estimate (1.913 W / 1.910 W): compare deltas only.
-Write down: meter model and its stated accuracy, range, resolution, reading interval, the mV and V_in readings with time stamps in `$D/power_readings.txt`.
+## 5. Power (after the functional steps of each design)
+Procedure: `board_checklist.md` section 4. **Primary: inline DC power meter between the 12 V adapter and the barrel jack. Cross-check: J21** (10 mOhm, 1 W sense resistor in series with the 12 V input, per forum quotes of the ZedBoard Hardware User's Guide; page citation to be added): I = V_J21 / 0.010 Ohm, P = I x V_in. Measure V_in in every state.
+For **each bitstream** (R0, R2q, R3q, r0_125): idle (T1 finished, ARM in its idle loop) and processing (`sr_app_t3_200f.elf` of that tree, read during the run); plus P0 (PL not programmed) and P3 (ARM only, `sr_app_t11_20f.elf`). Wait 30 s per state, then at least 5 readings over at least 30 s, both meters in the same window; report mean/min/max/count. Repeat R0 idle/processing at the end (drift).
+Start the long runs with `board_run.sh` (it prints the start time), e.g. `software/board/board_run.sh p2_r0 software/board/build/sr_app_t3_200f.elf data/board/div2k_img0193_lr_960x540.raw $D/p2_r0.raw` (R0 tree); in a sandbox `export SR_TREE=$PWD; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh` and `$BR p2_r2q ...`.
+Board-level power: not comparable to Vivado's on-chip estimate; compare deltas only. Write down both meter models, accuracy, range, resolution, and every reading with its time in `$D/power_readings.txt`.
 
 ## 6. What to bring back (all under `data/board/<date>/` of each tree)
 `*.log` (UART with time stamps), `*_xsdb.log`, `*_meta.txt` (git revision, bitstream and ELF md5), `*_stats.txt`, the `compare_raw.py` lines (also the negative controls), the hang-test texts of 1.1-1.3, the meter readings, and a list of every retry with its reason.
 After the session update the local project log, `docs/STATUS.md` and the merge decision; commit only on request.
 
-## 7. OPTIONAL last step: R0 at 125 MHz (tree `~/Desktop/venkat/sandbox_R0_125`, branch `r0_125`; VERSION 0x53524201)
-Only after sections 1-4 are done and only if time is left. Built 2026-10-25, Vivado WNS +0.632 ns at 125.000 MHz, simulation 88/88; **nothing on the board yet** (`docs/paper/fmax_plan.md` section 7, `results/utilization/m6_system_R0_125.md` in that branch). Expected answers: `docs/paper/board_expected.md`, section "R0 at 125 MHz".
+## 7. After R3q: r0_125, R0 at 125 MHz (tree `~/Desktop/venkat/sandbox_R0_125`, branch `r0_125`; VERSION 0x53524201)
+Only after sections 1-4 passed (checklist section 5a). Built 2026-10-25, Vivado WNS +0.632 ns at 125.000 MHz, simulation 88/88; **nothing on the board yet** (`docs/paper/fmax_plan.md` section 7, `results/utilization/m6_system_R0_125.md` in that branch). Expected answers: `docs/paper/board_expected.md`, section "R0 at 125 MHz".
 Same commands as section 1, from the sandbox root (the bitstream `~/Desktop/venkat/R0_125_artifacts/design_1_wrapper_R0_125.bit` is the tree default; the tree's driver refuses every other bitstream):
 ```bash
 cd ~/Desktop/venkat/sandbox_R0_125; export SR_TREE=$PWD; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh

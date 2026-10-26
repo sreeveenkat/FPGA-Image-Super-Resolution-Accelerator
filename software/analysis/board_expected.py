@@ -26,7 +26,7 @@ TREES = {
                 xsa=V / "R2q_artifacts/design_1_wrapper_R2q.xsa"),
     "R3q": dict(tree=V / "sandbox_R3q", version_expected="0x53523201", bits=[("sandbox build (tree default)", V / "R3q_artifacts/design_1_wrapper_R3q.bit")],
                 xsa=V / "R3q_artifacts/design_1_wrapper_R3q.xsa"),
-    # OPTIONAL last step (branch r0_125): deployed network, one more register per engine run, fabric clock 125 MHz.  Timing numbers here are PREDICTIONS (fmax_plan.md), not board values.
+    # After R3q (branch r0_125): deployed network, one more register per engine run, fabric clock 125 MHz.  Timing numbers here are PREDICTIONS (fmax_plan.md), not board values.
     "R0 at 125 MHz (r0_125)": dict(tree=V / "sandbox_R0_125", version_expected="0x53524201", bits=[("sandbox build (tree default)", V / "R0_125_artifacts/design_1_wrapper_R0_125.bit")],
                                    xsa=V / "R0_125_artifacts/design_1_wrapper_R0_125.xsa",
                                    cycles="926,214-926,245 (the R0 window of 926,210-926,241 plus the 4 extra cycles per tile of simulation: 926,201 -> 926,205)",

@@ -1,4 +1,4 @@
-# Board checklist: T1/T2 re-run, T7 ARM baseline, R2q, power, and later R3q
+# Board checklist: T1/T2 re-run, T7 ARM baseline, R2q, R3q, r0_125, power
 
 Prepared 2026-10-19, updated for the per-design VERSION values. **Nothing below has been run on the board.** Everything on the PC side (simulation, builds, byte-exact C model) is done and listed in
 `results/utilization/m6_system_R2q.md` (branch `r2q`) and `results/utilization/m6_system_R3q.md` (branch `r3q`).
@@ -6,13 +6,14 @@ Board on the PROG/JTAG USB (J17), boot jumpers on JTAG. Run every `xsdb` command
 
 Companion files (2026-10-24): `docs/paper/board_session_runbook.md` (the order of the day and every command), `docs/paper/board_expected.md` (what the board must print for each design, generated from each tree's integer model), `software/board/board_run.sh` (run + UART log capture, PC-tested only).
 
-## 0. The three designs and how to tell them apart
+## 0. The four designs and how to tell them apart
 
 | Name | Weights | Bitstream (outside the repo) | Tree to run from | 960x540 expected fnv1a32 | 128x128 baboon fnv1a32 |
 |---|---|---|---|---|---|
 | **R0 / 0602** (deployed) | `main` | `~/Desktop/venkat/vitis/m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit` (default of `run_board.tcl`; fallback copy `~/Desktop/venkat/TESTED_0602.bit`) | `~/Desktop/venkat/sem_project_all` | 0xcf947f22 | 0x91a4506d |
 | **R2q** (re-param + QAT, SHIFT 22/22/21/22) | branch `r2q` | `~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit` | `~/Desktop/venkat/sandbox_R2q` | 0x2afbc9ae | 0x272bafbb |
 | **R3q** (plain + anchor + QAT, SHIFT 22/22/21/25, RTL change) | branch `r3q` | `~/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.bit` | `~/Desktop/venkat/sandbox_R3q` | 0x45dd4e2d | 0xa1d2f75c |
+| **r0_125** (R0 weights, one more register per engine run, 125 MHz) | branch `r0_125` | `~/Desktop/venkat/R0_125_artifacts/design_1_wrapper_R0_125.bit` | `~/Desktop/venkat/sandbox_R0_125` | 0xcf947f22 (same weights as R0) | 0x91a4506d |
 
 **Each design has its own VERSION register value** (read by the ARM driver and printed as `version=` in the stats of every run):
 
@@ -21,6 +22,7 @@ Companion files (2026-10-24): `docs/paper/board_session_runbook.md` (the order o
 | R0 / 0602 | `0x53520602` |
 | R2q | `0x53522201` |
 | R3q | `0x53523201` |
+| r0_125 | `0x53524201` |
 
 Each tree's driver accepts only its own family (`VERSION & 0xFFFFFF00`), so an ELF built in the R2q tree **refuses** to run on any other bitstream (`SR: VERSION 0x..., expected 0x53522201`, result != 0): a loud, free negative control. `run_board.tcl`, `demo.sh`, `run_testsets.sh` and `fresh_load_soak.sh` of the R2q/R3q trees default to their own bitstream and VERSION (override with `SR_BIT` / `SR_EXPECT_VERSION`). The golden tile (T1) and the checksum of the 960x540 output (T2) still prove the weights: each tree has its own `golden_tile.h`, `sr_weights.h` and `data/board/*expected*` made from its own weights. As a second negative control, the first R2q T2 output should also be compared against the R0 expected file: `compare_raw.py` must say `BYTE-EXACT: no`.
 
@@ -60,41 +62,41 @@ Input files `data/board/div2k_img0193_lr_960x540.raw` (R2q/R3q trees have it; ex
 If T1 fails on R2q: check that the right bitstream was loaded (`SR_BIT`), then run `SR_BIT=~/Desktop/venkat/TESTED_0602.bit` with the R0 T1 to prove the board and
 the tooling are fine; then report the failing tile and the `t1_r2q.txt` stats.
 
-## 4. Power measurement (current design and R2q)
+## 4. Power measurement (every bitstream: R0, R2q, R3q, r0_125; plus ARM only)
 
 **What to measure:** the ZedBoard's 12 V input power (whole board: Zynq, DDR, regulators, USB-UART, LEDs). The board overhead is the same in every state, so the
 **differences** between states are the useful numbers. The synthesis power estimates are 1.913 W (0602) and 1.910 W (R2q, current VERSION 0x53522201 build; `m6_system_R2q.md:45` in branch `r2q`; the 1.912 W on its line 6 is the superseded first build), both "low confidence"; the measurement
 replaces them.
 
-**How (owner decision 2026-10-25): the 12 V input current-sense resistor, read with a multimeter.**
-* Measure the millivolts across the sense resistor (header J21 on the ZedBoard, per the owner; the board's own markings and schematic decide), then I = V / R and P = I x V_in.
-* **Also measure the actual input voltage** (multimeter on the 12 V rail / adapter output) in every state: do not assume 12.00 V.
-* **R and the header are NOT verified here.** The Hardware User Guide was not readable from this machine (the PDF URLs tried returned errors on 2026-10-25), so there is no page number to cite. Secondary sources only, not authoritative: element14 community posts say the guide describes a 10 mOhm, 1 W resistor in series with the 12 V input and J21 across it (https://community.element14.com/products/devtools/avnetboardscommunity/avnetboard-forums/f/zedboard-hardware-design/34032/zedboard-power-consumption); a worked example elsewhere uses 0.01 Ohm (https://www.openwall.com/lists/john-dev/2014/07/20/3). **Before the first reading: open the ZedBoard Hardware User's Guide, find the section on the 12 V input / J21, and write the resistor value, its tolerance, the guide version and the page number into `$D/power_readings.txt`** (and replace this paragraph with the citation). If the guide and the board disagree, the board wins and the difference is reported.
-* Expected size (from the secondary value only, a plan not a measurement): at 10 mOhm and about 0.5 A the drop is about 5 mV, so the meter needs mV resolution (0.01 mV is better). Record the meter model, range, stated accuracy and resolution.
-* Probe on the J21 pins only with the meter in voltage mode; an extra load across the header skews the reading (the header contact resistance is far above the sense resistor, as the second source notes), so do not use it to power anything.
+**How (owner decision 2026-10-26).**
+* **Primary: an inline DC power meter between the 12 V adapter and the barrel jack.** Write down its model, range, stated accuracy, resolution and reading/averaging interval. Use the same meter and range for every state.
+* **Cross-check: J21.** J21 is across a **10 mOhm, 1 W** current-sense resistor in series with the 12 V input (forum quotes of the ZedBoard Hardware User's Guide; **page citation to be added by the owner**: until then this value is not cited from the guide itself). Multimeter in mV mode across the J21 pins: I = V_J21 / 0.010 Ohm, P = I x V_in. At about 0.5 A the drop is about 5 mV, so the meter needs at least 0.01 mV resolution. Probe only (voltage mode); never load the header.
+* **Measure the actual input voltage** in every state (the inline meter shows it; otherwise a multimeter at the jack); do not assume 12.00 V.
+* **Average several readings per state:** wait 30 s after entering the state, then take at least 5 readings (or the meter's log) spread over at least 30 s; report mean, min, max and the number of readings. Inline meter and J21 are read in the same window.
+* If the two methods disagree by more than their combined stated accuracy, report both and say so; do not pick one afterwards.
 
 **Board-level power, not comparable to Vivado's on-chip estimate.** This is the whole ZedBoard's 12 V input (Zynq, DDR, regulators, USB-UART, LEDs, conversion losses). The Vivado numbers (1.913 W, 1.910 W) are the on-chip estimate of the Zynq only. Never put the two in one row without saying so, and never compare a board-level absolute with the estimate; compare the **delta** only.
 
-**States** (steady room temperature, wait 30 s in each state, read the meter at least 5 times or log it, note the time):
+**States: idle and processing for each bitstream** (steady room temperature; averaging as above; note the start and end time of each window):
 
-| # | State | How to get there |
-|---|---|---|
-| P0 | board on, PL not programmed | power on, do nothing |
-| P1a | 0602 programmed, ARM idle | R0 T1 (ends in an idle loop), read after it finished |
-| P2a | 0602 accelerator running | R0 `sr_app_t3_200f.elf` (200 frames, ~4.4 min), read during the run |
-| P1b | R2q programmed, ARM idle | R2q T1 |
-| P2b | R2q accelerator running | R2q `sr_app_t3_200f.elf` |
-| P3 | ARM only running | `sr_app_t11_20f.elf` (20 frames), read during the run |
+| # | State | How to get there | Tree |
+|---|---|---|---|
+| P0 | board on, PL not programmed | power on, do nothing | - |
+| P1-R0 / P2-R0 | 0602 programmed, ARM idle / accelerator running | T1 (ends in an idle loop), read after it finished / `sr_app_t3_200f.elf` (200 frames, ~4.4 min), read during the run | R0 |
+| P1-R2q / P2-R2q | same for R2q | same ELFs | R2q |
+| P1-R3q / P2-R3q | same for R3q | same ELFs | R3q |
+| P1-125 / P2-125 | same for r0_125 (125 MHz) | same ELFs (200 frames at ~1.06 s each, predicted, ~3.5 min) | r0_125 |
+| P3 | ARM only running (PL programmed with R0) | `sr_app_t11_20f.elf` (20 frames), read during the run | R0 |
 
-Order: P0, P1a, P2a, P1b, P2b, P3, then **repeat P1a, P2a, P1b, P2b** once more in the opposite order (drift check). The 0602 and R2q fabrics are logically identical
-apart from constants, so P2a and P2b should agree within the meter's accuracy: if they differ by more than that, say so rather than averaging.
+Order: P0, then idle/processing for R0, R2q, R3q, r0_125 (each design only after its functional steps passed), P3, then **repeat P1-R0 / P2-R0** at the end (drift check: if the repeat differs by more than the meter accuracy, say so rather than averaging).
+R0 and R2q fabrics are logically identical apart from constants, so their P2 should agree within the meter accuracy; R3q adds 33-45 LUT; r0_125 runs at a 25 % higher clock and is expected to draw more (not predicted; the Vivado estimates use different methods).
 
-**Reported deltas (owner decision):** accelerator delta = P(accelerator running T3) - P(PL configured, idle) (P2 - P1); also report P1 - P0 (cost of a configured but idle PL). All three states are measured with the same meter, range and input voltage reading.
+**Reported per bitstream (owner decision):** idle power P1, processing power P2, accelerator delta P2 - P1, and P1 - P0 (cost of a configured but idle PL); each from the inline meter (primary) with the J21 value beside it.
 
 | Quantity | Formula | Value |
 |---|---|---|
-| Energy per frame, FPGA, whole board | P2 x 1.312 s | J |
-| Energy per frame, FPGA, above idle | (P2 - P1) x 1.312 s | J |
+| Energy per frame, FPGA, whole board (per bitstream) | P2 x (that design's measured T3 frame time; 1.312 s for R0) | J |
+| Energy per frame, FPGA, above idle (per bitstream) | (P2 - P1) x (that design's measured frame time) | J |
 | Energy per frame, ARM-only, whole board | P3 x (T7 time per frame) | J |
 | Energy per frame, ARM-only, above idle | (P3 - P1) x (T7 time per frame) | J |
 
@@ -111,10 +113,24 @@ Only after R2q passed section 3. Same steps as section 3 with the R3q tree's ELF
 | negative controls | the R3q output compared with the R2q expected file and with the R0 expected file: `BYTE-EXACT: no` for both |
 | frame time | 20-frame mean within ±2 ms of 1,311.9 ms, max − min ≤ 3 ms, CYCLES per tile 926,210-926,241 (see section 2 T1 row and `results/speed/m7_timing_20frames.md`); per-frame times saved to a file |
 | T7 | `BYTE-EXACT: yes`, fnv 0x45dd4e2d (anchor compiled into `sr_swmodel.c`) |
-| power | repeat P1/P2 for R3q (P1c, P2c); expected within meter accuracy of R2q (+33 to +45 LUT, +66 FF, 0 DSP, 0 BRAM in the whole system: simulation/synthesis numbers, `m6_system_R3q.md` in branch `r3q`, not board-measured) |
+| power | idle and processing for R3q (P1-R3q, P2-R3q, section 4); expected within meter accuracy of R2q (+33 to +45 LUT, +66 FF, 0 DSP, 0 BRAM in the whole system: simulation/synthesis numbers, `m6_system_R3q.md` in branch `r3q`, not board-measured) |
 
 Seam and halo alignment are covered in simulation (20-tile and 4-tile seam tests, 26 anchor mutants); the board T2 on a real 960x540 frame (135 tiles) is the first
 real-hardware check of the anchor's halo-aligned read.
+
+## 5a. After R3q: r0_125 (R0 weights at 125 MHz), from `~/Desktop/venkat/sandbox_R0_125` (bitstream `~/Desktop/venkat/R0_125_artifacts/design_1_wrapper_R0_125.bit`, VERSION 0x53524201; the tree's default)
+Only after R3q (section 5). Built 2026-10-25: routed WNS +0.632 ns at 125.000 MHz, full simulation 88/88, 926,205 cycles per tile in simulation (R0: 926,201); **never run on a board**
+(`docs/paper/fmax_plan.md` section 7; `results/utilization/m6_system_R0_125.md` in branch `r0_125`). Commands: `board_session_runbook.md` section 7. Expected values (`board_expected.md`, section "R0 at 125 MHz"):
+
+| Step | Pass when |
+|---|---|
+| T1 | `result=0`, **`version=0x53524201`**, stat6 = 20, CYCLES each within **926,214-926,245** (the R0 window + 4) |
+| T2 | `BYTE-EXACT: yes`, fnv1a32 **0xcf947f22** (same as R0: the weights are unchanged) |
+| negative control | the R0-tree ELF must refuse this bitstream (VERSION family 0x535242xx vs 0x535206xx) |
+| frame time | 20-frame mean in **1,033-1,064 ms** (predicted 1,061.8 ms, a model value; lower end = core cycles at 125 MHz + ARM padding/copies), max - min <= 3 ms; per-frame times saved |
+| power | idle and processing for r0_125 (P1-125, P2-125, section 4) |
+
+If T1 or T2 fails: record it, stop, do not retry silently. The final target (R3q at 125 MHz) is built only after R3q and r0_125 both pass on the board (`docs/STATUS.md`).
 
 ## 5b. Merge criteria (PROPOSED, the owner confirms; same text as `docs/STATUS.md`)
 A branch goes into `main` only if, with its own bitstream: (1) T1 passes with its own VERSION and T2 is byte-exact with its fnv1a32 (R2q 0x2afbc9ae, R3q 0x45dd4e2d);
