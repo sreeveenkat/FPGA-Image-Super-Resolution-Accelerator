@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Review demo (needs the ZedBoard on JTAG + power).  One command, from a fresh power-up, ~1-2 minutes:
-#   software/board/demo.sh            # default bitstream = 0602 (m6_sr_0602)
+#   software/board/demo.sh            # default bitstream = this tree's own (BIT= below)
 #   software/board/demo.sh --0601     # fallback bitstream 0601 (m6_sr)
 #   software/board/demo.sh --no-view  # do not open the picture
 # Steps: [1] board answers on JTAG  [2] FPGA programmed safely (PL isolation on) + VERSION  [3] golden tile (+20 repeats)
@@ -40,6 +40,17 @@ fail() {  # fail "<what>" "<fix lines...>"
     banner FAIL "DEMO STOPPED at $(el) - full log: $LOG"; exit 1
 }
 st() { grep -E "^$2=" "$1" 2>/dev/null | cut -d= -f2; }
+# xsdb is started through rlwrap, which touches the terminal.  A plain `timeout N xsdb ...` runs xsdb in a background process group, so
+# rlwrap is stopped at exit and the call only ends when the timeout fires (seen 2026-10-13: 60 / 360 / 961 s instead of ~25 s).
+# xs closes stdin and keeps xsdb in the foreground group (`--foreground`); the timeout is a hard limit (TERM, then KILL after 5 s).
+# Reproduced and fixed on the PC with a trivial Tcl script in a pty (docs/paper/board_checklist.md "Known issues"); UNTESTED ON BOARD.
+XSDB_T_JTAG=${XSDB_T_JTAG:-30}; XSDB_T_T1=${XSDB_T_T1:-120}; XSDB_T_T2=${XSDB_T_T2:-300}
+xs() { local t=$1; shift; timeout --foreground -k 5 "$t" xsdb "$@" < /dev/null; XS_RC=$?; return $XS_RC; }
+hang_fail() {  # hang_fail "<step>" <seconds>   (call right after xs; fails only when the hard timeout fired)
+    case $XS_RC in 124|137) fail "xsdb did not exit within $2 s during: $1 (hard timeout; known hang, fix UNTESTED ON BOARD)" \
+        "see docs/paper/rehearsal_2026-10-13_notes.md section 4; the board result in $LOG may still be complete but is NOT accepted" \
+        "pkill hw_server, then run the demo again; if it repeats: power-cycle the board (SW8 off 10 s, on)" ;; esac
+}
 
 say "SR accelerator demo  $(date '+%F %T')   bitstream $EXPV  ($BIT)"
 say "full log: $LOG"
@@ -59,7 +70,7 @@ unset SR_SYSRST SR_NO_ISOLATE SR_NOFPGA SR_DOW2 SR_VERIFY_DUMP
 # ---- [1] JTAG ----------------------------------------------------------------------------------------------------------------------------------
 say "[1/5] board on JTAG ..."
 echo "== jtag_check" >> $LOG
-timeout 60 xsdb software/board/jtag_check.tcl >> $LOG 2>&1
+xs $XSDB_T_JTAG software/board/jtag_check.tcl >> $LOG 2>&1; hang_fail "JTAG check" $XSDB_T_JTAG
 grep -q "^JTAG_OK" $LOG || fail "the board does not answer on JTAG ($(grep -m1 JTAG_FAIL $LOG))" \
     "is the board ON (power LED) and the micro-USB cable in the PROG/JTAG port (J17)?" \
     "pkill hw_server   (a stale JTAG server), then run the demo again" \
@@ -73,7 +84,7 @@ say "[2/5] programming the FPGA (PL isolation on) ..."
 say "[3/5] golden tile 64x64 (+20 repeats) ..."
 echo "== T1 run_board.tcl" >> $LOG
 S1=$OUT/t1_$STAMP.txt
-timeout 300 xsdb software/board/run_board.tcl $B/sr_app_t1.elf - - $S1 >> $LOG 2>&1
+xs $XSDB_T_T1 software/board/run_board.tcl $B/sr_app_t1.elf - - $S1 >> $LOG 2>&1; hang_fail "golden tile T1" $XSDB_T_T1
 VER=$(st $S1 version)
 [ -n "$VER" ] || fail "no result from the board (program did not finish)" \
     "xsdb software/board/dap_reset.tcl   (clears a stuck debug port), then run the demo again" \
@@ -87,10 +98,10 @@ else
 fi
 
 # ---- [4] full frame ----------------------------------------------------------------------------------------------------------------------------
-say "[4/5] full frame 960x540 -> 1920x1080 (135 tiles) ..."
+say "[4/5] full frame 960x540 -> 1920x1080 (one frame, pipeline) ..."
 echo "== T2 run_board.tcl" >> $LOG
 S2=$OUT/t2_$STAMP.txt; O2=$OUT/fpga_1920x1080_$STAMP.raw
-timeout 600 xsdb software/board/run_board.tcl $B/sr_app_t2.elf $LR_RAW $O2 $S2 >> $LOG 2>&1
+xs $XSDB_T_T2 software/board/run_board.tcl $B/sr_app_t2.elf $LR_RAW $O2 $S2 >> $LOG 2>&1; hang_fail "full frame T2" $XSDB_T_T2
 [ "$(st $S2 result)" = 0 ] && [ -s $O2 ] || fail "frame: board result '$(st $S2 result)'" \
     "xsdb software/board/dap_reset.tcl, then run the demo again"
 echo "== compare_raw" >> $LOG
