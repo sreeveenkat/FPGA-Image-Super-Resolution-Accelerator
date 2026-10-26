@@ -110,3 +110,19 @@ xsdb software/board/run_board.tcl software/board/build/sr_app_t2.elf data/board/
 .venv/bin/python software/host_tools/compare_raw.py /tmp/out.raw data/board/div2k_img0193_expected_1920x1080.raw   # BYTE-EXACT: yes
 ```
 0601 fallback with the same commands: put `SR_BIT=/home/sreevenkat/Desktop/venkat/vitis/m6_sr/m6_sr.runs/impl_1/design_1_wrapper.bit` in front of each `xsdb ...`.
+
+## 7. The same demo with the newer designs (added 2026-10-27; none of them has run on a board yet)
+Each sandbox tree has its own `software/board/demo.sh`, which loads that tree's bitstream and expects its own VERSION; the xsdb timeout fix of main
+(`< /dev/null`, `timeout --foreground`) is in every tree, **untested on the board**. Run it from the tree's root, e.g. `cd ~/Desktop/venkat/sandbox_pipe && software/board/demo.sh`.
+
+| Tree | `[2/5]` VERSION | `[3/5]` golden tile CYCLES (simulation) | `[4/5]` checksum | `[4/5]` frame time |
+|---|---|---|---|---|
+| `sandbox_R3q` | 0x53523201 | 926,202 | 0x45dd4e2d | about 1,312 ms (same cycles as R0) |
+| `sandbox_R3q_125` | 0x53524301 | 926,206 | 0x45dd4e2d | predicted about 1,062 ms |
+| `sandbox_pipe` (whole-frame pipeline) | 0x53525301 | 74,641 (the tile runs as a 64 x 64 frame) | 0x45dd4e2d | **predicted 73-102 ms** |
+
+What to say for the pipeline, if it passes: "All four layers run at the same time on 170 DSPs, 16 clock cycles per pixel, the whole frame in one DMA
+transfer: the same bytes as before, predicted 13-18x faster than the tiled design." If it fails, say what failed and show the simulation result
+(`results/utilization/m6_system_pipe.md` in branch `pipe`: 960x540 bit-exact in simulation). The checksum differs from section 1 (0xcf947f22) because these
+trees use the R3q weights; the expected outputs are in each tree's `data/board/`. The simulation demo of section 3 exists on `main` only (the pipe
+branch has no tiled RTL).
