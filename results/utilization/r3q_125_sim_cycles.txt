@@ -1,0 +1,36 @@
+# r3q_125: raw simulation lines (run_tests.sh full and run_postsynth.sh in this tree, 2026-10-26)
+## run_tests.sh full: layer engines on real0
+PASS layer 1 tile real0: 4624 pixels (68x68) x 16 ch bit-exact, 124873 cycles (27 per pixel, PERIOD 27)
+PASS layer 2 tile real0: 4356 pixels (66x66) x 16 ch bit-exact, 69714 cycles (16 per pixel, PERIOD 16)
+PASS layer 3 tile real0: 4356 pixels (66x66) x 16 ch bit-exact, 69721 cycles (16 per pixel, PERIOD 16)
+PASS layer 4 tile real0 ANCHOR: 4096 pixels (64x64) x 12 ch bit-exact, 589845 cycles (144 per pixel, PERIOD 144)
+## run_tests.sh full: whole core at the real size, all golden tiles
+PASS sr_tile_core HC=64 tile full255: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile noise: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile pixel: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile ramp: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile real0: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile real1: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile real2: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile real_corner: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile zeros: 49152 output bytes bit-exact, layer buffers exact, 926205 cycles
+PASS sr_tile_core HC=64 tile real0: 49152 output bytes bit-exact, layer buffers exact, 947270 cycles, random stalls
+PASS sr_tile_core HC=64 tile noise: 49152 output bytes bit-exact, layer buffers exact, 947270 cycles, random stalls
+INFO HC=64 tile real0: CYCLES register = 926206 (core counter 926206)
+PASS sr_accel_top HC=64 tile real0: 12288 output beats bit-exact via AXI-Lite + AXI-Stream, CYCLES=926206, 2nd tile back to back
+INFO HC=64 tile real0: CYCLES register = 929242 (core counter 929242), random stalls
+PASS sr_accel_top HC=64 tile real0: 12288 output beats bit-exact via AXI-Lite + AXI-Stream, CYCLES=929242, random stalls
+INFO HC=64 tile real0: CYCLES register = 926206 (core counter 926206)
+PASS sr_accel_top HC=64 tile real0: 12288 output beats bit-exact via AXI-Lite + AXI-Stream, CYCLES=926206
+## run_tests.sh full: anchor mutation test
+PASS anchor mutation test: 26 mutants, 0 problems
+## summaries
+== summary: 42 test runs passed, 0 failed (quick)
+== summary: 95 test runs passed, 0 failed (full)
+## run_postsynth.sh
+[post-synthesis L1] PASS layer 1 tile small12: 100 pixels (10x10) x 16 ch bit-exact, 2725 cycles (27 per pixel, PERIOD 27), re-run + abort/recover OK
+[post-synthesis L2] PASS layer 2 tile small12: 64 pixels (8x8) x 16 ch bit-exact, 1042 cycles (16 per pixel, PERIOD 16), re-run + abort/recover OK
+[post-synthesis L3] PASS layer 3 tile small12: 64 pixels (8x8) x 16 ch bit-exact, 1049 cycles (16 per pixel, PERIOD 16), re-run + abort/recover OK
+[post-synthesis L4] PASS layer 4 tile small12 ANCHOR: 36 pixels (6x6) x 12 ch bit-exact, 5205 cycles (144 per pixel, PERIOD 144), re-run + abort/recover OK
+[post-synthesis tile core HC=6] PASS sr_tile_core HC=6 tile small12: 432 output bytes bit-exact (netlist: internal buffers not visible, not checked), 10965 cycles, re-run + 2nd tile + abort sweep OK
+== post-synthesis summary: 5 passed, 0 failed
