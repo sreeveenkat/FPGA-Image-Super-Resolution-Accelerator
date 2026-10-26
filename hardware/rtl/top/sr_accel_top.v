@@ -1,41 +1,28 @@
-// Top module of the super-resolution accelerator (M6): AXI4-Lite control + AXI-Stream data around sr_tile_core.  This is the module the Vivado
-// block design uses (as a "module reference").
+// Top module of the super-resolution accelerator, whole-frame PIPELINE version (branch `pipe`, docs/ARCHITECTURE_PIPELINE.md): AXI4-Lite control +
+// AXI-Stream data around sr_pipe_core.  Same module name and ports as the tiled design, so the Vivado block design is unchanged.
 //
-//   ARM --AXI4-Lite--> register block --start/soft reset/status--> sr_axis_wrapper --bytes--> sr_tile_core
-//   DMA MM2S --s_axis (32 bit)--> sr_axis_wrapper ... sr_tile_core ... sr_axis_wrapper --m_axis (32 bit)--> DMA S2MM
+//   ARM --AXI4-Lite--> registers --start/soft reset/size--> sr_pipe_core;  DMA MM2S --s_axis--> sr_pipe_core --m_axis--> DMA S2MM
 //
-// Register map (byte offsets, 32-bit registers; the C header and docs must agree with this table):
-//   0x00 CONTROL    W: bit0 start (one-cycle pulse; ignored while busy; an accepted start also clears sticky DONE and ERROR),
-//                      bit1 soft reset (one-cycle pulse, resets the core and wrapper and clears DONE/ERROR).  Reads 0.
-//                      Only bits written with wstrb[0] set take effect.
+// Register map (byte offsets, 32-bit registers; software/board/sr_regs.h and docs/REGISTER_MAP.md must agree):
+//   0x00 CONTROL    W: bit0 start (ignored while busy; refused with ERROR_CODE 4 if FRAME_W/FRAME_H are out of range; an accepted start clears
+//                      DONE and ERROR), bit1 soft reset (clears DONE/ERROR, aborts a frame).  Only bits written with wstrb[0] set take effect.  Reads 0.
 //   0x04 STATUS     R: bit0 busy, bit1 done (sticky), bit2 error (sticky, = ERROR_CODE != 0)
-//   0x08 TILE_SIZE  R: HC (core tile edge in input pixels, 64)
-//   0x0C CYCLES     R: core cycles of the last/current tile (start to last output byte)
-//   0x10 ERROR_CODE R: 0 none | 1 s_axis_tlast on a beat that is not the last input beat | 2 last input beat without tlast | 3 s_axis_tkeep != 4'hF
-//                      (the FIRST error of a tile is kept).  Errors are only reported; the tile is still processed.  Recovery = soft reset.
-//   0x14 VERSION    R: 32'h5352_4301  (R3q at 125 MHz; 0x53523201 = R3q at 100 MHz, 0x53520602 = deployed R0 build, 0601 = the first board version, without the debug registers below)
-//   Debug registers (read-only, added 2026-10-11 to find the board's first-tile stream errors; they do not change the data path):
-//   0x18 DBG_IN_BEATS   input beats accepted since the last accepted start
-//   0x1C DBG_TLAST_AT   1 + index (since start) of the first accepted input beat with tlast; 0 = none yet
-//   0x20 DBG_START2BEAT bits 30:0 cycles from the accepted start to the first accepted input beat (saturating); bit 31 = s_axis_tvalid was high in the start cycle
-//   0x24 DBG_PRE_BEATS  input beats accepted while no tile was running, since aresetn (must stay 0)
-//   0x28 DBG_STARTS     bits 15:0 accepted starts, bits 31:16 ignored starts (written while busy), since aresetn
-//   0x2C DBG_ERR_BEATS  DBG_IN_BEATS when the first error of the tile was recorded (cleared with ERROR_CODE)
-//   0x30 DBG_ERR_CYCLES CYCLES when the first error of the tile was recorded (cleared with ERROR_CODE)
+//   0x08 FRAME_W    RW: LR frame width W, 1..MAX_W (sampled at start)
+//   0x0C CYCLES     R: cycles from the accepted start to the last output beat of the frame (running count while busy)
+//   0x10 ERROR_CODE R: 0 none | 1 TLAST before the last input beat | 2 last input beat without TLAST | 3 TKEEP != 4'hF | 4 frame size out of range
+//                      (start refused) | 5 internal FIFO error (never expected).  The FIRST error is kept.  Errors are only reported (except 4).
+//   0x14 VERSION    R: 32'h5352_5301  (pipeline, R3q weights + anchor, 125 MHz)
+//   0x18 FRAME_H    RW: LR frame height H, 1..65535 (sampled at start)
+//   0x1C MAX_W      R: largest W (MAXW - 6)
+//   0x20 DBG_IN_BEATS  R: input beats accepted in the current/last frame
+//   0x24 DBG_OUT_BEATS R: output beats sent in the current/last frame
 //   other addresses read 0, writes to them are accepted and ignored (OKAY response).
+// Streams: input = the replicate-padded LR frame, ceil(3 (W+6)(H+6) / 4) beats (the last one may carry unused bytes), TLAST on the last beat;
+// output = 3 W H beats (2W x 2H x 3 bytes, raster), TLAST on the last beat.  s_axis_tready stays low until a frame has started.
 //
-// Differences to the first sketch, on purpose: STATUS.busy is the wrapper's busy (core busy OR the last output word not yet taken by the DMA) and also
-// high in the cycle after a CONTROL.start write (so a driver that polls right after the write cannot miss it) and in the cycle of the done pulse; STATUS.done is set when the LAST OUTPUT
-// BEAT was accepted by the DMA (not when the core computed it), so "done" means the data is in DDR-bound stream.
-//
-// Streams: one 32-bit beat = 4 bytes, little endian (first byte = tdata[7:0]).  A tile is (HC+6)^2*3 bytes in (3,675 beats at HC=64) and (2HC)^2*3 bytes out
-// (12,288 beats).  s_axis_tready stays low until CONTROL.start has been written (the DMA may be armed first).  HC must be even so that the input byte count
-// is a multiple of 4 (the output count always is); an odd HC is NOT accepted: there is deliberately no elaboration-time check here (an unresolved dummy module blocks Vivado's module reference). It is enforced by tb_sr_accel_top.v (fails at time 0) and synth_sr_accel_top.tcl (checked before synthesis); sr_axis_wrapper.v also stops a simulation.
-//
-// WDIR default is an ABSOLUTE path: it ties the build to this machine (the .mem files must be found by $readmemh during synthesis).  Change it, or override
-// it in the block design, when the project moves.  The derived parameters of the core are deliberately not exposed here.
+// WDIR default is an ABSOLUTE path (the .mem files must be found by $readmemh during synthesis); build_m6_system.tcl points it at the checkout.
 module sr_accel_top #(
-    parameter HC   = 64,
+    parameter MAXW = 1024,
     parameter WDIR = "/home/sreevenkat/Desktop/venkat/sem_project_all/hardware/rtl/weights/"
 ) (
     (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 aclk CLK" *)
@@ -80,7 +67,7 @@ module sr_accel_top #(
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TREADY" *) input  wire        m_axis_tready,
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TLAST" *)  output wire        m_axis_tlast
 );
-    localparam [31:0] VERSION = 32'h5352_4301;
+    localparam [31:0] VERSION = 32'h5352_5301;
 
     // ------------------------------------------------------------------ AXI4-Lite slave: AW and W may arrive in any order, one write at a time
     reg         aw_got, w_got, bvalid, rvalid;
@@ -103,65 +90,36 @@ module sr_accel_top #(
 
     // ------------------------------------------------------------------ the accelerator
     reg         start_r, srst_r;                              // one-cycle pulses
-    wire        wrap_busy, wrap_done;
-    wire [31:0] wrap_cycles;
-    wire [2:0]  wrap_flags;
+    reg  [15:0] frame_w, frame_h;
+    wire        core_busy, core_done;
+    wire [31:0] core_cycles, in_beats, out_beats;
+    wire [3:0]  core_flags;
+    wire        size_ok  = (frame_w != 16'd0) && (frame_w <= MAXW - 6) && (frame_h != 16'd0);
+    wire        start_ok = start_r && !core_busy && size_ok;
 
-    sr_axis_wrapper #(.HC(HC), .WDIR(WDIR)) wrap (
-        .aclk(aclk), .aresetn(aresetn), .soft_rst(srst_r), .start(start_r), .busy(wrap_busy), .done(wrap_done), .cycles(wrap_cycles),
-        .error_flags(wrap_flags),
-        .s_axis_tdata(s_axis_tdata), .s_axis_tvalid(s_axis_tvalid), .s_axis_tready(s_axis_tready), .s_axis_tlast(s_axis_tlast),
-        .m_axis_tdata(m_axis_tdata), .m_axis_tvalid(m_axis_tvalid), .m_axis_tready(m_axis_tready), .m_axis_tlast(m_axis_tlast),
-        .m_axis_tkeep(m_axis_tkeep));
+    sr_pipe_core #(.MAXW(MAXW), .WDIR(WDIR)) core (
+        .clk(aclk), .rst(!aresetn || srst_r), .start(start_ok), .lr_w(frame_w), .lr_h(frame_h),
+        .busy(core_busy), .done(core_done), .cycles(core_cycles), .error_flags(core_flags), .in_beats(in_beats), .out_beats(out_beats),
+        .s_axis_tdata(s_axis_tdata), .s_axis_tkeep(s_axis_tkeep), .s_axis_tvalid(s_axis_tvalid), .s_axis_tready(s_axis_tready), .s_axis_tlast(s_axis_tlast),
+        .m_axis_tdata(m_axis_tdata), .m_axis_tvalid(m_axis_tvalid), .m_axis_tready(m_axis_tready), .m_axis_tlast(m_axis_tlast));
+    assign m_axis_tkeep = 4'hF;
 
     // ------------------------------------------------------------------ sticky status
     reg         done_s;
-    reg  [1:0]  err_code;
-    wire        keep_bad = s_axis_tvalid && s_axis_tready && (s_axis_tkeep != 4'hF);
-    wire        busy_st  = wrap_busy || start_r || wrap_done;   // no cycle where busy is low and done not yet set
-    wire        start_ok = start_r && !wrap_busy;             // identical condition to the wrapper's own start gate
-
+    reg  [2:0]  err_code;
+    wire        busy_st = core_busy || start_r || core_done;   // no cycle where busy is low and done not yet set
     always @(posedge aclk) begin
         if (!aresetn || srst_r) begin
-            done_s <= 1'b0; err_code <= 2'd0;
+            done_s <= 1'b0; err_code <= 3'd0;
         end else begin
-            if (start_ok) begin done_s <= 1'b0; err_code <= 2'd0; end
-            if (wrap_done) done_s <= 1'b1;
-            if (err_code == 2'd0) begin                        // keep the first error
-                if (wrap_flags[0])      err_code <= 2'd1;
-                else if (wrap_flags[1]) err_code <= 2'd2;
-                else if (keep_bad)      err_code <= 2'd3;
-            end
-        end
-    end
-
-    // ------------------------------------------------------------------ debug counters (observation only)
-    wire        s_take = s_axis_tvalid && s_axis_tready;
-    reg         in_tile_d, first_seen;
-    reg  [31:0] dbg_in_beats, dbg_tlast_at, dbg_s2b, dbg_pre, dbg_err_beats, dbg_err_cyc;
-    reg  [15:0] dbg_starts_ok, dbg_starts_ign;
-    wire        err_now = (err_code == 2'd0) && (wrap_flags[0] || wrap_flags[1] || keep_bad);   // the cycle the first error is recorded
-    always @(posedge aclk) begin
-        if (!aresetn) begin
-            in_tile_d <= 1'b0; first_seen <= 1'b0; dbg_in_beats <= 0; dbg_tlast_at <= 0; dbg_s2b <= 0; dbg_pre <= 0;
-            dbg_err_beats <= 0; dbg_err_cyc <= 0; dbg_starts_ok <= 0; dbg_starts_ign <= 0;
-        end else begin
-            if (start_ok) begin
-                in_tile_d <= 1'b1; first_seen <= 1'b0; dbg_in_beats <= 0; dbg_tlast_at <= 0; dbg_s2b <= {s_axis_tvalid, 31'd0};
-                dbg_err_beats <= 0; dbg_err_cyc <= 0; dbg_starts_ok <= dbg_starts_ok + 1'b1;
-            end else begin
-                if (srst_r || wrap_done) in_tile_d <= 1'b0;
-                if (srst_r) begin dbg_err_beats <= 0; dbg_err_cyc <= 0; end
-                if (start_r) dbg_starts_ign <= dbg_starts_ign + 1'b1;
-                if (in_tile_d && !first_seen && !s_take && dbg_s2b[30:0] != 31'h7FFF_FFFF) dbg_s2b[30:0] <= dbg_s2b[30:0] + 1'b1;
-                if (s_take) begin
-                    if (in_tile_d) begin
-                        dbg_in_beats <= dbg_in_beats + 1;
-                        first_seen <= 1'b1;
-                        if (s_axis_tlast && dbg_tlast_at == 0) dbg_tlast_at <= dbg_in_beats + 1;
-                    end else dbg_pre <= dbg_pre + 1;
-                end
-                if (err_now && !srst_r) begin dbg_err_beats <= dbg_in_beats + (s_take ? 1 : 0); dbg_err_cyc <= wrap_cycles; end
+            if (start_ok) begin done_s <= 1'b0; err_code <= 3'd0; end
+            if (core_done) done_s <= 1'b1;
+            if (err_code == 3'd0 && !start_ok) begin            // keep the first error
+                if (start_r && !core_busy && !size_ok) err_code <= 3'd4;
+                else if (core_flags[0])  err_code <= 3'd1;
+                else if (core_flags[1])  err_code <= 3'd2;
+                else if (core_flags[2])  err_code <= 3'd3;
+                else if (core_flags[3])  err_code <= 3'd5;
             end
         end
     end
@@ -171,7 +129,7 @@ module sr_accel_top #(
         start_r <= 1'b0;
         srst_r  <= 1'b0;
         if (!aresetn) begin
-            aw_got <= 1'b0; w_got <= 1'b0; bvalid <= 1'b0;
+            aw_got <= 1'b0; w_got <= 1'b0; bvalid <= 1'b0; frame_w <= 16'd0; frame_h <= 16'd0;
         end else begin
             if (s_axi_awvalid && s_axi_awready) begin aw_got <= 1'b1; aw_addr <= s_axi_awaddr; end
             if (s_axi_wvalid  && s_axi_wready)  begin w_got  <= 1'b1; w_data <= s_axi_wdata; w_strb <= s_axi_wstrb; end
@@ -180,6 +138,14 @@ module sr_accel_top #(
                 if (aw_addr[5:2] == 4'd0 && w_strb[0]) begin
                     start_r <= w_data[0];
                     srst_r  <= w_data[1];
+                end
+                if (aw_addr[5:2] == 4'd2) begin
+                    if (w_strb[0]) frame_w[7:0]  <= w_data[7:0];
+                    if (w_strb[1]) frame_w[15:8] <= w_data[15:8];
+                end
+                if (aw_addr[5:2] == 4'd6) begin
+                    if (w_strb[0]) frame_h[7:0]  <= w_data[7:0];
+                    if (w_strb[1]) frame_h[15:8] <= w_data[15:8];
                 end
             end
             if (bvalid && s_axi_bready) bvalid <= 1'b0;
@@ -195,18 +161,15 @@ module sr_accel_top #(
                 rvalid <= 1'b1;
                 case (s_axi_araddr[5:2])
                     4'd0:    rdata <= 32'd0;
-                    4'd1:    rdata <= {29'd0, (err_code != 2'd0), done_s, busy_st};
-                    4'd2:    rdata <= HC;
-                    4'd3:    rdata <= wrap_cycles;
-                    4'd4:    rdata <= {30'd0, err_code};
+                    4'd1:    rdata <= {29'd0, (err_code != 3'd0), done_s, busy_st};
+                    4'd2:    rdata <= {16'd0, frame_w};
+                    4'd3:    rdata <= core_cycles;
+                    4'd4:    rdata <= {29'd0, err_code};
                     4'd5:    rdata <= VERSION;
-                    4'd6:    rdata <= dbg_in_beats;
-                    4'd7:    rdata <= dbg_tlast_at;
-                    4'd8:    rdata <= dbg_s2b;
-                    4'd9:    rdata <= dbg_pre;
-                    4'd10:   rdata <= {dbg_starts_ign, dbg_starts_ok};
-                    4'd11:   rdata <= dbg_err_beats;
-                    4'd12:   rdata <= dbg_err_cyc;
+                    4'd6:    rdata <= {16'd0, frame_h};
+                    4'd7:    rdata <= MAXW - 6;
+                    4'd8:    rdata <= in_beats;
+                    4'd9:    rdata <= out_beats;
                     default: rdata <= 32'd0;
                 endcase
             end
@@ -214,5 +177,5 @@ module sr_accel_top #(
         end
     end
 
-    wire unused = &{1'b0, s_axi_awprot, s_axi_arprot, w_strb[3:1], aw_addr[1:0]};
+    wire unused = &{1'b0, s_axi_awprot, s_axi_arprot, w_strb[3:2], aw_addr[1:0]};
 endmodule
