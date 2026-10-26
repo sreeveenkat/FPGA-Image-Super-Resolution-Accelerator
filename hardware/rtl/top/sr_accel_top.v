@@ -9,10 +9,10 @@
 //   0x04 STATUS     R: bit0 busy, bit1 done (sticky), bit2 error (sticky, = ERROR_CODE != 0)
 //   0x08 FRAME_W    RW: LR frame width W, 1..MAX_W (sampled at start)
 //   0x0C CYCLES     R: cycles from the accepted start to the last output beat of the frame (running count while busy)
-//   0x10 ERROR_CODE R: 0 none | 1 TLAST before the last input beat | 2 last input beat without TLAST | 3 TKEEP != 4'hF | 4 frame size out of range
+//   0x10 ERROR_CODE R: 0 none | 1 TLAST before the last input beat | 2 last input beat without TLAST | 3 TKEEP != 4'hF | 4 frame size out of range (W 1..MAX_W, H 1..4096)
 //                      (start refused) | 5 internal FIFO error (never expected).  The FIRST error is kept.  Errors are only reported (except 4).
 //   0x14 VERSION    R: 32'h5352_5301  (pipeline, R3q weights + anchor, 125 MHz)
-//   0x18 FRAME_H    RW: LR frame height H, 1..65535 (sampled at start)
+//   0x18 FRAME_H    RW: LR frame height H, 1..4096 (sampled at start)
 //   0x1C MAX_W      R: largest W (MAXW - 6)
 //   0x20 DBG_IN_BEATS  R: input beats accepted in the current/last frame
 //   0x24 DBG_OUT_BEATS R: output beats sent in the current/last frame
@@ -94,7 +94,8 @@ module sr_accel_top #(
     wire        core_busy, core_done;
     wire [31:0] core_cycles, in_beats, out_beats;
     wire [3:0]  core_flags;
-    wire        size_ok  = (frame_w != 16'd0) && (frame_w <= MAXW - 6) && (frame_h != 16'd0);
+    localparam  MAXH = 4096;                                  // H + 6 must fit the 16-bit row counters and sums of the core (audit 2026-10-27: 65,530+ wrapped)
+    wire        size_ok  = (frame_w != 16'd0) && (frame_w <= MAXW - 6) && (frame_h != 16'd0) && (frame_h <= MAXH);
     wire        start_ok = start_r && !core_busy && size_ok;
 
     sr_pipe_core #(.MAXW(MAXW), .WDIR(WDIR)) core (

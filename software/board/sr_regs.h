@@ -11,7 +11,7 @@
 #define SR_REG_CYCLES       0x0Cu   /* R : clock cycles from the accepted start to the last output beat of the frame */
 #define SR_REG_ERROR_CODE   0x10u   /* R : 0 none, 1..5 see below (first error of the frame) */
 #define SR_REG_VERSION      0x14u   /* R : fixed constant */
-#define SR_REG_FRAME_H      0x18u   /* RW: LR frame height H (>= 1), sampled at start */
+#define SR_REG_FRAME_H      0x18u   /* RW: LR frame height H (1..SR_MAX_H), sampled at start */
 #define SR_REG_MAX_W        0x1Cu   /* R : largest W the line buffers hold */
 #define SR_REG_DBG_IN_BEATS  0x20u  /* R : input beats accepted in the current / last frame */
 #define SR_REG_DBG_OUT_BEATS 0x24u  /* R : output beats sent in the current / last frame */
@@ -30,13 +30,14 @@
 #define SR_ERR_EARLY_TLAST     1u   /* s_axis_tlast on an input beat that is not the last of the frame */
 #define SR_ERR_MISSING_TLAST   2u   /* last input beat arrived without tlast */
 #define SR_ERR_BAD_TKEEP       3u   /* s_axis_tkeep != 4'hF on an accepted input beat */
-#define SR_ERR_BAD_SIZE        4u   /* START with FRAME_W = 0, FRAME_W > MAX_W or FRAME_H = 0: refused, nothing runs */
+#define SR_ERR_BAD_SIZE        4u   /* START with FRAME_W = 0, FRAME_W > MAX_W, FRAME_H = 0 or FRAME_H > SR_MAX_H: refused, nothing runs */
 #define SR_ERR_INTERNAL        5u   /* an internal FIFO was misused (never expected; a design error) */
 
 /* ---- constants */
 #define SR_VERSION          0x53525301u   /* "SR" 53 01 = whole-frame pipeline, R3q weights + anchor, 125 MHz; this tree's driver accepts only VERSION & 0xFFFFFF00 == 0x53525300 */
 #define SR_VERSION_MASK     0xFFFFFF00u   /* the driver checks VERSION & mask == SR_VERSION & mask */
 #define SR_MAX_W            1018u         /* MAX_W register of the default build (MAXW - 6, MAXW = 1024) */
+#define SR_MAX_H            4096u         /* MAXH of sr_accel_top.v (H + 6 must fit the core's 16-bit row counters) */
 #define SR_HALO             3u
 /* frame sizes: input = replicate-padded (W+6) x (H+6) x 3 bytes, sent as whole 32-bit beats (the last one may carry 1..3 unused bytes) */
 #define SR_FRAME_IN_BYTES(w, h)   (3u * ((w) + 2u * SR_HALO) * ((h) + 2u * SR_HALO))

@@ -18,7 +18,9 @@ module anchor_fifo #(
 );
     reg [23:0] mem [0:DEPTH-1];
     reg [AW:0] wp, rp;
-    wire really_full = (wp - rp) == DEPTH;
+    wire [AW:0] cnt  = wp - rp;              // occupancy, AW+1 bits: the pointers wrap; computing wp - rp in a wider (32-bit) context breaks after the
+                                             // first wrap (bug found 2026-10-26: full went high at 579 entries after 8,192 pushes and the pipeline stopped)
+    wire really_full = (cnt == DEPTH);
     wire empty       = (wp == rp);
     always @(posedge clk) begin
         if (push && !really_full) mem[wp[AW-1:0]] <= din;
@@ -29,7 +31,7 @@ module anchor_fifo #(
             if (push && !really_full) wp <= wp + 1'b1;
             if (pop && !empty) rp <= rp + 1'b1;
             if ((push && really_full) || (pop && empty)) err <= 1'b1;
-            full <= (wp - rp) >= DEPTH - 4;
+            full <= (cnt >= DEPTH - 4);
         end
     end
 endmodule

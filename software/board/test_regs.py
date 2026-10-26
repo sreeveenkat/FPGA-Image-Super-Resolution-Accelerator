@@ -46,7 +46,7 @@ REGS = ["CONTROL", "STATUS", "FRAME_W", "CYCLES", "ERROR_CODE", "VERSION", "FRAM
 NAMES = [f"SR_REG_{n}" for n in REGS] + [
     "SR_CTRL_START", "SR_CTRL_SRESET", "SR_STATUS_BUSY", "SR_STATUS_DONE", "SR_STATUS_ERROR",
     "SR_ERR_NONE", "SR_ERR_EARLY_TLAST", "SR_ERR_MISSING_TLAST", "SR_ERR_BAD_TKEEP", "SR_ERR_BAD_SIZE", "SR_ERR_INTERNAL",
-    "SR_VERSION", "SR_MAX_W", "SR_HALO", "SR_HC", "SR_TILE_IN_BYTES", "SR_TILE_OUT_BYTES"]
+    "SR_VERSION", "SR_MAX_W", "SR_MAX_H", "SR_HALO", "SR_HC", "SR_TILE_IN_BYTES", "SR_TILE_OUT_BYTES"]
 C = c_values(NAMES, [("IN_BEATS_960", "SR_FRAME_IN_BEATS(960u, 540u)"), ("OUT_BYTES_960", "SR_FRAME_OUT_BYTES(960u, 540u)"),
                      ("IN_BYTES_64", "SR_FRAME_IN_BYTES(64u, 64u)"), ("OUT_BYTES_64", "SR_FRAME_OUT_BYTES(64u, 64u)")])
 
@@ -111,7 +111,10 @@ if m:
     for got, name in ((size, "SR_ERR_BAD_SIZE"), (early, "SR_ERR_EARLY_TLAST"), (missing, "SR_ERR_MISSING_TLAST"), (keep, "SR_ERR_BAD_TKEEP"), (internal, "SR_ERR_INTERNAL")):
         check(got == C[name], f"{name}: Verilog {got} vs header {C[name]}")
 check(C["SR_ERR_NONE"] == 0, "SR_ERR_NONE must be 0")
-check(re.search(r"size_ok\s*=\s*\(frame_w != 16'd0\) && \(frame_w <= MAXW - 6\) && \(frame_h != 16'd0\);", code) is not None, "frame-size rule in the top")
+check(re.search(r"size_ok\s*=\s*\(frame_w != 16'd0\) && \(frame_w <= MAXW - 6\) && \(frame_h != 16'd0\) && \(frame_h <= MAXH\);", code) is not None, "frame-size rule in the top")
+m = must(r"localparam\s+MAXH\s*=\s*(\d+);", code, "MAXH")
+if m:
+    check(int(m.group(1)) == C["SR_MAX_H"], f"MAXH: Verilog {m.group(1)} vs SR_MAX_H {C['SR_MAX_H']}")
 check(re.search(r"if \(s_axis_tlast && in_beats != nbi - 1\) error_flags\[0\]", ccode) is not None, "core flag[0] is no longer 'tlast on a non-last beat'")
 check(re.search(r"if \(!s_axis_tlast && in_beats == nbi - 1\) error_flags\[1\]", ccode) is not None, "core flag[1] is no longer 'missing tlast'")
 check(re.search(r"if \(s_axis_tkeep != 4'hF\) error_flags\[2\]", ccode) is not None, "core flag[2] is no longer the tkeep check")

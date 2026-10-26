@@ -141,7 +141,7 @@ static int image_fits(uint32_t w, uint32_t h, sr_geom_t *g)
 {
     if (w == 0 || h == 0 || w > 8192 || h > 8192) return 0;
 #if SR_TEST != 11
-    if (w > SR_MAX_W) return 0;                                   /* the pipeline's line buffers (MAX_W register) */
+    if (w > SR_MAX_W || h > SR_MAX_H) return 0;                   /* the pipeline's line buffers (MAX_W register) and row counters (SR_MAX_H) */
 #endif
     sr_geom(w, h, g);                                             /* tiled geometry (T7); the pipeline's padded frame is smaller in both directions */
     return (16u + 3u * (uint64_t)w * h <= SR_IN_SIZE) && (16u + (uint64_t)sr_out_bytes(g) <= SR_OUT_SIZE) && (sr_padded_bytes(g) <= SR_PAD_SIZE);

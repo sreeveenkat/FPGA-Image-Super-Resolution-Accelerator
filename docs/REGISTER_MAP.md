@@ -15,9 +15,9 @@ registers 0x18-0x30). Each tree's driver accepts only its own VERSION family (`V
 | 0x04 | STATUS | R | bit0 **BUSY**, bit1 **DONE** (sticky), bit2 **ERROR** (sticky, = ERROR_CODE != 0) |
 | 0x08 | FRAME_W | RW | LR frame width W, 1..MAX_W; bits 15:0 (byte lanes 0 and 1); sampled at START; 0 after reset |
 | 0x0C | CYCLES | R | clock cycles from the accepted START to the last output beat of the frame (counts while busy, holds its value afterwards) |
-| 0x10 | ERROR_CODE | R | 0 none, 1 early `tlast` (on an input beat that is not the last), 2 last input beat without `tlast`, 3 `tkeep` != 0xF on an accepted input beat, 4 frame size out of range (START refused, nothing runs, DONE unchanged), 5 internal FIFO error (never expected). The FIRST error is kept. |
+| 0x10 | ERROR_CODE | R | 0 none, 1 early `tlast` (on an input beat that is not the last), 2 last input beat without `tlast`, 3 `tkeep` != 0xF on an accepted input beat, 4 frame size out of range (W 1..MAX_W, H 1..4096; START refused, nothing runs, DONE unchanged), 5 internal FIFO error (never expected). The FIRST error is kept. |
 | 0x14 | VERSION | R | `0x53525301` (pipeline, R3q weights + anchor, 125 MHz) |
-| 0x18 | FRAME_H | RW | LR frame height H, 1..65535; bits 15:0; sampled at START; 0 after reset |
+| 0x18 | FRAME_H | RW | LR frame height H, 1..4096; bits 15:0; sampled at START; 0 after reset (H + 6 must fit the core's 16-bit row counters) |
 | 0x1C | MAX_W | R | largest W: MAXW - 6 = 1018 (line-buffer depth 1024) |
 | 0x20 | DBG_IN_BEATS | R | input beats accepted in the current / last frame |
 | 0x24 | DBG_OUT_BEATS | R | output beats sent in the current / last frame |

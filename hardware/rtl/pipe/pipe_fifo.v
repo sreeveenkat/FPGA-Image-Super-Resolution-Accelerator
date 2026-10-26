@@ -21,6 +21,7 @@ module pipe_fifo #(
     reg [W-1:0]  mem [0:DEPTH-1];
     reg [AW:0]   wp, rp, res;
     wire         pop = out_valid && out_ready;
+    wire [AW:0]  cnt = wp - rp;              // occupancy in the pointers' own width (see anchor_fifo.v)
     assign out_valid = (wp != rp);
     assign dout      = mem[rp[AW-1:0]];
     assign ok        = (res < DEPTH);
@@ -33,7 +34,7 @@ module pipe_fifo #(
             if (push) wp <= wp + 1'b1;
             if (pop)  rp <= rp + 1'b1;
             res <= res + (reserve ? 1'b1 : 1'b0) - (pop ? 1'b1 : 1'b0);
-            if (push && (wp - rp == DEPTH)) err <= 1'b1;
+            if (push && (cnt == DEPTH)) err <= 1'b1;
             if (reserve && !ok) err <= 1'b1;
         end
     end
