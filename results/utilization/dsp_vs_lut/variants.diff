@@ -1,0 +1,8 @@
+7c7
+< (* use_dsp = "yes" *)
+---
+> (* use_dsp = "no" *)
+48c48
+< synth_design -top conv_engine -part xc7z020clg484-1 -mode out_of_context -generic [lindex $gen 0] -generic [lindex $gen 1] -generic [lindex $gen 2] -generic [lindex $gen 3] -generic [lindex $gen 4] -generic [lindex $gen 5] -generic [lindex $gen 6] -generic [lindex $gen 7] -generic [lindex $gen 8] -generic [lindex $gen 9] {*}$anc_args -flatten_hierarchy rebuilt
+---
+> synth_design -top conv_engine -part xc7z020clg484-1 -mode out_of_context -generic [lindex $gen 0] -generic [lindex $gen 1] -generic [lindex $gen 2] -generic [lindex $gen 3] -generic [lindex $gen 4] -generic [lindex $gen 5] -generic [lindex $gen 6] -generic [lindex $gen 7] -generic [lindex $gen 8] -generic [lindex $gen 9] {*}$anc_args -flatten_hierarchy rebuilt -max_dsp 0
