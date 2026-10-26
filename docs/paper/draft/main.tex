@@ -305,7 +305,7 @@ E1 changes no output at all on the deployed weights, because all channels of a l
 The limits are as important: the mutants are hand-written and sit in the requantizer, MAC, engine and tile core, not in the AXI wrapper, the top module, the weight ROM or the split RAM; 18 of the 20 image-quality columns rest on a Python twin that reproduced the RTL output byte for byte (C3 is not verified, E3 has no twin); only the quick suite was run on the mutants (the full suite contains it); and everything is simulation, not board.
 
 \subsection{Limits}
-0.76\,fps is not real time. Load, compute and output of a tile are not overlapped. The power figure in Table~\ref{tab:system} is a Vivado estimate with low confidence; a board-level measurement (12\,V input, multimeter on the current-sense resistor) is \emph{pending board run}, and it will not be comparable to the on-chip estimate.
+0.76\,fps is not real time. Load, compute and output of a tile are not overlapped. The power figure in Table~\ref{tab:system} is a Vivado estimate with low confidence; a board-level measurement (12\,V input: inline DC meter, with the J21 sense resistor as a cross-check) is \emph{pending board run}, and it will not be comparable to the on-chip estimate.
 The timing run uses one image and one board; the ARM-only baseline (T7) and the R2q and R3q candidates are \emph{pending board run}.
 Images go in over JTAG, not from a video source. Two single first-tile failures on 2026-10-11 remain unexplained (the 8{,}000-tile test afterwards showed none; \texttt{results/\allowbreak{}speed/\allowbreak{}m6\_board.md}).
 No comparison with other FPGA super-resolution results is made here (related work is still to be written).
