@@ -1,4 +1,4 @@
-# r3q_125: R3q network (re-param + anchor + QAT weights) with the r0_125 timing change, fabric clock 125 MHz (built 2026-10-26, branch `r3q_125`, NOT on the board)
+# r3q_125: R3q network (re-param + anchor + QAT weights) with the r0_125 timing change, fabric clock 125 MHz (built 2026-10-26, branch `r3q_125`, run on the board 2026-10-27 at a 100 MHz PL clock, not 125 MHz: byte-exact, VERSION and checksum as expected, frame time in `results/board/2026-10-27/SUMMARY.md` on main; 125 MHz untested)
 
 Sandbox `~/Desktop/venkat/sandbox_R3q_125` (git worktree of branch `r3q_125`, off `r3q` 8aa9b95). Change = commit e80403a of `r0_125` applied to R3q
 (cherry-pick; the only conflicts were VERSION lines):
@@ -36,6 +36,6 @@ Artifacts (outside the repo): `~/Desktop/venkat/R3q_125_artifacts/design_1_wrapp
 `software/board/build/sr_app_t{1,2,3_20f,3_200f,11,11_20f}.elf`, built with `build_elf.sh`; link warnings only from the BSP's `xparameters.h`.
 
 Prediction (cycle model, the same as r0_125, since cycles per tile are the same): 135 x 926,224 (board mean + 4) / 125 MHz + 61.5 ms ARM/DMA = about 1,062 ms
-per frame = **0.94 fps**. Expected output checksum = R3q's (fnv1a32 0x45dd4e2d on the img0193 960x540 frame; same weights). NOT on the board.
+per frame = **0.94 fps**. Expected output checksum = R3q's (fnv1a32 0x45dd4e2d on the img0193 960x540 frame; same weights). Run on the board 2026-10-27 at 100 MHz (not 125 MHz): byte-exact, 1,311.8 ms; 125 MHz untested.
 
 Not done: board run, power on the board, the AREG/fabric-register split of the 60 MAC DSPs (r0_125: 43 of 60 absorbed; it does not change cycles).
