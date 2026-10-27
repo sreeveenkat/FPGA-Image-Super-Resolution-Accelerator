@@ -21,12 +21,12 @@
 \maketitle
 
 \begin{abstract}
-% Only measured statements; edit after the board session.
+% Only measured statements; board session 2026-10-27 (results/board/2026-10-27/SUMMARY.md): all runs at a 100 MHz PL clock, 125 MHz untested, power not measured.
 We describe a $\times 2$ image super-resolution accelerator for a ZedBoard (XC7Z020): a 2{,}620-parameter INT8 CNN upscales $960\times540$ to $1920\times1080$
 in 1.312\,s per frame (0.762\,fps, 20-frame mean, board-measured) with 68 DSP48 blocks at 100\,MHz.
 The output is byte-identical to a NumPy integer model on all 119 images of Set5, Set14 and BSD100 on the board.
 On these sets the INT8 network gains about 1.4, 1.1 and 1.0\,dB PSNR-Y over bicubic interpolation (Table~\ref{tab:quality}).
-On average only 17.2\,\% of the DSPs perform a MAC per cycle because the four layer engines run one after the other; a cycle model matches the simulated cycles of each layer to within 24 cycles, and its alternatives are labelled as predictions. Twenty injected RTL faults are all caught by the regression, five of them invisible to an image-quality comparison. The unchanged design fails timing at 152\,MHz; one added register closes 125\,MHz in Vivado (WNS +0.632\,ns), which is not yet tested on the board. Board energy and the quantization-aware variants are pending board runs.
+On average only 17.2\,\% of the DSPs perform a MAC per cycle because the four layer engines run one after the other; a cycle model matches the simulated cycles of each layer to within 24 cycles, and its alternatives are labelled as predictions. Twenty injected RTL faults are all caught by the regression, five of them invisible to an image-quality comparison. The unchanged design fails timing at 152\,MHz; one added register closes 125\,MHz in Vivado (WNS +0.632\,ns), but 125\,MHz was not tested on the board. A whole-frame layer pipeline with the same network upscales a frame in 112.1\,ms (8.92\,fps, 11.7$\times$ the tiled design, about 120$\times$ the ARM core alone) with byte-identical output; all board runs used a 100\,MHz clock, so this speed-up is architectural. Board power was not measured.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -48,7 +48,7 @@ Our contributions are measurements and analyses of one design:
 \item \textbf{A measured verification strength.} Twenty hand-written single-edit faults in the datapath and control RTL are all detected by the quick regression; five of them change the image quality by less than 0.01\,dB and would be invisible to a PSNR comparison (Section~\ref{sec:discussion}).
 \item \textbf{A localized negative timing result.} The unchanged design does not close timing at 152\,MHz (WNS $-1.693$\,ns); 434 of 580 failing endpoints are one path type, and a one-register change is analysed (Section~\ref{sec:discussion}).
 \end{itemize}
-Two further network variants (quantization-aware training and a nearest-neighbour anchor) are simulated bit-exactly but have not yet run on the board; they are reported as such (Section~\ref{sec:quant}).
+Two further network variants (quantization-aware training and a nearest-neighbour anchor) and a whole-frame layer pipeline were run on the board in a second session: all are byte-identical to their integer models, and the pipeline needs 112.1\,ms per frame (Section~\ref{sec:results}). That session ran every bitstream at a 100\,MHz clock; the 125\,MHz builds were not tested at 125\,MHz, and power was not measured.
 
 \section{Related Work}
 % TODO: read each paper in full before citing (docs/paper/related_work_and_venues.md section 1 lists the candidates).  Only FSRCNN has been read so far.
@@ -127,11 +127,11 @@ In hardware the requantization of one output value is a single DSP48E1 operation
 The requantizer is checked on its own with vectors for shifts 1, 2, 3, 8, 21, 23 and 24 and with randomized layers in which every output channel has a different multiplier (\texttt{hardware/\allowbreak{}verification}, \texttt{gen\_unit\_vectors.py}). A deliberately wrong shared multiplier is detected only by the randomized layers (Section~\ref{sec:discussion}), because the deployed weights give all channels of a layer the same $M$.
 For new weight sets an overflow analysis is part of the export: for the quantization-aware candidate R2q the largest possible $|acc\cdot M|$ plus rounding needs at most 35 bits (limit 48), and the accumulators keep 13--15 bits of headroom below 32 bits even under the worst-case bound (\texttt{results/\allowbreak{}quality/\allowbreak{}acc\_range\_R2q\_rep\_qat\_s1.txt}).
 
-\subsection{Quantization-aware candidates (integer model; not yet on the board)}
+\subsection{Quantization-aware candidates}
 Post-training quantization is enough for the deployed network, but not for every network. A re-parameterized network (training-time blocks merged into plain convolutions) collapses under PTQ, and quantization-aware training (QAT) recovers $+3.40$, $+1.99$ and $+1.54$\,dB PSNR-Y on Set5, Set14 and BSD100 (R2q $-$ R2, mean of two seeds; \texttt{results/\allowbreak{}quality/\allowbreak{}image\_quality\_ladder.md}).
 Against the mean of two trainings of the deployed recipe (R0), the QAT network R2q gains $+0.87$, $+0.50$ and $+0.36$\,dB, and R3q, which adds a nearest-neighbour anchor (the upscaled input is added to the last layer's output), $+1.12$, $+0.70$ and $+0.49$\,dB; R3q is $+0.26$, $+0.20$ and $+0.13$\,dB better than R2q (two seeds each, integer model, selection on validation images only).
 R2q needs no RTL change except different constants (shifts 22, 22, 21, 22); the anchor needs a small RTL change (the anchor pixel is added through the requantizer's rounding constant, no extra cycle; \texttt{results/\allowbreak{}utilization/\allowbreak{}m6\_system\_R3q.md} in the sandbox branch \texttt{r3q}).
-Both are simulated and netlist-simulated bit-exactly but \emph{pending board run}; every board statement in this paper refers to the deployed design R0.
+Both are simulated and netlist-simulated bit-exactly, and both ran on the board (2026-10-27): the 960$\times$540 output is byte-identical to the respective integer model and the frame time equals that of R0 (Table~\ref{tab:candidates}). The 119-image board check was run only for the deployed design R0 and for the pipeline (which uses the R3q weights); \emph{R2q and R3q on the 119 images are pending}.
 
 \section{Architecture}\label{sec:arch}
 % Sources for every number in this section are named in the comments; board numbers are from results/speed/*.md, simulation numbers from results/utilization/m4_*.md, m5_*.md, m6_*.md.
@@ -195,8 +195,9 @@ On the board, the output of all 119 test images (Set5, Set14, BSD100) is byte-id
 How well this regression detects bugs is measured in Section~\ref{sec:discussion}.
 
 \section{Results}\label{sec:results}
-All board numbers were measured on a ZedBoard with the deployed bitstream (VERSION 0x53520602, 100\,MHz), the test image is a DIV2K image of $960\times540$.
-Power is a Vivado estimate, not a measurement.
+The board numbers of Tables~\ref{tab:quality} and~\ref{tab:system} were measured on a ZedBoard with the deployed bitstream (VERSION 0x53520602, 100\,MHz); Table~\ref{tab:candidates} and the pipeline result come from a second session (2026-10-27, six bitstreams, die temperature 42--50\,$^\circ$C). The test image is a DIV2K image of $960\times540$.
+\textbf{All runs of the second session used a 100\,MHz PL clock}: the loading script applies the platform's initialisation after the bitstream, which sets 100\,MHz (read back: divisors 5 and 2), so the bitstreams built for 125\,MHz did not run at 125\,MHz (the two tiled 125\,MHz designs show the same 1{,}311.8 and 1{,}311.9\,ms as the 100\,MHz designs). The 125\,MHz speed is therefore untested, and the 11.7$\times$ of the pipeline over the tiled design (112.1 against 1{,}311.7\,ms) is an architectural gain, not a clock effect. The pipeline's end-to-end time is 112.1\,ms (min 112.0, max 113.6; 8{,}398{,}491--8{,}398{,}508 cycles = 84.0\,ms at 100\,MHz, PL time 106.4\,ms); about 22\,ms lie outside the core cycles and are not yet attributed. Its output is byte-identical to the integer model for the benchmark frame and for all 119 test images, and its error recovery passed (four deliberately bad frames, each followed by a correct one). The ARM core alone needs about 13.4\,s for the frame (byte-identical; timed from UART timestamps because the ARM-side timer was not running in that build), i.e.\ the pipeline is about 120$\times$ and the tiled design 10.2$\times$ faster than the ARM alone.
+Power is a Vivado estimate for the deployed design, not a measurement; board power was not measured.
 
 \begin{table}[t]
 \caption{Image quality, $\times2$, PSNR-Y (dB) / SSIM-Y. FPGA = outputs read back from the board, byte-identical to the INT8 integer model.}\label{tab:quality}
@@ -219,20 +220,22 @@ Table~\ref{tab:quality} shows the quality; the network is better than bicubic in
 Fine random texture (gravel, fur, fabric) is not recovered by a network of this size.
 
 \begin{table}[t]
-\caption{Candidate weight sets against the deployed design (R0). Quality: INT8 integer model, PSNR-Y (dB), the single built seed of each candidate. Resources and timing: Vivado post-implementation of the whole system at 100\,MHz, not board measurements.}\label{tab:candidates}
+\caption{Candidate weight sets against the deployed design (R0). Quality: INT8 integer model, PSNR-Y (dB), the single built seed of each candidate. Resources and timing: Vivado post-implementation of the whole system, not board measurements. Board: 20-frame mean, 2026-10-27, PL clock 100\,MHz in every run, output byte-identical to the integer model.}\label{tab:candidates}
 \centering
 \resizebox{\columnwidth}{!}{%
 \begin{tabular}{lcccc}
 \toprule
-Design & Set5 / Set14 / BSD100 & LUT & WNS (ns) & Board \\
+Design & Set5 / Set14 / BSD100 & LUT & WNS (ns) & Board (ms/frame) \\
 \midrule
-R0 deployed & 35.02 / 31.40 / 30.53 & 5{,}296 & +0.503 & 0.762\,fps \\
-R2q (rep.\ + QAT) & 35.84 / 31.89 / 30.87 & 5{,}287 & +0.944 & pending board run \\
-R3q (anchor + QAT) & 36.20 / 32.12 / 31.01 & 5{,}323 & +0.683 & pending board run \\
+R0 deployed & 35.02 / 31.40 / 30.53 & 5{,}296 & +0.503 & 1{,}311.7 \\
+R2q (rep.\ + QAT) & 35.84 / 31.89 / 30.87 & 5{,}287 & +0.944 & 1{,}312.0 \\
+R3q (anchor + QAT) & 36.20 / 32.12 / 31.01 & 5{,}323 & +0.683 & 1{,}311.6 \\
+R3q, layer pipeline & as R3q & 9{,}888 & +0.267$^\dagger$ & \textbf{112.1} \\
 \bottomrule
 \end{tabular}}
 % sources: R0 results/quality/table_a_x2.md, results/utilization/m6_system_0602.md, results/speed/m7_timing_20frames.md;
 %          R2q / R3q: results/utilization/m6_system_R2q.md (branch r2q), m6_system_R3q.md (branch r3q) -- INT8 lines and the build tables.
+% board column: results/board/2026-10-27/SUMMARY.md.  $^\dagger$ the pipeline was built for 125 MHz (WNS at 125 MHz, results/utilization/m6_system_pipe.md in branch pipe); on the board it ran at 100 MHz.
 % R2q needs only different constants (SHIFT 22/22/21/22); R3q adds a nearest-neighbour anchor (+33..45 LUT, +66 FF, no extra cycle: m6_system_R3q.md).
 \end{table}
 
@@ -250,10 +253,11 @@ Cycles per 64$\times$64 tile (board counter) & 926{,}217--926{,}241 (simulation 
 LUT / FF / BRAM tiles / DSP & 5{,}296 / 7{,}831 / 72 / 68 \\
 Timing at 100\,MHz (WNS / WHS) & +0.503 / +0.016\,ns \\
 Power, Vivado estimate (chip / accelerator) & 1.913 / 0.176\,W, confidence low \\
-ARM-only baseline (same chip, no accelerator) & pending board run \\
+ARM-only baseline (Cortex-A9, C model, 1 frame) & about 13.4\,s (host-timed, $\pm0.2$\,s) \\
 \bottomrule
 \end{tabular}}
 % sources: results/speed/m7_timing_20frames.md; results/utilization/m6_system_0602.md; results/utilization/m7_power.md.
+% ARM-only: results/board/2026-10-27/SUMMARY.md (T7, byte-exact; the ARM timer was not running in that build, so the time is from UART timestamps).  A repeat of the 20-frame run on 2026-10-27 gave 1,311.7 ms.
 % 95.3 % of the frame is the core itself (1,250.4 ms of 1,311.9 ms, m7_timing_20frames.md).
 \end{table}
 
@@ -268,7 +272,8 @@ Implementation & ms / frame & fps \\
 FP32 PyTorch, CPU, 1 thread & 128.8 & 7.76 \\
 FP32 PyTorch, GPU incl.\ host copies & 7.9 & 126.81 \\
 INT8 NumPy integer model, CPU (unoptimised) & 1{,}526.2 & 0.66 \\
-ZedBoard FPGA (board-measured) & 1{,}311.9 & 0.76 \\
+ZedBoard FPGA, tiled design (board-measured) & 1{,}311.9 & 0.76 \\
+ZedBoard FPGA, layer pipeline (board-measured, 100\,MHz) & 112.1 & 8.92 \\
 \bottomrule
 \end{tabular}}
 % source: docs/paper/cpu_baseline.md (i5-13450HX, RTX 3050 6 GB laptop GPU, PyTorch 2.12.0+cu130; 2026-10-16).  CPU energy not measured; GPU 0.548 J per frame is GPU power only.
@@ -285,8 +290,9 @@ Layer 4 alone takes 589{,}844 of the 926{,}201 cycles of a tile (63.7\,\%): it h
 The core itself accounts for 95.3\,\% of the frame time (1{,}250.4 of 1{,}311.9\,ms); the ARM and DMA overhead is 61.5\,ms (\texttt{results/\allowbreak{}speed/\allowbreak{}m7\_timing\_20frames.md}, \texttt{docs/\allowbreak{}paper/\allowbreak{}cycle\_model.md} Part~1).
 The cycle model reproduces the simulated cycles of each layer to within 17 to 24 cycles per tile (+24, +17, +24, +20 for L1--L4), so it is a fair basis for the predictions below, but the predictions themselves are \emph{not} measurements.
 
-\textbf{Predictions (model only, nothing built).} A line-buffer pipeline in which all four layers work at once, with the same 68 DSPs, would need about 25.2\,M cycles per frame, i.e.\ \emph{predicted} 258\,ms (3.9\,fps) at 100\,MHz, assuming no stalls, a 32-bit output stream and no tile halo (Part~2 of the cycle model).
+\textbf{Predictions (model).} A line-buffer pipeline in which all four layers work at once, with the same 68 DSPs, would need about 25.2\,M cycles per frame, i.e.\ \emph{predicted} 258\,ms (3.9\,fps) at 100\,MHz, assuming no stalls, a 32-bit output stream and no tile halo (Part~2 of the cycle model).
 A single shared engine that uses all DSPs for one layer at a time would be \emph{predicted} at 2.2\,fps (I/O as today) or 2.8\,fps (I/O overlapped) at 100\,MHz (Part~3). Such figures omit stalls and control cost, and layer-pipelined designs already exist in the literature (to be cited in the related-work section), so we claim the measured gap and its cause, not the pipeline as a contribution.
+A whole-frame layer pipeline with 170 DSPs was then built (model value at 125\,MHz: 13.6\,fps; simulated 8{,}398{,}481 cycles per frame) and measured on the board at 100\,MHz: 112.1\,ms (8.92\,fps), against 84.0\,ms of core cycles at that clock. Its DSP efficiency (1.33\,G MACs over 170 DSPs and 8.40\,M cycles) is a calculation, not a measurement.
 
 \subsection{What limits the clock}
 The unchanged design does not close timing at 152.38\,MHz (the nearest frequency the PS7 PLL gave to a 150\,MHz request): worst negative slack $-1.693$\,ns, total negative slack $-421.053$\,ns, 580 of 23{,}943 endpoints failing, while the 100\,MHz board build has WNS $+0.503$\,ns (\texttt{results/\allowbreak{}utilization/\allowbreak{}timing\_150mhz/\allowbreak{}}, \texttt{docs/\allowbreak{}paper/\allowbreak{}timing\_150mhz.md}; the run was repeated and every number reproduced).
@@ -296,18 +302,18 @@ A one-register change was derived from these paths (\texttt{docs/\allowbreak{}pa
 With this change the whole system was rebuilt at 125.000\,MHz (branch \texttt{r0\_125}, \texttt{results/\allowbreak{}utilization/\allowbreak{}m6\_system\_R0\_125.md} in that branch): post-route WNS $+0.632$\,ns, WHS $+0.032$\,ns, no failing endpoint of 24{,}167, 5{,}251 LUT, 7{,}979 FF (+148), 72 BRAM tiles and 68 DSPs, and the full regression (88 runs) passes.
 The plan had estimated about $+1.3$\,ns for the worst RAM-to-MAC path; the built design has $+0.63$\,ns on the same path type, so the estimate was optimistic by about 0.7\,ns because the placement changed. 43 of the 60 MAC DSPs use their internal input register; the other 17 keep a fabric register.
 At 150\,MHz the same single register is not enough by the plan's arithmetic (about $-0.02$\,ns for the RAM path and about $-0.8$\,ns in the DMA IP), and this was not built.
-The \emph{predicted} frame time at 125\,MHz, with the ARM and DMA overhead held at 61.5\,ms, is 1{,}061.8\,ms (0.942\,fps; \texttt{docs/\allowbreak{}paper/\allowbreak{}cycle\_model.md} Part~4); the 125\,MHz bitstream is \emph{pending board run}, and board power at the higher clock is not measured.
+The \emph{predicted} frame time at 125\,MHz, with the ARM and DMA overhead held at 61.5\,ms, is 1{,}061.8\,ms (0.942\,fps; \texttt{docs/\allowbreak{}paper/\allowbreak{}cycle\_model.md} Part~4); the 125\,MHz bitstreams ran on the board only at 100\,MHz (see Section~\ref{sec:results}); 125\,MHz operation is untested, and board power is not measured.
 
 \subsection{How strong is the verification?}
 A bit-exact regression passes if the design is right, but it says little about whether it would fail if the design were wrong. We therefore injected 20 single-edit faults into the RTL (7 in the requantizer, 4 in the MAC, 3 in the engine, 3 in the tile core, 3 in the control path) and ran the quick regression (36 runs) on each; an unmutated control passes 36 of 36.
 \textbf{All 20 are detected; none survives} (\texttt{docs/\allowbreak{}paper/\allowbreak{}mutation\_study.md}). The result is more informative than the count. Five faults change the output quality by less than 0.01\,dB PSNR-Y on the 119 test images and would pass any quality comparison: a bias that is one too large (A3, $+0.0020$\,dB mean), a requantizer valid-pipeline reset gate (K1), a busy flag that is not reset (K2), a cycle counter that is not reset (K3), and a bug that gives every channel the multiplier of channel~0 (E1).
 E1 changes no output at all on the deployed weights, because all channels of a layer share one multiplier. These faults are seen only by specific tests: E1 only by the randomized layers with distinct multipliers per channel, K1 and K2 only by the reset and abort sweeps of the conv-engine sections, K3 by the wrapper, core and seam sections. Removing any one of these tests would let a fault survive.
-A second design showed where both methods stop. In the whole-frame layer pipeline (a sandbox design, \emph{not yet run on the board}), the full regression (60 runs) and a 30-mutant study (29 caught, 1 equivalent) passed, yet the first simulation of a full 960$\times$540 frame stopped after 5 of 540 output rows. The occupancy of a 4{,}096-entry FIFO was written as \texttt{(wp - rp) >= DEPTH - 4}; Verilog evaluates the 13-bit pointer difference in the 32-bit width of the integer it is compared with, so after the first pointer wrap (8{,}192 entries) the FIFO reported full with 579 entries inside and the input stalled. No regression frame pushed more than 3{,}072 entries, so no test reached the wrap, and mutation testing cannot expose a state that no test reaches: it measures whether the tests notice a change, not whether they cover the state space. We then added a FIFO unit test that wraps the pointers 234 times, frames at the counter limits (192$\times$192 and 960$\times$24 past the wrap, the maximum width 1018 and the maximum height 4096), a table of every counter with its wrap point and the test that crosses it, and the bug itself as a mutant. An audit of all RTL arithmetic for the same width trap found one more: a 16-bit sum $H+6$ that wrapped for frame heights above 65{,}529, which the start check had accepted (heights are now limited to 4{,}096).
-The limits are as important: the mutants are hand-written and sit in the requantizer, MAC, engine and tile core, not in the AXI wrapper, the top module, the weight ROM or the split RAM; 18 of the 20 image-quality columns rest on a Python twin that reproduced the RTL output byte for byte (C3 is not verified, E3 has no twin); only the quick suite was run on the mutants (the full suite contains it); and everything is simulation, not board.
+A second design showed where both methods stop. In the whole-frame layer pipeline (a sandbox design, since then run on the board), the full regression (60 runs) and a 30-mutant study (29 caught, 1 equivalent) passed, yet the first simulation of a full 960$\times$540 frame stopped after 5 of 540 output rows. The occupancy of a 4{,}096-entry FIFO was written as \texttt{(wp - rp) >= DEPTH - 4}; Verilog evaluates the 13-bit pointer difference in the 32-bit width of the integer it is compared with, so after the first pointer wrap (8{,}192 entries) the FIFO reported full with 579 entries inside and the input stalled. No regression frame pushed more than 3{,}072 entries, so no test reached the wrap, and mutation testing cannot expose a state that no test reaches: it measures whether the tests notice a change, not whether they cover the state space. We then added a FIFO unit test that wraps the pointers 234 times, frames at the counter limits (192$\times$192 and 960$\times$24 past the wrap, the maximum width 1018 and the maximum height 4096), a table of every counter with its wrap point and the test that crosses it, and the bug itself as a mutant. An audit of all RTL arithmetic for the same width trap found one more: a 16-bit sum $H+6$ that wrapped for frame heights above 65{,}529, which the start check had accepted (heights are now limited to 4{,}096).
+The limits are as important: the mutants are hand-written and sit in the requantizer, MAC, engine and tile core, not in the AXI wrapper, the top module, the weight ROM or the split RAM; 18 of the 20 image-quality columns rest on a Python twin that reproduced the RTL output byte for byte (C3 is not verified, E3 has no twin); only the quick suite was run on the mutants (the full suite contains it); and the mutation study is simulation only.
 
 \subsection{Limits}
-0.76\,fps is not real time. Load, compute and output of a tile are not overlapped. The power figure in Table~\ref{tab:system} is a Vivado estimate with low confidence; a board-level measurement (12\,V input: inline DC meter, with the J21 sense resistor as a cross-check) is \emph{pending board run}, and it will not be comparable to the on-chip estimate.
-The timing run uses one image and one board; the ARM-only baseline (T7) and the R2q and R3q candidates are \emph{pending board run}.
+0.76\,fps is not real time. Load, compute and output of a tile are not overlapped. The power figure in Table~\ref{tab:system} is a Vivado estimate with low confidence; a board-level measurement (12\,V input: inline DC meter, with the J21 sense resistor as a cross-check) was not done (no meter was available); power is not measured for any bitstream, and a board-level figure will not be comparable to the on-chip estimate.
+The timing runs use one image and one board; the ARM-only time is host-timed ($\pm0.2$\,s); the 125\,MHz operation, the VERSION-refusal controls and the 119-image check of R2q and R3q are \emph{pending}.
 Images go in over JTAG, not from a video source. Two single first-tile failures on 2026-10-11 remain unexplained (the 8{,}000-tile test afterwards showed none; \texttt{results/\allowbreak{}speed/\allowbreak{}m6\_board.md}).
 No comparison with other FPGA super-resolution results is made here (related work is still to be written).
 

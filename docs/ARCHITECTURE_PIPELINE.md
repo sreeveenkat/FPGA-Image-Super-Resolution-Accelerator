@@ -2,7 +2,7 @@
 
 Status: chosen 2026-10-26, implemented and verified on the PC 2026-10-27 in the sandbox branch `pipe` (worktree `~/Desktop/venkat/sandbox_pipe`):
 960x540 frame bit-exact in simulation (8,398,481 cycles), routed at 125 MHz (WNS +0.267 ns), 170 DSP, 27 BRAM, 9,888 LUT (`results/utilization/m6_system_pipe.md`
-in that branch). **Not on the board.**
+in that branch). **Run on the board 2026-10-27 at a 100 MHz PL clock (not 125 MHz): byte-exact, 112.1 ms per frame measured (11.7x R0, about 120x the ARM alone); 125 MHz untested** (`results/board/2026-10-27/SUMMARY.md`).
 Main's deployed design (four folded engines over 64x64 tiles, `hardware/` on main) is unchanged.
 
 ## 1. Choice and why

@@ -9,6 +9,8 @@ with AXI DMA.
 (Set5 35.02 / Set14 31.40 / BSD100 30.53 dB vs 33.67 / 30.32 / 29.56), better than bicubic on 119 of 119 images. The design uses 68 DSPs (31 %) and
 72 BRAM tiles (51 %); the power is **estimated** by Vivado at 1.91 W for the whole chip, 0.18 W of it the accelerator.
 
+**Newer designs (board session 2026-10-27, sandbox branches; all runs at a 100 MHz PL clock):** a whole-frame layer pipeline upscales the same frame in **112.1 ms (8.92 fps), 11.7× faster than the design above and about 120× faster than the ARM core alone (about 13.4 s)**, byte-exact with the integer model (and 119 of 119 test images byte-exact on the board). The speed-up comes from the architecture, not from the clock: 125 MHz is built but **not yet tested** on the board. Power was **not measured** (no meter).
+
 > **Scope change:** this repository started as a *sparse ray tracing + AI 4K reconstruction* idea. On a Zynq-7020 (220 DSP slices) native 4K
 > reconstruction is not realistic, so the project is a **low-resolution super-resolution accelerator (≤ 1080p output)**. The ray-traced
 > front end is kept as an optional extension.
@@ -236,18 +238,26 @@ Notes:
 * Training is statistically but not bit-for-bit reproducible (thread count changes the floating-point summation order: about 0.02 dB); that is
   why the checkpoint (14 KB) is committed and everything after it is checked byte for byte.
 
-## Designs in progress (built and simulated on the PC, **not yet run on a board**)
+## Newer designs (built on the PC, **run on the board 2026-10-27**)
 
-All of them live in sandbox branches; `main`, its weights and its bitstream are unchanged. Every number is from simulation or Vivado; frame times
-are **predictions** until the board session. Expected board answers: [`docs/paper/board_expected.md`](docs/paper/board_expected.md); checklist:
-[`docs/paper/board_checklist.md`](docs/paper/board_checklist.md).
+All of them live in sandbox branches; `main`, its weights and its bitstream are unchanged. Frame times below are **board measurements, mean of 20 frames**, 960×540 → 1920×1080
+([`results/board/2026-10-27/SUMMARY.md`](results/board/2026-10-27/SUMMARY.md)); resources and timing are from Vivado. Expected board answers:
+[`docs/paper/board_expected.md`](docs/paper/board_expected.md); checklist: [`docs/paper/board_checklist.md`](docs/paper/board_checklist.md).
 
-| Design (branch) | What changes | Verified on the PC | Vivado (routed) | Frame time |
-|---|---|---|---|---|
-| R2q (`r2q`) | re-parameterized + QAT weights, same RTL | full regression, netlist simulation | 100 MHz, WNS +0.944 ns | as R0 (same cycles) |
-| R3q (`r3q`) | anchor network (+1.12 / +0.70 / +0.49 dB PSNR-Y over R0's 2-seed mean on Set5 / Set14 / BSD100, `docs/STATUS.md`), small RTL change | full regression, 26 anchor mutants, netlist simulation | 100 MHz, WNS +0.683 ns | as R0 |
-| r0_125, r3q_125 (`r0_125`, `r3q_125`) | one more register per MAC lane, 125 MHz | full regressions, netlist simulation | 125 MHz, WNS +0.632 / +0.393 ns | predicted ~1,062 ms |
-| **pipe** (`pipe`) | **new architecture**: whole-frame layer pipeline, all four layers at once, 16 cycles per pixel, no tiles ([`docs/ARCHITECTURE_PIPELINE.md`](docs/ARCHITECTURE_PIPELINE.md)) | 65-run regression, 34-mutant study, netlist simulation, **960×540 frame bit-exact (8,398,481 cycles)** | 125 MHz, WNS +0.267 ns; 170 DSP (77 %), 27 BRAM, 9,888 LUT | **predicted 73-102 ms (≈10-14 fps)** vs 1,312 ms measured for R0 |
+| Design (branch) | VERSION | What changes | Vivado (routed, built for) | Board, 2026-10-27 | Frame time (board) |
+|---|---|---|---|---|---|
+| R0 (`main`, deployed) | 0x53520602 | the design above | 100 MHz, WNS +0.503 ns | byte-exact, 0xcf947f22 | 1,311.7 ms (0.762 fps) |
+| R2q (`r2q`) | 0x53522201 | re-parameterized + QAT weights, same RTL | 100 MHz, WNS +0.944 ns | byte-exact, 0x2afbc9ae | 1,312.0 ms |
+| R3q (`r3q`) | 0x53523201 | anchor network (+1.12 / +0.70 / +0.49 dB PSNR-Y over R0's 2-seed mean on Set5 / Set14 / BSD100, `docs/STATUS.md`), small RTL change | 100 MHz, WNS +0.683 ns | byte-exact, 0x45dd4e2d | 1,311.6 ms |
+| r0_125 (`r0_125`) | 0x53524201 | R0 + one more register per MAC lane | 125 MHz, WNS +0.632 ns | byte-exact, 0xcf947f22 | 1,311.9 ms (**ran at 100 MHz**) |
+| r3q_125 (`r3q_125`) | 0x53524301 | R3q + that register | 125 MHz, WNS +0.393 ns | byte-exact, 0x45dd4e2d | 1,311.8 ms (**ran at 100 MHz**) |
+| **pipe** (`pipe`) | 0x53525301 | **new architecture**: whole-frame layer pipeline, all four layers at once, 16 cycles per pixel, no tiles ([`docs/ARCHITECTURE_PIPELINE.md`](docs/ARCHITECTURE_PIPELINE.md)); 170 DSP (77 %), 27 BRAM, 9,888 LUT | 125 MHz, WNS +0.267 ns | byte-exact, 0x45dd4e2d; 119/119 test images byte-exact; error recovery PASS | **112.1 ms (8.92 fps), 11.7× R0** |
+| ARM only (T7, R0 tree) | - | the same network in plain C on the Cortex-A9, no accelerator | - | byte-exact, 0xcf947f22 | about 13.4 s (host-timed, ±0.2 s) |
+
+**All runs used a 100 MHz PL clock.** The loading script runs the platform's `ps7_init.tcl`, which sets 100 MHz after the bitstream is loaded (read back: DIV0 = 5, DIV1 = 2), so the three
+'125 MHz' bitstreams did not run at 125 MHz; the 125 MHz claim is untested and the pipeline's 11.7× is architectural. The pipeline's PL time per frame (106.4 ms) is 22 ms more than its
+core cycles (8.4 M cycles = 84.0 ms at 100 MHz); the cause is not separated yet. Pipeline at 125 MHz (model, **not measured**): about 95 ms. Next session: 125 MHz runs, the VERSION-refusal
+controls, the 22 ms, a working T7 timer ([`docs/STATUS.md`](docs/STATUS.md)).
 
 The pipeline's first full-size simulation found a FIFO bug that the whole regression and the mutation study had missed (a counter that no test
 wrapped); it is fixed, and every counter now has a test that crosses its wrap point (`docs/STATUS.md`).
@@ -260,20 +270,20 @@ golden tile, whole frames and all 119 test images.
 
 ## Limitations (honest list)
 
-* **0.76 fps, not real time.** The four layer engines run one after another and are folded (L4 alone is 64 % of the cycles); tile load, compute and
-  output are not overlapped. The whole-frame pipeline above is the answer to this; it is not on the board yet.
-* **Power is a Vivado estimate** (confidence Low); nothing was measured with an instrument. 82 % of the estimate is the ARM side (PS7).
+* **The deployed design is 0.76 fps, not real time.** The four layer engines run one after another and are folded (L4 alone is 64 % of the cycles); tile load, compute and
+  output are not overlapped. The whole-frame pipeline above answers this: 112.1 ms (8.92 fps) measured on the board at 100 MHz; still not real time at 30 fps, and not yet merged into `main`.
+* **Power is a Vivado estimate** (confidence Low) for the deployed design; **nothing was measured with an instrument** (no meter in the 2026-10-27 session, power not measured yet for any bitstream). 82 % of the estimate is the ARM side (PS7).
 * **2 single first-tile failures** seen on 2026-10-11 are still unexplained (`results/speed/m6_board.md`); none happened in the thousands of tiles after
   the PL-isolation fix in the loading script.
 * Images are moved in and out over JTAG (debugger memory access), not from an SD card or a video input: fine for measuring, not a product.
 * The INT8 model loses 0.08-0.18 dB against FP32; fine random texture (gravel, fur, fabric) is not recovered by a 2,620-parameter network.
 * PC comparison (measured, [`docs/paper/cpu_baseline.md`](docs/paper/cpu_baseline.md)): the same network in FP32 PyTorch takes 129 ms per frame on one
-  CPU thread of an i5-13450HX and 7.9 ms on an RTX 3050 laptop GPU (incl. copies); the deployed FPGA design (1,312 ms) is slower than both.
+  CPU thread of an i5-13450HX and 7.9 ms on an RTX 3050 laptop GPU (incl. copies); the deployed FPGA design (1,312 ms) is slower than both; the pipeline (112.1 ms on the board) is faster than one CPU thread (129 ms) and slower than the GPU (7.9 ms).
 
 ## Future work
 
-* Speed: run the whole-frame pipeline (branch `pipe`) on the board; it is predicted at 73-102 ms per frame.
-* SAIF-based power estimate and a measured board power figure.
+* Speed: run the 125 MHz bitstreams at 125 MHz (the 2026-10-27 runs were at 100 MHz; the pipeline is predicted at about 95 ms end to end), find the 22 ms the pipeline spends outside its core cycles, and decide which sandbox is merged into `main`.
+* A measured board power figure (needs a meter) and a SAIF-based estimate.
 * M8 options: HDMI output, ×4, luma-only network, ray-traced input.
 
 ## References
