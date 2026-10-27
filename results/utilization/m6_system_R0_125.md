@@ -1,4 +1,4 @@
-# r0_125: deployed network (R0 weights), one more register per engine run, fabric clock 125 MHz (built 2026-10-25, branch `r0_125`, NOT on the board)
+# r0_125: deployed network (R0 weights), one more register per engine run, fabric clock 125 MHz (built 2026-10-25, branch `r0_125`, run on the board 2026-10-27 at a 100 MHz PL clock, not 125 MHz: byte-exact, VERSION and checksum as expected, frame time in `results/board/2026-10-27/SUMMARY.md` on main; 125 MHz untested)
 
 Sandbox `~/Desktop/venkat/sandbox_R0_125` (git worktree of branch `r0_125`, off main `ad20b81`). Change = exactly what `docs/paper/fmax_plan.md` proposes, plus the clock and a VERSION:
 * `hardware/rtl/conv_engine/conv_engine.v`: the channel-selected activation is registered (`a_r`, one per MAC lane); the weight-ROM address, `v`, `first` and `last` are delayed by one cycle so data, weights and control stay aligned (`waddr_r`, `v2`, `first2`, `last2`). `mac_unit.v`, the requantizer and the weights are unchanged; no `.mem` file changed.
