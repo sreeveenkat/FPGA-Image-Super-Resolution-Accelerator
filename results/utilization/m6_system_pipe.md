@@ -1,4 +1,4 @@
-# pipe: whole-frame layer pipeline, R3q weights + anchor, 125 MHz (built 2026-10-27, branch `pipe`, NOT on the board)
+# pipe: whole-frame layer pipeline, R3q weights + anchor, 125 MHz (built 2026-10-27, branch `pipe`, run on the board 2026-10-27 at a 100 MHz PL clock, not 125 MHz: byte-exact, VERSION 0x53525301, 112.1 ms per frame = 11.7x R0; 119/119 test images byte-exact; 125 MHz untested; frame time and logs in `results/board/2026-10-27/SUMMARY.md` on main)
 
 Design: `docs/ARCHITECTURE_PIPELINE.md`. Worktree `~/Desktop/venkat/sandbox_pipe` (branch `pipe`, off `r3q_125`). VERSION **0x53525301**; register map
 `docs/REGISTER_MAP.md` (pipeline version). The tiled RTL was removed from this branch; the weights and `qparams.npz` are R3q's, unchanged
