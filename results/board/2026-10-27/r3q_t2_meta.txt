@@ -1,0 +1,8 @@
+name r3q_t2
+date 2026-10-27T20:10:05+05:30
+cwd /home/sreevenkat/Desktop/venkat/sandbox_R3q
+git 731b767 r3q
+elf software/board/build/sr_app_t2.elf c60eaa6e74fe22052a200b4be284c88e
+bitstream /home/sreevenkat/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.bit 993c76e1f084ff471d861093ad5547aa
+command xsdb software/board/run_board.tcl software/board/build/sr_app_t2.elf data/board/div2k_img0193_lr_960x540.raw data/board/2026-10-27/r3q_t2.raw data/board/2026-10-27/r3q_t2_stats.txt
+xsdb_exit 0

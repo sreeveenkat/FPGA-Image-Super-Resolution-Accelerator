@@ -1,0 +1,8 @@
+name pipe_t5
+date 2026-10-27T19:50:18+05:30
+cwd /home/sreevenkat/Desktop/venkat/sandbox_pipe
+git 7aa3c1a pipe
+elf software/board/build/sr_app_t5.elf c6cc8ca9563fd9cf6af924fa8cae91fb
+bitstream /home/sreevenkat/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.bit 4e7a28951fd4c5b1939dcdc12b4f7777
+command xsdb software/board/run_board.tcl software/board/build/sr_app_t5.elf - - data/board/2026-10-27/pipe_t5_stats.txt
+xsdb_exit 0

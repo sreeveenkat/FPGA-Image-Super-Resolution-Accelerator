@@ -1,0 +1,8 @@
+name r0_125_t2
+date 2026-10-27T20:19:42+05:30
+cwd /home/sreevenkat/Desktop/venkat/sandbox_R0_125
+git 30ecbb6 r0_125
+elf software/board/build/sr_app_t2.elf 6e5906e29cc88a65b67ccaf271a48df6
+bitstream /home/sreevenkat/Desktop/venkat/R0_125_artifacts/design_1_wrapper_R0_125.bit ecceb98270f5cf1a0ba4b413f26ee11d
+command xsdb software/board/run_board.tcl software/board/build/sr_app_t2.elf data/board/div2k_img0193_lr_960x540.raw data/board/2026-10-27/r0_125_t2.raw data/board/2026-10-27/r0_125_t2_stats.txt
+xsdb_exit 0

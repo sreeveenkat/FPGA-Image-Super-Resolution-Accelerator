@@ -1,0 +1,8 @@
+name r0_t1
+date 2026-10-27T19:45:01+05:30
+cwd /home/sreevenkat/Desktop/venkat/sem_project_all
+git 17c4fea main
+elf software/board/build/sr_app_t1.elf 5c1047248aba2946cbc8da2d805661ea
+bitstream /home/sreevenkat/Desktop/venkat/TESTED_0602.bit d48ef9ea1b1b4e513ad9b6b52e90c8a9
+command xsdb software/board/run_board.tcl software/board/build/sr_app_t1.elf - - data/board/2026-10-27/r0_t1_stats.txt
+xsdb_exit 0

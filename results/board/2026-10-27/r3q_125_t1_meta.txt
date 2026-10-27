@@ -1,0 +1,8 @@
+name r3q_125_t1
+date 2026-10-27T20:12:58+05:30
+cwd /home/sreevenkat/Desktop/venkat/sandbox_R3q_125
+git 882dff6 r3q_125
+elf software/board/build/sr_app_t1.elf c10a44a6d9aae54213e5bb4f90725a45
+bitstream /home/sreevenkat/Desktop/venkat/R3q_125_artifacts/design_1_wrapper_R3q_125.bit a32acd2ddc4475a18ed202fd69250343
+command xsdb software/board/run_board.tcl software/board/build/sr_app_t1.elf - - data/board/2026-10-27/r3q_125_t1_stats.txt
+xsdb_exit 0

@@ -1,0 +1,17 @@
+=== r3q_125  20:12:48  bitstream a32acd2ddc44
+board_run: r3q_125_t1 exit 0; files: data/board/2026-10-27/r3q_125_t1.log data/board/2026-10-27/r3q_125_t1_xsdb.log data/board/2026-10-27/r3q_125_t1_meta.txt data/board/2026-10-27/r3q_125_t1_stats.txt
+8s | init ok: VERSION 0x53524301, TILE_SIZE 64
+8s | T1: CYCLES over 21 runs: min 926222, max 926240, mean 926224 (simulation: 926202)
+8s | T1 PASS
+marker: result=0 bytes=6220816 tiles=135 fnv1a32=0x45dd4e2d (host wall clock incl. image upload: 2 s)
+board_run: r3q_125_t2 exit 0; files: data/board/2026-10-27/r3q_125_t2.log data/board/2026-10-27/r3q_125_t2_xsdb.log data/board/2026-10-27/r3q_125_t2_meta.txt data/board/2026-10-27/r3q_125_t2_stats.txt
+board   : data/board/2026-10-27/r3q_125_t2.raw  1920x1080  fnv1a32 0x45dd4e2d
+expected: data/board/div2k_img0193_expected_1920x1080.raw  1920x1080  fnv1a32 0x45dd4e2d
+BYTE-EXACT: yes (6220800 bytes identical)
+board_run: r3q_125_t3 exit 0; files: data/board/2026-10-27/r3q_125_t3.log data/board/2026-10-27/r3q_125_t3_xsdb.log data/board/2026-10-27/r3q_125_t3_meta.txt data/board/2026-10-27/r3q_125_t3_stats.txt
+7s | T3: per frame mean 1311849 us (1311 ms), min 1311412 us, max 1313232 us; mean split: pad 5889 us, ARM copy 26402 us, DMA+compute 1279525 us
+7s | T3: DMA+compute per frame min/max 1279118/1280907 us; frames per second x1000 (mean): 762
+7s | T3: CYCLES per tile min 926221, max 926245, mean 926224 (135 tiles x 20 frames); all frames gave the same output: yes
+BYTE-EXACT: yes (6220800 bytes identical)
+expected fnv 0x45dd4e2d
+20:14:30 after r3q_125 XADC_TEMP_C 49.6
