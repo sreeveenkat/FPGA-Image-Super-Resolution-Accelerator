@@ -52,6 +52,14 @@ static uint32_t ticks_to_us(uint64_t t) { return (uint32_t)((t * 1000000ull) / T
 static uint64_t now_ticks(void) { return sr_now_ticks(); }
 
 static sr_dev_t dev;
+#if defined(SR_NC_OUT) || defined(SR_NC_PAD) || defined(SR_FNV_TIME)
+#define SR_OUT_TIMING 1
+#ifdef SR_NC_OUT
+#define SR_OUT_ATTR "non-cacheable"
+#else
+#define SR_OUT_ATTR "cacheable"
+#endif
+#endif
 
 #ifdef SR_TIMING_SPLIT
 /* prints and clears the driver's summed split (sr_driver.h); only in -DSR_TIMING_SPLIT builds */
@@ -229,8 +237,18 @@ static void write_output_header(const sr_geom_t *g)
 static int finish_output(const sr_geom_t *g, uint32_t tiles, uint32_t test)
 {
     const uint32_t bytes = 16u + (uint32_t)sr_out_bytes(g);
+#ifdef SR_OUT_TIMING
+    const uint64_t tf0 = now_ticks();
+#endif
+#ifdef SR_NC_OUT
+    sr_write_drain();                                             /* non-cacheable output: only the ARM-written header can still be in a write buffer */
+#else
     Xil_DCacheFlushRange((UINTPTR)SR_OUT_ADDR, bytes);            /* the host reads DDR over JTAG: write the cache back first */
+#endif
     const uint32_t fnv = sr_fnv1a32((const uint8_t *)(SR_OUT_ADDR + 16), sr_out_bytes(g));
+#ifdef SR_OUT_TIMING
+    xil_printf("FNV: ARM read of the output (flush/drain + FNV-1a over %u bytes, output buffer %s): %u us\r\n", (unsigned)sr_out_bytes(g), SR_OUT_ATTR, ticks_to_us(now_ticks() - tf0));
+#endif
     write_marker(0, bytes, fnv, tiles, test);
     xil_printf("SR_READY test=%u out=0x%08x bytes=%u tiles=%u fnv1a32=0x%08x\r\n", test, (unsigned)SR_OUT_ADDR, bytes, tiles, fnv);
     return 0;
@@ -270,6 +288,9 @@ SR_MAYBE_UNUSED static int test3(void)
     uint64_t tot_sum = 0, pad_sum = 0, copy_sum = 0, run_sum = 0, cyc_sum = 0;
     uint32_t cyc_min = 0xFFFFFFFFu, cyc_max = 0, cyc_n = 0, fnv0 = 0, tiles = 0;
     int same = 1;
+#ifdef SR_OUT_TIMING
+    uint64_t fnv_sum = 0;
+#endif
     for (int f = 0; f < SR_T3_FRAMES; f++) {
         sr_timing_t tm; uint64_t tp, tt;
         rc = process_frame(&g, NULL, NULL, &tp, &tm, &tt);
@@ -289,14 +310,28 @@ SR_MAYBE_UNUSED static int test3(void)
         if (cy < cyc_min) cyc_min = cy;
         if (cy > cyc_max) cyc_max = cy;
         cyc_sum += cy; cyc_n++; tiles = tm.tiles;
+#ifdef SR_OUT_TIMING
+        const uint64_t tf0 = now_ticks();
+#endif
+#ifdef SR_NC_OUT
+        sr_write_drain();
+#else
         Xil_DCacheFlushRange((UINTPTR)SR_OUT_ADDR, 16u + (uint32_t)sr_out_bytes(&g));
+#endif
         const uint32_t fnv = sr_fnv1a32((const uint8_t *)(SR_OUT_ADDR + 16), sr_out_bytes(&g));
+#ifdef SR_OUT_TIMING
+        fnv_sum += now_ticks() - tf0;
+#endif
         if (f == 0) fnv0 = fnv; else if (fnv != fnv0) same = 0;
     }
     const uint32_t mean_us = (uint32_t)(tot_sum / SR_T3_FRAMES);
     xil_printf("T3: per frame mean %u us (%u ms), min %u us, max %u us; mean split: pad %u us, ARM copy %u us, DMA+compute %u us\r\n", mean_us, mean_us / 1000u,
                tot_min, tot_max, (uint32_t)(pad_sum / SR_T3_FRAMES), (uint32_t)(copy_sum / SR_T3_FRAMES), (uint32_t)(run_sum / SR_T3_FRAMES));
     xil_printf("T3: DMA+compute per frame min/max %u/%u us; frames per second x1000 (mean): %u\r\n", run_min, run_max, mean_us ? (uint32_t)(1000000000ull / mean_us) : 0u);
+#ifdef SR_OUT_TIMING
+    xil_printf("T3: ARM read of the output per frame (flush/drain + FNV-1a, output buffer %s): mean %u us; frame time %u us excludes it; wall per frame (frame + output read) %u us\r\n", SR_OUT_ATTR,
+               ticks_to_us(fnv_sum / SR_T3_FRAMES), mean_us, mean_us + ticks_to_us(fnv_sum / SR_T3_FRAMES));
+#endif
     xil_printf("T3: CYCLES per frame min %u, max %u, mean %u (%u frame x %d frames); all frames gave the same output: %s\r\n", cyc_min, cyc_max,
                cyc_n ? (uint32_t)(cyc_sum / cyc_n) : 0u, tiles, SR_T3_FRAMES, same ? "yes" : "NO");
     if (!same) { xil_printf("T3 FAIL: outputs differ between frames\r\n"); write_marker(100, 0, 0, tiles, 3); return -1; }
@@ -439,6 +474,21 @@ int main(void)
     int rc = sr_init(&dev);
     if (rc != SR_RC_OK) { xil_printf("sr_init failed: %d\r\n", rc); write_marker((uint32_t)rc, 0, 0, 0, 0); return rc; }
     xil_printf("init ok: VERSION 0x%08x, MAX_W %u\r\n", sr_reg_read(&dev, SR_REG_VERSION), sr_reg_read(&dev, SR_REG_MAX_W));
+#if defined(SR_NC_OUT) || defined(SR_NC_PAD)
+    { const uint64_t tn0 = now_ticks(); sr_nc_init();
+      xil_printf("NC: output region %s, padded-input region %s non-cacheable (set-up %u us)\r\n",
+#ifdef SR_NC_OUT
+                 "0x12000000+16MB",
+#else
+                 "-",
+#endif
+#ifdef SR_NC_PAD
+                 "0x14000000+32MB",
+#else
+                 "-",
+#endif
+                 ticks_to_us(now_ticks() - tn0)); }
+#endif
 #if SR_TEST >= 6 && SR_TEST <= 9
     /* stale-state programs for software/board/stale_test.sh: leave the DMA / core in a half-finished state, then spin (they never finish).
      *   9 = MM2S started with the full tile, core NOT started: the DMA stays blocked in the middle of its transfer

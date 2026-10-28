@@ -3,6 +3,43 @@
 #include "xil_io.h"
 #include "xil_printf.h"
 #include "xstatus.h"
+#if defined(SR_NC_OUT) || defined(SR_NC_PAD)
+#include "xil_mmu.h"
+#include "xpseudo_asm.h"
+#include "xparameters_ps.h"
+#include "xl2cc.h"
+#include "sr_memmap.h"
+_Static_assert((SR_OUT_ADDR & 0xFFFFFu) == 0 && (SR_OUT_SIZE & 0xFFFFFu) == 0 && (SR_PAD_ADDR & 0xFFFFFu) == 0 && (SR_PAD_SIZE & 0xFFFFFu) == 0,
+               "non-cacheable regions must be whole 1 MB sections");
+
+static inline int sr_inside(const void *p, uint32_t base, uint32_t size) { const uintptr_t a = (uintptr_t)p; return a >= base && a < (uintptr_t)base + size; }
+
+/* every ARM write before this point is in DDR when it returns: DSB, then the PL310 cache-sync (drains its write buffers), then DSB */
+void sr_write_drain(void)
+{
+    dsb();
+    Xil_Out32(XPS_L2CC_BASEADDR + XPS_L2CC_CACHE_SYNC_OFFSET, 0u);
+    while (Xil_In32(XPS_L2CC_BASEADDR + XPS_L2CC_CACHE_SYNC_OFFSET) & 1u) { }
+    dsb();
+}
+
+static void nc_region(uint32_t base, uint32_t size)
+{
+    Xil_DCacheFlushRange((UINTPTR)base, size);                     /* nothing of the region may stay in L1 / L2 when its attributes change */
+    for (uint32_t a = base; a < base + size; a += 0x100000u) Xil_SetTlbAttributes((INTPTR)a, NORM_NONCACHE);
+}
+
+void sr_nc_init(void)
+{
+#ifdef SR_NC_OUT
+    nc_region(SR_OUT_ADDR, SR_OUT_SIZE);
+#endif
+#ifdef SR_NC_PAD
+    nc_region(SR_PAD_ADDR, SR_PAD_SIZE);
+#endif
+    dsb();
+}
+#endif
 #if defined(SDT)
 #include "xiltimer.h"
 #else
@@ -187,8 +224,14 @@ int sr_run_frame_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, u
 
     /* Caches: the DMA reads/writes DDR directly.  FLUSH (clean + invalidate) the input so the DMA sees the ARM's bytes, and flush the OUTPUT buffer too, so no
      * dirty line of it can be evicted later on top of the DMA's data; invalidate it again after the DMA is done so the ARM reads DDR, not stale cache lines. */
+#ifdef SR_NC_PAD
+    if (sr_inside(in, SR_PAD_ADDR, SR_PAD_SIZE)) sr_write_drain(); else
+#endif
     Xil_DCacheFlushRange((UINTPTR)in, in_bytes > in_len ? in_bytes : in_len);
     SR_TS(1);
+#ifdef SR_NC_OUT
+    if (!sr_inside(out, SR_OUT_ADDR, SR_OUT_SIZE))
+#endif
     Xil_DCacheFlushRange((UINTPTR)out, out_bytes);
     SR_TS(2);
 
@@ -219,6 +262,9 @@ int sr_run_frame_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, u
     if (st & SR_STATUS_ERROR) { d->last_error_code = reg_rd(d, SR_REG_ERROR_CODE); sr_dump(d, "core reported an error"); recover(d); return SR_RC_HW_ERROR; }
     if ((dma_sr(d, XAXIDMA_DMA_TO_DEVICE) | dma_sr(d, XAXIDMA_DEVICE_TO_DMA)) & XAXIDMA_ERR_ALL_MASK) { sr_dump(d, "DMA error bits"); recover(d); return SR_RC_DMA_ERROR; }
 
+#ifdef SR_NC_OUT
+    if (!sr_inside(out, SR_OUT_ADDR, SR_OUT_SIZE))
+#endif
     Xil_DCacheInvalidateRange((UINTPTR)out, out_bytes);
     d->last_cycles = reg_rd(d, SR_REG_CYCLES);
     SR_TS(5);

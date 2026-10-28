@@ -25,6 +25,17 @@ extern uint64_t sr_split_sum[SR_SPLIT_N];
 extern uint32_t sr_split_calls;
 #endif
 
+/* Optional non-cacheable DMA buffers (compile-time flags, both OFF by default: the code is then the same as without this block).
+ *   -DSR_NC_OUT : the output-image region [SR_OUT_ADDR, +SR_OUT_SIZE) = 0x12000000 + 16 MB = sections 0x120..0x12F (the DMA writes it)
+ *   -DSR_NC_PAD : the padded-input region [SR_PAD_ADDR, +SR_PAD_SIZE) = 0x14000000 + 32 MB = sections 0x140..0x15F (the DMA reads it)
+ * sr_nc_init() (main.c calls it once after sr_init) cleans + invalidates each region, then marks its 1 MB sections Normal Non-cacheable with Xil_SetTlbAttributes.
+ * sr_run_frame_len() then skips the flush / invalidate of a buffer INSIDE such a region; for the padded input it drains the write buffers instead (DSB + PL310 cache
+ * sync), so the DMA sees every byte the ARM wrote.  Buffers outside the regions (T1 / T5 tile buffers, test arrays) keep the cached path. */
+#if defined(SR_NC_OUT) || defined(SR_NC_PAD)
+void sr_nc_init(void);
+void sr_write_drain(void);
+#endif
+
 /* Base address of sr_accel_top/s_axi: from the Vivado Address Editor of the block design (project m6_sr), 4K range.  Override with -DSR_BASE=... if the design changes.
  * A wrong value is dangerous: reading an address nobody decodes can hang the AXI bus or raise a data abort on the Zynq; sr_init() reads VERSION first for that reason. */
 #ifndef SR_BASE
