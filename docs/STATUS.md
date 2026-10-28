@@ -10,7 +10,7 @@ over seeds, "within noise" tags): `results/quality/image_quality_ladder.md` (gen
    Set5 / Set14 / BSD100 are for final reporting only.
 3. Do **not** touch the deployed checkpoint (`software/ai/checkpoints/srnet_fp32.pt`), `software/ai/quantization/qparams.npz`, `hardware/`
    or the exported weights until the owner decides. Candidate weights live in `software/ai/checkpoints/q/` (git-ignored).
-4. Commit and push only when asked. Commit messages short, past tense, specific. **No Co-Authored-By or any other trailer.** No `gh`.
+4. Commit and push only when asked. Commit messages short, past tense, specific. No `gh`.
 5. Never symlink `hardware/` or `data/` into a Vivado project folder.
 6. Never claim a number that was not measured. Estimates are marked as estimates.
 7. ~~Freeze (2026-10-26): no new builds and no RTL changes until the board results are in.~~ **Lifted the same day (owner): ONE board session at the end, so everything is finished before it. New work only in separate sandboxes; main's deployed files stay untouched until the board results are in.**

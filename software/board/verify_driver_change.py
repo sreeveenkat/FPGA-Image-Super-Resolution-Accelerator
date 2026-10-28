@@ -25,9 +25,9 @@ DES = {
     "r0": dict(name="R0", tree=MAIN, bit=V / "vitis/m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit", ps7=None, mhz=100, version=0x53520602, fnv=0xCF947F22, ref=1311.7, t5=True),
     "r2q": dict(name="R2q", tree=V / "sandbox_R2q", bit=V / "R2q_artifacts/design_1_wrapper_R2q.bit", ps7=None, mhz=100, version=0x53522201, fnv=0x2AFBC9AE, ref=1312.0, t5=False),
     "r3q": dict(name="R3q", tree=V / "sandbox_R3q", bit=V / "R3q_artifacts/design_1_wrapper_R3q.bit", ps7=None, mhz=100, version=0x53523201, fnv=0x45DD4E2D, ref=1311.6, t5=False),
-    "r0_125": dict(name="r0_125", tree=V / "sandbox_R0_125", bit=V / "R0_125_artifacts/design_1_wrapper_R0_125.bit", ps7=R.SCRATCH / "r0_125/ps7_init.tcl", mhz=125, version=0x53524201, fnv=0xCF947F22, ref=1061.85, t5=False),
-    "r3q_125": dict(name="r3q_125", tree=V / "sandbox_R3q_125", bit=V / "R3q_125_artifacts/design_1_wrapper_R3q_125.bit", ps7=R.SCRATCH / "r3q_125/ps7_init.tcl", mhz=125, version=0x53524301, fnv=0x45DD4E2D, ref=1061.68, t5=False),
-    "pipe": dict(name="pipe", tree=V / "sandbox_pipe", bit=V / "pipe_artifacts/design_1_wrapper_pipe.bit", ps7=R.SCRATCH / "pipe/ps7_init.tcl", mhz=125, version=0x53525301, fnv=0x45DD4E2D, ref=95.36, t5=True),
+    "r0_125": dict(name="r0_125", tree=V / "sandbox_R0_125", bit=V / "R0_125_artifacts/design_1_wrapper_R0_125.bit", ps7=R.DESIGNS["r0_125"]["ps7"], mhz=125, version=0x53524201, fnv=0xCF947F22, ref=1061.85, t5=False),
+    "r3q_125": dict(name="r3q_125", tree=V / "sandbox_R3q_125", bit=V / "R3q_125_artifacts/design_1_wrapper_R3q_125.bit", ps7=R.DESIGNS["r3q_125"]["ps7"], mhz=125, version=0x53524301, fnv=0x45DD4E2D, ref=1061.68, t5=False),
+    "pipe": dict(name="pipe", tree=V / "sandbox_pipe", bit=V / "pipe_artifacts/design_1_wrapper_pipe.bit", ps7=R.DESIGNS["pipe"]["ps7"], mhz=125, version=0x53525301, fnv=0x45DD4E2D, ref=95.36, t5=True),
 }
 T3_TOL_MS = 2.0
 LR960 = MAIN / "data/board/div2k_img0193_lr_960x540.raw"

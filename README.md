@@ -2,14 +2,45 @@
 
 A small **INT8 convolutional neural network** that upscales images **2×** (960×540 → 1920×1080), trained in PyTorch and run by a tile-based
 accelerator in the fabric of a **Zynq XC7Z020** (Digilent ZedBoard). The ARM core controls the accelerator over AXI-Lite and moves image tiles
-with AXI DMA.
+with AXI DMA. `main` holds this deployed tile design; a faster whole-frame layer pipeline lives on branch `pipe` (see the headline results and the table of the six designs below).
 
-**Headline (measured on the board, 2026-10-12):** a 960×540 frame is upscaled to 1920×1080 in **1.312 s (0.76 fps)** at 100 MHz, and the output is
-**byte-identical to the software integer model** on all **119** test images (Set5, Set14, BSD100). Quality: **+1.0 to +1.4 dB PSNR-Y over bicubic**
-(Set5 35.02 / Set14 31.40 / BSD100 30.53 dB vs 33.67 / 30.32 / 29.56), better than bicubic on 119 of 119 images. The design uses 68 DSPs (31 %) and
+## Headline results
+
+Measured on a ZedBoard unless marked as an estimate. All outputs are compared byte for byte with the software integer model.
+
+* **Whole-frame layer pipeline (branch [`pipe`](../../tree/pipe), not on `main`): 95.4 ms per 960×540 → 1920×1080 frame = 10.49 fps at 125 MHz** (mean of 20 frames, clock read back from the PS registers; 95.36 ms, min 95.19, max 96.79).
+  With optional **non-cacheable DMA buffers: 70.5 ms = 14.2 fps**, a second configuration that is *not* the default: it applies when the output goes to another DMA master such as a display,
+  because ARM reads of the output buffer become about 10× slower (620 vs 64 ms for the 6.2 MB checksum read).
+* **13.8× faster than the deployed tile design R0** (1,311.7 ms = 0.762 fps at 100 MHz) and about **140× faster than the ARM core alone** (13.437 s per frame, mean of 3 runs: one Cortex-A9 core at 650 MHz, plain C, no NEON, `-O2`).
+* **Byte-exact on 119 of 119 test images** (Set5, Set14, BSD100) on the board for R0, r0_125, r3q_125 and the pipeline; R2q and R3q were checked byte-exact on the 960×540 frame only.
+  Quality of the R3q weights (the pipeline uses them): +1.1 dB PSNR-Y over R0 on Set5 (Set5 36.05 / Set14 32.05 / BSD100 30.96 dB, 2-seed mean of the recipe, vs 34.93 / 31.35 / 30.48 for R0; bicubic 33.67 / 30.32 / 29.56).
+* **Efficiency, Vivado estimate from simulated switching activity (not measured): 12.5 GOPS/W for the whole chip and 42.5 GOPS/W for the programmable logic alone** (27.8 GOPS end to end; 17.0 / 57.5 GOPS/W with non-cacheable buffers).
+  **Power has not been measured with an instrument yet** (no meter); the Vivado numbers are in [`results/power_estimate/SUMMARY.md`](results/power_estimate/SUMMARY.md).
+* Resources of the pipeline: 170 DSP (77 %), 27 BRAM, 9,888 LUT, timing met at 125 MHz (WNS +0.267 ns). The deployed R0: 68 DSP (31 %), 72 BRAM (51 %), 100 MHz.
+
+## The six designs (which branch holds which)
+
+**The pipeline design is on branch `pipe`.** `main` holds the deployed tile design R0, the documentation, results and all tools; the other designs are variants on their own branches, each with its own bitstream VERSION.
+Board times are the 20-frame means of 2026-10-27 (100 MHz) and 2026-10-28 (125 MHz).
+
+| Design | Branch | What it is | PL clock | Frame time on the board | fps |
+|---|---|---|---|---|---|
+| R0 | `main` | the deployed tile design: four layer engines, one after the other, 64×64 tiles with halo | 100 MHz | 1,311.7 ms | 0.762 |
+| R2q | `r2q` | R0's hardware with re-parameterized + QAT weights (+0.87 / +0.50 / +0.36 dB PSNR-Y over R0's 2-seed mean) | 100 MHz | 1,312.0 ms | 0.762 |
+| R3q | `r3q` | anchor network + QAT weights (+1.12 / +0.70 / +0.49 dB), small RTL change (anchor folded into the requantizer) | 100 MHz | 1,311.6 ms | 0.762 |
+| r0_125 | `r0_125` | R0 with one more register per MAC lane so it closes timing at 125 MHz | 125 MHz | 1,061.9 ms | 0.942 |
+| r3q_125 | `r3q_125` | R3q at 125 MHz | 125 MHz | 1,061.7 ms | 0.942 |
+| **pipeline** | **`pipe`** | **whole-frame layer pipeline** (all four layers work at once, line buffers, no tiles; [`docs/ARCHITECTURE_PIPELINE.md`](docs/ARCHITECTURE_PIPELINE.md) on that branch), R3q weights | 125 MHz | **95.4 ms** (70.5 ms with non-cacheable DMA buffers) | **10.49** (14.2) |
+
+Details, VERSION values, checksums and every measurement: [`docs/STATUS.md`](docs/STATUS.md), [`results/board/2026-10-27/SUMMARY.md`](results/board/2026-10-27/SUMMARY.md),
+[`results/board/2026-10-28/SUMMARY.md`](results/board/2026-10-28/SUMMARY.md). Clone a design with `git checkout <branch>`.
+
+## Earlier headline (the deployed design R0, measured 2026-10-12)
+
+A 960×540 frame is upscaled to 1920×1080 in **1.312 s (0.76 fps)** at 100 MHz, and the output is **byte-identical to the software integer model** on all **119** test images (Set5, Set14, BSD100).
+Quality: **+1.0 to +1.4 dB PSNR-Y over bicubic** (Set5 35.02 / Set14 31.40 / BSD100 30.53 dB vs 33.67 / 30.32 / 29.56), better than bicubic on 119 of 119 images. The design uses 68 DSPs (31 %) and
 72 BRAM tiles (51 %); the power is **estimated** by Vivado at 1.91 W for the whole chip, 0.18 W of it the accelerator.
 
-**Newer designs (board session 2026-10-27, sandbox branches; all runs at a 100 MHz PL clock):** a whole-frame layer pipeline upscales the same frame in **112.1 ms (8.92 fps), 11.7× faster than the design above and about 120× faster than the ARM core alone (about 13.4 s)**, byte-exact with the integer model (and 119 of 119 test images byte-exact on the board). The speed-up comes from the architecture, not from the clock: 125 MHz is built but **not yet tested** on the board. Power was **not measured** (no meter).
 
 > **Scope change:** this repository started as a *sparse ray tracing + AI 4K reconstruction* idea. On a Zynq-7020 (220 DSP slices) native 4K
 > reconstruction is not realistic, so the project is a **low-resolution super-resolution accelerator (≤ 1080p output)**. The ray-traced
@@ -155,7 +186,7 @@ ARM Cortex-A9 (bare-metal C, software/board/sr_app)          FPGA fabric, 100 MH
 ## Repository layout
 
 ```
-docs/          demo script (DEMO.md), demo figures, register map, verification guide, report
+docs/          demo script (DEMO.md), demo figures, register map, verification guide, project guide, status
 software/ai/   dataset, models, training, quantization, evaluation (Python)
 software/board/   ARM program (sr_app/), board scripts (xsdb, bash), platform + ELF build
 software/host_tools/   PC helpers: png <-> raw, expected output, compare, figures
@@ -238,29 +269,17 @@ Notes:
 * Training is statistically but not bit-for-bit reproducible (thread count changes the floating-point summation order: about 0.02 dB); that is
   why the checkpoint (14 KB) is committed and everything after it is checked byte for byte.
 
-## Newer designs (built on the PC, **run on the board 2026-10-27**)
+## Newer designs
 
-All of them live in sandbox branches; `main`, its weights and its bitstream are unchanged. Frame times below are **board measurements, mean of 20 frames**, 960×540 → 1920×1080
-([`results/board/2026-10-27/SUMMARY.md`](results/board/2026-10-27/SUMMARY.md)); resources and timing are from Vivado. Expected board answers:
-[`docs/paper/board_expected.md`](docs/paper/board_expected.md); checklist: [`docs/paper/board_checklist.md`](docs/paper/board_checklist.md).
+The six designs, their branches and board times are in the table at the top of this file. They live in separate branches; `main`, its weights and its bitstream are unchanged.
+Resources and timing are from Vivado (routed); expected board answers: [`docs/paper/board_expected.md`](docs/paper/board_expected.md); checklist: [`docs/paper/board_checklist.md`](docs/paper/board_checklist.md).
 
-| Design (branch) | VERSION | What changes | Vivado (routed, built for) | Board, 2026-10-27 | Frame time (board) |
-|---|---|---|---|---|---|
-| R0 (`main`, deployed) | 0x53520602 | the design above | 100 MHz, WNS +0.503 ns | byte-exact, 0xcf947f22 | 1,311.7 ms (0.762 fps) |
-| R2q (`r2q`) | 0x53522201 | re-parameterized + QAT weights, same RTL | 100 MHz, WNS +0.944 ns | byte-exact, 0x2afbc9ae | 1,312.0 ms |
-| R3q (`r3q`) | 0x53523201 | anchor network (+1.12 / +0.70 / +0.49 dB PSNR-Y over R0's 2-seed mean on Set5 / Set14 / BSD100, `docs/STATUS.md`), small RTL change | 100 MHz, WNS +0.683 ns | byte-exact, 0x45dd4e2d | 1,311.6 ms |
-| r0_125 (`r0_125`) | 0x53524201 | R0 + one more register per MAC lane | 125 MHz, WNS +0.632 ns | byte-exact, 0xcf947f22 | 1,311.9 ms (**ran at 100 MHz**) |
-| r3q_125 (`r3q_125`) | 0x53524301 | R3q + that register | 125 MHz, WNS +0.393 ns | byte-exact, 0x45dd4e2d | 1,311.8 ms (**ran at 100 MHz**) |
-| **pipe** (`pipe`) | 0x53525301 | **new architecture**: whole-frame layer pipeline, all four layers at once, 16 cycles per pixel, no tiles ([`docs/ARCHITECTURE_PIPELINE.md`](docs/ARCHITECTURE_PIPELINE.md)); 170 DSP (77 %), 27 BRAM, 9,888 LUT | 125 MHz, WNS +0.267 ns | byte-exact, 0x45dd4e2d; 119/119 test images byte-exact; error recovery PASS | **112.1 ms (8.92 fps), 11.7× R0** |
-| ARM only (T7, R0 tree) | - | the same network in plain C on the Cortex-A9, no accelerator | - | byte-exact, 0xcf947f22 | about 13.4 s (host-timed, ±0.2 s) |
-
-**All runs used a 100 MHz PL clock.** The loading script runs the platform's `ps7_init.tcl`, which sets 100 MHz after the bitstream is loaded (read back: DIV0 = 5, DIV1 = 2), so the three
-'125 MHz' bitstreams did not run at 125 MHz; the 125 MHz claim is untested and the pipeline's 11.7× is architectural. The pipeline's PL time per frame (106.4 ms) is 22 ms more than its
-core cycles (8.4 M cycles = 84.0 ms at 100 MHz); the cause is not separated yet. Pipeline at 125 MHz (model, **not measured**): about 95 ms. Next session: 125 MHz runs, the VERSION-refusal
-controls, the 22 ms, a working T7 timer ([`docs/STATUS.md`](docs/STATUS.md)).
-
-The pipeline's first full-size simulation found a FIFO bug that the whole regression and the mutation study had missed (a counter that no test
-wrapped); it is fixed, and every counter now has a test that crosses its wrap point (`docs/STATUS.md`).
+* The three 125 MHz designs were first run on 2026-10-27 at 100 MHz by mistake (the loading script's platform init set 100 MHz after the bitstream); on 2026-10-28 they were run with their own init script and the clock
+  **read back as 125.000 MHz** before every run, byte-exact on 119/119 images each. Measured against the model: 1,061.85 / 1,061.68 / 95.36 ms (predicted 1,061.8 / ~1,062 / 95.2 ms).
+* The pipeline's DMA-wait overhead (22.4 ms of the 95.4 ms) was measured to be cache maintenance (flush input 2.9, flush output 9.6, invalidate output 9.9 ms); with non-cacheable DMA buffers it disappears (70.5 ms).
+* A VERSION check protects every program: a program built for another bitstream stops before it touches the DMA (tested on the board, with a marker in the DMA registers).
+* The pipeline's first full-size simulation found a FIFO bug that the whole regression and the mutation study had missed (a counter that no test wrapped); it is fixed, and every counter now has a test that
+  crosses its wrap point (`docs/STATUS.md`).
 
 ## Verification chain
 
@@ -271,8 +290,8 @@ golden tile, whole frames and all 119 test images.
 ## Limitations (honest list)
 
 * **The deployed design is 0.76 fps, not real time.** The four layer engines run one after another and are folded (L4 alone is 64 % of the cycles); tile load, compute and
-  output are not overlapped. The whole-frame pipeline above answers this: 112.1 ms (8.92 fps) measured on the board at 100 MHz; still not real time at 30 fps, and not yet merged into `main`.
-* **Power is a Vivado estimate** (confidence Low) for the deployed design; **nothing was measured with an instrument** (no meter in the 2026-10-27 session, power not measured yet for any bitstream). 82 % of the estimate is the ARM side (PS7).
+  output are not overlapped. The whole-frame pipeline (branch `pipe`) answers this: 95.4 ms (10.49 fps) measured on the board at 125 MHz, 70.5 ms with non-cacheable DMA buffers; still not real time at 30 fps, and not merged into `main`.
+* **Power is a Vivado estimate** (confidence Low) for the deployed design; **nothing was measured with an instrument** (no meter, power not measured yet for any bitstream; a SAIF-based Vivado estimate for the pipeline and R0 is in `results/power_estimate/`). 82 % of the estimate is the ARM side (PS7).
 * **2 single first-tile failures** seen on 2026-10-11 are still unexplained (`results/speed/m6_board.md`); none happened in the thousands of tiles after
   the PL-isolation fix in the loading script.
 * Images are moved in and out over JTAG (debugger memory access), not from an SD card or a video input: fine for measuring, not a product.
@@ -282,8 +301,8 @@ golden tile, whole frames and all 119 test images.
 
 ## Future work
 
-* Speed: run the 125 MHz bitstreams at 125 MHz (the 2026-10-27 runs were at 100 MHz; the pipeline is predicted at about 95 ms end to end), find the 22 ms the pipeline spends outside its core cycles, and decide which sandbox is merged into `main`.
-* A measured board power figure (needs a meter) and a SAIF-based estimate.
+* Speed: decide which design is merged into `main` (the pipeline is on branch `pipe`); reduce the ARM-side cache cost (22 ms) without making ARM reads of the output slow.
+* A measured board power figure (needs a meter); the SAIF-based estimate exists (`results/power_estimate/`).
 * M8 options: HDMI output, ×4, luma-only network, ray-traced input.
 
 ## References

@@ -23,25 +23,36 @@ import statistics
 import struct
 import subprocess
 import sys
+import tempfile
 import time
+import zipfile
 from pathlib import Path
 
 V = Path.home() / "Desktop/venkat"
 MAIN = V / "sem_project_all"
-SCRATCH = Path("/tmp/claude-1000/-home-sreevenkat-Desktop-venkat-sem-project-all/1ad352c1-a6cb-46e2-a235-f590ad2ef8c8/scratchpad/ps7")
+
+
+def ps7_from_xsa(xsa, tag):
+    """Extracts ps7_init.tcl from an XSA (a zip file; the XSA is not modified) into a temporary folder and returns its path."""
+    d = Path(tempfile.gettempdir()) / "sr_ps7_init" / tag
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "ps7_init.tcl").write_bytes(zipfile.ZipFile(xsa).read("ps7_init.tcl"))
+    return d / "ps7_init.tcl"
+
+
 PLATFORM_PS7 = V / "vitis_workspace/sr_app/_ide/psinit/ps7_init.tcl"
 SETTINGS_VITIS = Path.home() / "Desktop/vivado_install/Vitis/2024.1/settings64.sh"
 SETTINGS_VIVADO = Path.home() / "Desktop/vivado_install/Vivado/2024.1/settings64.sh"
 TEMP_LIMIT_C = 70.0
 
 DESIGNS = {
-    "r0_125": dict(tree=V / "sandbox_R0_125", bit=V / "R0_125_artifacts/design_1_wrapper_R0_125.bit", ps7=SCRATCH / "r0_125/ps7_init.tcl", version=0x53524201, fnv=0xCF947F22,
+    "r0_125": dict(tree=V / "sandbox_R0_125", bit=V / "R0_125_artifacts/design_1_wrapper_R0_125.bit", ps7=ps7_from_xsa(V / "R0_125_artifacts/design_1_wrapper_R0_125.xsa", "r0_125"), version=0x53524201, fnv=0xCF947F22,
                    sets=MAIN / "data/board/testsets", kind="tiled",
                    pred_cycles_ms=926205 * 135 / 125e3, pred_overhead_ms=61.0),
-    "r3q_125": dict(tree=V / "sandbox_R3q_125", bit=V / "R3q_125_artifacts/design_1_wrapper_R3q_125.bit", ps7=SCRATCH / "r3q_125/ps7_init.tcl", version=0x53524301, fnv=0x45DD4E2D,
+    "r3q_125": dict(tree=V / "sandbox_R3q_125", bit=V / "R3q_125_artifacts/design_1_wrapper_R3q_125.bit", ps7=ps7_from_xsa(V / "R3q_125_artifacts/design_1_wrapper_R3q_125.xsa", "r3q_125"), version=0x53524301, fnv=0x45DD4E2D,
                     sets=V / "sandbox_R3q_125/data/board/testsets", kind="tiled",
                     pred_cycles_ms=926205 * 135 / 125e3, pred_overhead_ms=61.0),
-    "pipe": dict(tree=V / "sandbox_pipe", bit=V / "pipe_artifacts/design_1_wrapper_pipe.bit", ps7=SCRATCH / "pipe/ps7_init.tcl", version=0x53525301, fnv=0x45DD4E2D,
+    "pipe": dict(tree=V / "sandbox_pipe", bit=V / "pipe_artifacts/design_1_wrapper_pipe.bit", ps7=ps7_from_xsa(V / "pipe_artifacts/design_1_wrapper_pipe.xsa", "pipe"), version=0x53525301, fnv=0x45DD4E2D,
                  sets=V / "sandbox_pipe/data/board/testsets", kind="pipe",
                  pred_cycles_ms=8398481 / 125e3, pred_overhead_ms=28.0),
 }

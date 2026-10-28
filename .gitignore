@@ -53,3 +53,6 @@ docs/*Demo Run Sheet*.pdf
 
 # LaTeX build output
 docs/paper/draft/build/
+
+# local study notes (not published)
+docs/PROJECT_GUIDE_study_notes.md

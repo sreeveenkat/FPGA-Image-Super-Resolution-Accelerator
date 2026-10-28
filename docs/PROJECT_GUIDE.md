@@ -32,11 +32,9 @@ Never write a predicted number in the report as if it were measured.
 15. [The board session](#15-the-board-session)
 16. [Power measurement](#16-power-measurement)
 17. [Publishing a paper](#17-publishing-a-paper)
-18. [Honesty and AI use](#18-honesty-and-ai-use)
-19. [Where everything is in the repository](#19-where-everything-is-in-the-repository)
-20. [What is done and what is left](#20-what-is-done-and-what-is-left)
-21. [Viva / interview questions with answers](#21-viva--interview-questions-with-answers)
-22. [Glossary](#22-glossary)
+18. [Where everything is in the repository](#18-where-everything-is-in-the-repository)
+19. [What is done and what is left](#19-what-is-done-and-what-is-left)
+20. [Glossary](#20-glossary)
 
 ---
 
@@ -284,7 +282,7 @@ The deployed R0 checkpoint alone scores 35.02 / 31.40 / 30.53 (PSNR-Y, `results/
 ### 10.1 The idea
 Instead of making the network produce the whole output pixel, it produces only a **correction** (residual) that is **added to the nearest input pixel**. Learning a small correction is easier, so quality improves. This idea comes from **ABPN** (mobile SR, CVPR 2021 workshops).
 
-### 10.2 The clever hardware part (learn this for your viva)
+### 10.2 The clever hardware part
 The normal requantizer computes:
 ```
 (acc × M + 2^(S−1)) >> S
@@ -523,15 +521,7 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 
 ---
 
-## 18. Honesty and AI use
-
-- Much of the code, tests and text were written with an AI coding assistant. **That's allowed, but it must be disclosed.** IEEE requires authors to disclose AI-generated content (usually in the acknowledgments).
-- Commit messages were cleaned of the tool name. That's fine for tidiness, but **do not hide AI use from your guide, examiners or reviewers.**
-- **You must be able to explain every part yourself.** Examiners will ask. Go through one module per day and ask for explanations until you can draw and explain it without help.
-
----
-
-## 19. Where everything is in the repository
+## 18. Where everything is in the repository
 
 | What | Where |
 |---|---|
@@ -553,11 +543,10 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 
 **Git branches:** `main`, `r2q`, `r3q`, `r0_125`, `r3q_125`, `pipe`. Everything is committed **locally**; nothing pushed. Backup branches `backup/*-2026-10-25` exist from the history cleanup.
 
-**Settings note:** Claude Code hooks were disabled (`disableAllHooks`) because the plugins' hooks needed Node.js, which isn't installed.
 
 ---
 
-## 20. What is done and what is left
+## 19. What is done and what is left
 
 ### Done
 - [x] Network trained, quantized, integer golden model
@@ -578,57 +567,11 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 - [ ] **Power measurement** (needs a multimeter)
 - [ ] Merge the winning design (pipeline, or R3q) into `main` after board results
 - [ ] Update the public GitHub README (it is stale)
-- [ ] **You:** read the related-work papers
-- [ ] **You:** meet your guide: results, draft, authors, venue
-- [ ] **You:** study every module until you can explain it
 - [ ] Final paper numbers, comparison table, AI disclosure, submit (FPL 2027, to be confirmed)
 
 ---
 
-## 21. Viva / interview questions with answers
-
-**Q: What does your project do?**
-A: It upscales 960×540 images to 1920×1080 with a small INT8 CNN running as custom hardware on a Zynq-7020 FPGA, and proves the board output is bit-exact with a software reference.
-
-**Q: Why an FPGA and not a GPU?**
-A: A GPU is faster, but it's big and power-hungry. An FPGA can run the network in a small, low-power embedded device. The fair comparison is the same chip with and without the accelerator, and energy per frame.
-
-**Q: Why INT8?**
-A: Integer math is much smaller and faster on an FPGA than floating point, and 8-bit multiplies fit the DSP blocks. Quality loss was only about 0.1–0.2 dB, and QAT reduces it further.
-
-**Q: Explain requantization.**
-A: The accumulator is multiplied by an integer M, a rounding constant 2^(S−1) is added, and it's shifted right by S. That scales the large sum back to 8 bits, rounding to nearest. Then it's clamped.
-
-**Q: Why was version 1 slow?**
-A: Four layer engines ran one after another, so three engines' DSPs were always idle. Efficiency was only 16–17%. The cycle model confirmed it.
-
-**Q: How did you fix it?**
-A: A layer pipeline: all four layers run at the same time, connected by line buffers and FIFOs, with DSPs shared out in proportion to each layer's work. DSP efficiency went from about 16% to about 93%. On the board it is 11.7× faster (1,311.7 → 112.1 ms) at the same 100 MHz clock, and 95.4 ms (13.8×) at 125 MHz, byte-exact on all 119 test images both times.
-
-**Q: What is a line buffer?**
-A: A memory holding only the last few image rows a layer needs (3 rows for a 3×3 filter), instead of a whole tile. It saves memory and avoids recomputing halo pixels.
-
-**Q: What is the anchor?**
-A: The network predicts a correction added to the nearest input pixel instead of the whole pixel. It's cheaper to learn, so quality improves. In hardware, it's folded into the requantizer's rounding constant, so it costs no adder and no cycles.
-
-**Q: What does "bit-exact" mean and why does it matter?**
-A: Every output pixel is identical to the golden model. A PSNR check can hide bugs that change only a few pixel values; bit-exactness catches every bug that changes any output.
-
-**Q: What is mutation testing?**
-A: Deliberately inserting bugs into the design to check that the tests catch them. It measures how good the tests are.
-
-**Q: Tell me about a bug you found.**
-A: The pipeline deadlocked after 5 rows of a full frame. A FIFO computed its fill level in 32 bits from 13-bit pointers; after the pointers wrapped, the value went negative and the FIFO falsely reported full. No test had pushed enough data to wrap the pointers, so all regressions passed. I fixed the width, added a test that wraps the pointers, and made a rule that every counter must wrap in at least one test.
-
-**Q: What is re-parameterization?**
-A: During training each 3×3 conv has extra parallel branches; after training they are merged mathematically into one 3×3 conv, so hardware is unchanged but quality is better. It needs QAT, because the merged weights lose a lot of quality with plain PTQ.
-
-**Q: What are the limitations?**
-A: ×2 only; a tiny network can't recover fine texture; a desktop GPU is faster; power not yet measured (until it is); the pipeline idea is from earlier work.
-
----
-
-## 22. Glossary
+## 20. Glossary
 
 | Term | Meaning |
 |---|---|
