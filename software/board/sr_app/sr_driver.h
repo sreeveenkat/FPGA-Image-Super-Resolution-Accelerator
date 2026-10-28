@@ -14,6 +14,17 @@ void     sr_timer_init(void);
 uint64_t sr_now_ticks(void);
 uint64_t sr_ticks_per_sec(void);
 
+/* Optional split of the time inside one sr_run_tile / sr_run_frame call.  Built ONLY with -DSR_TIMING_SPLIT (software/board/build_elf.sh <N> -DSR_TIMING_SPLIT with
+ * SR_ELF_SUFFIX=_split); without the flag every SR_TS* macro in sr_driver.c is empty, so the production code is the same source as before.
+ * sr_split[]: global-timer ticks of the LAST call: 0 busy check + register writes, 1 flush input, 2 flush output, 3 arm S2MM + MM2S + START, 4 wait loop (core compute
+ * + whatever the DMA and polling add), 5 status/error checks + invalidate output + CYCLES read, 6 sum of 0..5.  sr_split_sum[] / sr_split_calls: the same, summed over calls. */
+#ifdef SR_TIMING_SPLIT
+#define SR_SPLIT_N 7
+extern uint64_t sr_split[SR_SPLIT_N];
+extern uint64_t sr_split_sum[SR_SPLIT_N];
+extern uint32_t sr_split_calls;
+#endif
+
 /* Base address of sr_accel_top/s_axi: from the Vivado Address Editor of the block design (project m6_sr), 4K range.  Override with -DSR_BASE=... if the design changes.
  * A wrong value is dangerous: reading an address nobody decodes can hang the AXI bus or raise a data abort on the Zynq; sr_init() reads VERSION first for that reason. */
 #ifndef SR_BASE

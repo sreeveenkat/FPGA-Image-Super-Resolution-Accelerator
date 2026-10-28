@@ -48,6 +48,18 @@ static uint64_t now_ticks(void) { return sr_now_ticks(); }
 
 static sr_dev_t dev;
 
+#ifdef SR_TIMING_SPLIT
+/* prints and clears the driver's summed split (sr_driver.h); only in -DSR_TIMING_SPLIT builds */
+static void print_split(const char *tag)
+{
+    xil_printf("%s split over %u call(s), us: busy+regs %u, flush in %u, flush out %u, DMA set-up+START %u, wait %u, check+invalidate+CYCLES %u, sum %u\r\n", tag, sr_split_calls,
+               ticks_to_us(sr_split_sum[0]), ticks_to_us(sr_split_sum[1]), ticks_to_us(sr_split_sum[2]), ticks_to_us(sr_split_sum[3]), ticks_to_us(sr_split_sum[4]),
+               ticks_to_us(sr_split_sum[5]), ticks_to_us(sr_split_sum[6]));
+    for (int k = 0; k < SR_SPLIT_N; k++) sr_split_sum[k] = 0;
+    sr_split_calls = 0;
+}
+#endif
+
 /* ------------------------------------------------------------------ memory map sanity (run time part)
  * The program is linked at 0x00100000 (lscript.ld): code, rodata, data, bss, heap and finally the stack.  _stack is the top of the stack = the highest address the
  * program uses; it must stay below the first data buffer (SR_IN_ADDR).  (Measured when linked against zed_platform: program ends at 0x00120870.) */
@@ -231,6 +243,9 @@ SR_MAYBE_UNUSED static int test2(void)
     rc = process_frame(&g, tile_cb, &tc, &tp, &tm, &tt);
     if (rc) { xil_printf("T2 FAIL: tile %u returned %d\r\n", tm.tiles, rc); write_marker((uint32_t)rc, 0, 0, tm.tiles, 2); return rc; }
     xil_printf("T2: %u tiles done in %u ms, CYCLES per tile min/max %u/%u\r\n", tm.tiles, ticks_to_us(tt) / 1000u, tc.cyc_min, tc.cyc_max);
+#ifdef SR_TIMING_SPLIT
+    print_split("T2");
+#endif
     g_stats[0] = ticks_to_us(tt); g_stats[1] = ticks_to_us(tp); g_stats[2] = ticks_to_us(tm.t_cut + tm.t_place); g_stats[3] = ticks_to_us(tm.t_run);
     g_stats[4] = tc.cyc_min; g_stats[5] = tc.cyc_max; g_stats[6] = tc.n ? (uint32_t)(tc.cyc_sum / tc.n) : 0u;
     return finish_output(&g, tm.tiles, 2);
@@ -256,6 +271,9 @@ SR_MAYBE_UNUSED static int test3(void)
         const uint32_t us_tot = ticks_to_us(tt), us_pad = ticks_to_us(tp), us_copy = ticks_to_us(tm.t_cut + tm.t_place), us_run = ticks_to_us(tm.t_run);
         xil_printf("  frame %d: total %u us = pad %u + ARM tile copy %u + DMA/compute wait %u (+ loop overhead %d)\r\n", f, us_tot, us_pad, us_copy, us_run,
                    (int)us_tot - (int)(us_pad + us_copy + us_run));
+#ifdef SR_TIMING_SPLIT
+        print_split("  frame");
+#endif
         tot_sum += us_tot; pad_sum += us_pad; copy_sum += us_copy; run_sum += us_run;
         if (us_tot < tot_min) tot_min = us_tot;
         if (us_tot > tot_max) tot_max = us_tot;
@@ -370,6 +388,7 @@ SR_MAYBE_UNUSED static int test6(void)
 static int test7(void)
 {
     sr_geom_t g;
+    sr_timer_init();   /* T7 never calls sr_init(), which is where the A9 global timer is enabled: without this every T7 time read 0 (2026-10-27) */
     xil_printf("T7: ARM-only baseline (no FPGA), %d frame(s) of the image at 0x%08x\r\n", SR_T7_FRAMES, (unsigned)SR_IN_ADDR);
     int rc = read_input_header(&g);
     if (rc) { write_marker((uint32_t)rc, 0, 0, 0, 11); return rc; }
