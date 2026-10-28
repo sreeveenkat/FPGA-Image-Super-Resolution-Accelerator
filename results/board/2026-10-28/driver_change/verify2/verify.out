@@ -1,0 +1,50 @@
+md5 of all bitstreams, init scripts and production ELFs match board_expected.md (t5 ELFs are not listed there: md5 printed in the log)
+15:14:07 before R0: XADC_TEMP_C 42.6 VCCINT 1.000 VCCAUX 1.801
+[R0] T1: rc=0 version=0x53520602 result=0 repeats=20 CYCLES 926217/926232/926220 fclk0=100.000 MHz
+[R0] T2: rc=0 byte-exact=True fnv=0xcf947f22 (expected 0xcf947f22) version=0x53520602 total=1311862 us
+[R0] T3: 20 frames mean 1312.48 ms (old ELF reference 1311.7, tolerance +-2.0), min 1311.86 max 1313.52, max-min 1.66 ms, byte-exact=True
+[R0] T5: rc=0 T5 PASS
+     T5 case 0 (input too short (TLAST early)): bad tile rc 7, reset after it rc 0, next good tile byte-exact
+     T5 case 1 (input too long (no TLAST on the last word)): bad tile rc 7, reset after it rc 0, next good tile byte-exact
+     T5 case 2 (S2MM buffer too short (core stuck in output)): bad tile rc 6, reset after it rc 0, next good tile byte-exact
+     T5 case 3 (both wrong): bad tile rc 7, reset after it rc 0, next good tile byte-exact
+     T5 PASS
+15:15:37 after R0: XADC_TEMP_C 48.1 VCCINT 0.994 VCCAUX 1.802
+== R0 OK (15:15:37)
+15:15:47 before R2q: XADC_TEMP_C 48.4 VCCINT 0.993 VCCAUX 1.802
+[R2q] T1: rc=0 version=0x53522201 result=0 repeats=20 CYCLES 926217/926220/926219 fclk0=100.000 MHz
+[R2q] T2: rc=0 byte-exact=True fnv=0x2afbc9ae (expected 0x2afbc9ae) version=0x53522201 total=1313429 us
+[R2q] T3: 20 frames mean 1312.38 ms (old ELF reference 1312.0, tolerance +-2.0), min 1311.86 max 1314.23, max-min 2.37 ms, byte-exact=True
+15:17:09 after R2q: XADC_TEMP_C 49.3 VCCINT 0.995 VCCAUX 1.802
+== R2q OK (15:17:09)
+15:17:18 before R3q: XADC_TEMP_C 49.0 VCCINT 0.994 VCCAUX 1.802
+[R3q] T1: rc=0 version=0x53523201 result=0 repeats=20 CYCLES 926217/926220/926219 fclk0=100.000 MHz
+[R3q] T2: rc=0 byte-exact=True fnv=0x45dd4e2d (expected 0x45dd4e2d) version=0x53523201 total=1311875 us
+[R3q] T3: 20 frames mean 1312.47 ms (old ELF reference 1311.6, tolerance +-2.0), min 1311.86 max 1313.54, max-min 1.68 ms, byte-exact=True
+15:18:41 after R3q: XADC_TEMP_C 49.8 VCCINT 0.994 VCCAUX 1.803
+== R3q OK (15:18:41)
+15:18:51 before r0_125: XADC_TEMP_C 49.6 VCCINT 0.995 VCCAUX 1.803
+[r0_125] T1: rc=0 version=0x53524201 result=0 repeats=20 CYCLES 926222/926225/926224 fclk0=125.000 MHz
+[r0_125] T2: rc=0 byte-exact=True fnv=0xcf947f22 (expected 0xcf947f22) version=0x53524201 total=1061730 us
+[r0_125] T3: 20 frames mean 1062.36 ms (old ELF reference 1061.85, tolerance +-2.0), min 1061.69 max 1063.42, max-min 1.73 ms, byte-exact=True
+15:20:08 after r0_125: XADC_TEMP_C 50.3 VCCINT 0.993 VCCAUX 1.803
+== r0_125 OK (15:20:08)
+15:20:18 before r3q_125: XADC_TEMP_C 50.6 VCCINT 0.995 VCCAUX 1.805
+[r3q_125] T1: rc=0 version=0x53524301 result=0 repeats=20 CYCLES 926222/926252/926226 fclk0=125.000 MHz
+[r3q_125] T2: rc=0 byte-exact=True fnv=0x45dd4e2d (expected 0x45dd4e2d) version=0x53524301 total=1062261 us
+[r3q_125] T3: 20 frames mean 1062.33 ms (old ELF reference 1061.68, tolerance +-2.0), min 1061.69 max 1063.67, max-min 1.99 ms, byte-exact=True
+15:21:36 after r3q_125: XADC_TEMP_C 50.4 VCCINT 0.994 VCCAUX 1.803
+== r3q_125 OK (15:21:36)
+15:21:46 before pipe: XADC_TEMP_C 50.6 VCCINT 0.992 VCCAUX 1.802
+[pipe] T1: rc=0 version=0x53525301 result=0 repeats=20 CYCLES 74652/74655/74654 fclk0=125.000 MHz
+[pipe] T2: rc=0 byte-exact=True fnv=0x45dd4e2d (expected 0x45dd4e2d) version=0x53525301 total=95213 us
+[pipe] T3: 20 frames mean 95.28 ms (old ELF reference 95.36, tolerance +-2.0), min 95.19 max 96.89, max-min 1.69 ms, byte-exact=True
+[pipe] T5: rc=0 T5 PASS
+     T5 case 0 (input too short (TLAST early)): bad tile rc 7, reset after it rc 0, next good tile byte-exact
+     T5 case 1 (input too long (no TLAST on the last word)): bad tile rc 7, reset after it rc 0, next good tile byte-exact
+     T5 case 2 (S2MM buffer too short (core stuck in output)): bad tile rc 6, reset after it rc 0, next good tile byte-exact
+     T5 case 3 (both wrong): bad tile rc 7, reset after it rc 0, next good tile byte-exact
+     T5 PASS
+15:22:52 after pipe: XADC_TEMP_C 49.7 VCCINT 0.995 VCCAUX 1.802
+== pipe OK (15:22:52)
+ALL OK: R0, R2q, R3q, r0_125, r3q_125, pipe

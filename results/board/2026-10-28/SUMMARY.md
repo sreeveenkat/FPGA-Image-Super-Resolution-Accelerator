@@ -94,3 +94,27 @@ R0 tree, 100 MHz, byte-exact (0xcf947f22). ARM timer: total **13,433,337 us** = 
 | old 2 | 1,311.702 | 26.400 | 1,279.382 | 5.888 | 51.9 |
 | new 2 | 1,312.505 | 26.910 | 1,279.589 | 5.974 | 52.2 |
 Tile-copy gap (new - old): +0.345 ms (pair 1), +0.510 ms (pair 2); every new run is above every old run (26.909, 26.910 vs 26.564, 26.400). Frame-mean gap +0.17 / +0.80 ms. The script's pre-registered rule (gap > 3 x the old-ELF run-to-run difference of 0.164 ms) was NOT met and printed "drift"; that rule was the right test. Temperature rose 50.9 -> 52.2 C over the four runs but the hottest old run (old 2) had the lowest copy time. **Label (owner, 2026-10-28): unresolved, <= 0.5 ms (< 0.04 % of the frame).** The tile-copy code is unchanged at object level; the cause (code placement or something else) was not isolated.
+
+# Part 3 (same day): non-cacheable DMA buffers, pipeline tree only (`driver_change/nc/`, `driver_change/verify2/`)
+
+Owner-approved change, pipeline branch only (`-DSR_NC_OUT`, `-DSR_NC_PAD`, both OFF by default; diff `driver_change/proposed_driver_change/applied_nc_pipe_tree.diff`). Checks before building: (1) linker map: all sections, heap, stacks and the MMU table lie in 0x00100000-0x00112150 (T5 build up to 0x0012E1D0, MMU table 0x00108000 / 0x00118000), nothing in 0x12000000-0x12FFFFFF or 0x14000000-0x15FFFFFF; (2) `NORM_NONCACHE` = 0x11DE2 decodes as short-descriptor section, TEX=001, C=0, B=0, S=1, XN=0 = Normal memory, outer and inner non-cacheable (not Device, not Strongly-ordered; Device is TEX 000 C0 B1, Strongly-ordered TEX 000 C0 B0), so unaligned LDR/STR in `sr_pad_image` are legal as before (LDM/STM/LDRD need word alignment in any memory type and are unchanged). With both flags off the compiled `sr_driver.c` and `main.c` (SR_TEST 2, 3) are identical to the committed ones (all functions identical); the production ELFs differ from the committed build only by the 20-byte GNU build-id note.
+
+Regions: output 0x12000000 + 16 MB (sections 0x120-0x12F), padded input 0x14000000 + 32 MB (sections 0x140-0x15F), all 1 MB aligned (static assert); marker block, IN buffer, tile buffers, program stay cacheable.
+
+Re-verification before the flagged runs (patched tree, flags off): all six designs T1/T2 byte-exact, T3 means 1,312.48 / 1,312.38 / 1,312.47 / 1,062.36 / 1,062.33 / 95.28 ms (all inside +-2 ms of the old-ELF means), T5 PASS on R0 and pipe (`verify2/`).
+
+## Flagged runs, pipeline, REAL 125 MHz, 20-frame means (all byte-exact 0x45dd4e2d, T1 and T5 PASS in every variant)
+`fnv` = cached reference build (only adds the timing print of the ARM's output read). A/B/A/B order, then OUT-only and PAD-only.
+| Run | Frame time ms (min / max) | Pad ms | DMA+compute ms | ARM output read ms (flush or drain + FNV-1a) | Wall per frame (frame + read) ms | NC set-up (once) |
+|---|---|---|---|---|---|---|
+| fnv 1 (cached) | 95.36 (95.18 / 96.93) | 5.70 | 89.65 | 63.66 | 159.02 | - |
+| both 1 | **70.52** (70.52 / 70.53) | 3.32 | 67.19 | 620.48 | 690.99 | 87.1 ms |
+| fnv 2 (cached) | 95.36 (95.18 / 96.92) | 5.78 | 89.58 | 63.65 | 159.01 | - |
+| both 2 | **70.52** (70.52 / 70.53) | 3.32 | 67.19 | 620.52 | 691.04 | 87.1 ms |
+| out only | 75.85 (75.76 / 77.33) | 5.71 | 70.14 | 620.36 | 696.21 | 29.0 ms |
+| pad only | 89.96 (89.96 / 89.97) | 3.32 | 86.64 | 64.07 | 154.03 | 58.1 ms |
+Predictions (model, made before the run): both 73.0 + dpad (dpad -1..+4) = 72-77 ms; out only 75.8; pad only 92.3 + dpad. Measured: out only 75.85 (+0.05), pad only 89.96 = 92.3 - 2.4, both 70.52. **The padding got faster, not slower (5.70 -> 3.32 ms, -2.4 ms)**: writes to non-cacheable memory skip the write-allocate line fills. With both buffers non-cacheable the DMA+compute window equals the core cycles (67.19 ms = 8,398,495 cycles / 125 MHz): all the cache-maintenance overhead is gone. Frame 95.36 -> 70.52 ms (-24.8 ms, -26 %), 14.2 fps; vs R0 at 100 MHz 18.6x, vs the ARM-only baseline (13.437 s) 190x, about 37.6 GOPS end to end; the core is 95.3 % of the frame time.
+
+**Frame time excludes the ARM's read of the output, on purpose:** the frame window runs from the start of the ARM padding to the end of the DMA/compute wait (`process_frame`). The checksum over the output (FNV-1a, byte-wise) is verification work of the test program, done after the window; a pipeline that hands the output buffer to something else does not read it. But a design where the ARM must read the output pays for it: **a byte-wise ARM read of the 6.2 MB output is about 10x slower from non-cacheable memory (620 ms vs 63.7 ms, which includes the flush)**, so the wall time of frame + checksum read goes UP (159 ms -> 691 ms). Not measured: a word-wise read (a wider read would be faster), or invalidating a cacheable buffer once instead of per frame. Side effects measured: padding faster (above), ARM output read 10x slower, one-time set-up 29-87 ms (clean + invalidate of 16 / 32 MB then 16 / 32 section updates).
+
+Board returned to its normal state: production pipeline ELF reloaded at 125 MHz, one T2 byte-exact (0x45dd4e2d), VERSION 0x53525301, FCLK0 125.000 MHz. Die temperature 49.6-50.0 C during the runs. Committed 2026-10-28 (main and `sandbox_pipe`). Second reported configuration (not the default; flags off by default): **70.52 ms (14.2 fps) with non-cacheable DMA buffers, applicable when the output goes to another DMA master such as a display; ARM output reads become ~10x slower (620 vs 64 ms).** Headline stays 95.4 ms / 10.49 fps (default build).

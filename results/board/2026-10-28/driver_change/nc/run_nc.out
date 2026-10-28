@@ -1,0 +1,40 @@
+15:23:33 before fnv1: XADC_TEMP_C 49.8 VCCINT 0.995 VCCAUX 1.803
+[fnv1] T2: rc=0 byte-exact=True fnv=0x45dd4e2d total=95204 us pad=5720 us NC set-up=- us ARM output read=63537 us
+[fnv1] T5: PASS
+[fnv1] T3 20 frames: byte-exact=True frame 95.36 ms (min 95.18, max 96.93), pad 5.70 ms, DMA+compute 89.65 ms, ARM output read 63.66 ms, wall per frame 159.02 ms
+15:24:40 after fnv1: XADC_TEMP_C 49.6 VCCINT 0.995 VCCAUX 1.802
+15:24:50 before both1: XADC_TEMP_C 49.7 VCCINT 0.995 VCCAUX 1.804
+[both1] T2: rc=0 byte-exact=True fnv=0x45dd4e2d total=70526 us pad=3332 us NC set-up=87103 us ARM output read=620288 us
+[both1] T5: PASS
+[both1] T3 20 frames: byte-exact=True frame 70.52 ms (min 70.52, max 70.53), pad 3.32 ms, DMA+compute 67.19 ms, ARM output read 620.48 ms, wall per frame 690.99 ms
+15:26:08 after both1: XADC_TEMP_C 49.7 VCCINT 0.995 VCCAUX 1.802
+15:26:19 before fnv2: XADC_TEMP_C 49.8 VCCINT 0.995 VCCAUX 1.805
+[fnv2] T2: rc=0 byte-exact=True fnv=0x45dd4e2d total=95196 us pad=5699 us NC set-up=- us ARM output read=63546 us
+[fnv2] T5: PASS
+[fnv2] T3 20 frames: byte-exact=True frame 95.36 ms (min 95.18, max 96.92), pad 5.78 ms, DMA+compute 89.58 ms, ARM output read 63.65 ms, wall per frame 159.01 ms
+15:27:25 after fnv2: XADC_TEMP_C 49.7 VCCINT 0.995 VCCAUX 1.804
+15:27:35 before both2: XADC_TEMP_C 49.8 VCCINT 0.995 VCCAUX 1.803
+[both2] T2: rc=0 byte-exact=True fnv=0x45dd4e2d total=70525 us pad=3331 us NC set-up=87103 us ARM output read=620173 us
+[both2] T5: PASS
+[both2] T3 20 frames: byte-exact=True frame 70.52 ms (min 70.52, max 70.53), pad 3.32 ms, DMA+compute 67.19 ms, ARM output read 620.52 ms, wall per frame 691.04 ms
+15:28:53 after both2: XADC_TEMP_C 49.7 VCCINT 0.995 VCCAUX 1.803
+15:29:04 before out1: XADC_TEMP_C 49.8 VCCINT 0.995 VCCAUX 1.804
+[out1] T2: rc=0 byte-exact=True fnv=0x45dd4e2d total=75765 us pad=5720 us NC set-up=29037 us ARM output read=620169 us
+[out1] T5: PASS
+[out1] T3 20 frames: byte-exact=True frame 75.85 ms (min 75.76, max 77.33), pad 5.71 ms, DMA+compute 70.14 ms, ARM output read 620.36 ms, wall per frame 696.21 ms
+15:30:21 after out1: XADC_TEMP_C 50.0 VCCINT 0.995 VCCAUX 1.802
+15:30:32 before pad1: XADC_TEMP_C 49.7 VCCINT 0.995 VCCAUX 1.803
+[pad1] T2: rc=0 byte-exact=True fnv=0x45dd4e2d total=89968 us pad=3333 us NC set-up=58071 us ARM output read=63537 us
+[pad1] T5: PASS
+[pad1] T3 20 frames: byte-exact=True frame 89.96 ms (min 89.96, max 89.97), pad 3.32 ms, DMA+compute 86.64 ms, ARM output read 64.07 ms, wall per frame 154.03 ms
+15:31:38 after pad1: XADC_TEMP_C 49.6 VCCINT 0.995 VCCAUX 1.803
+
+SUMMARY (125 MHz, pipeline, 20-frame means, ms):
+  run        frame    pad   DMA+comp  ARM-out-read  wall(frame+read)
+  fnv1         95.36   5.70     89.65        63.66         159.02
+  both1         70.52   3.32     67.19       620.48         690.99
+  fnv2         95.36   5.78     89.58        63.65         159.01
+  both2         70.52   3.32     67.19       620.52         691.04
+  out1         75.85   5.71     70.14       620.36         696.21
+  pad1         89.96   3.32     86.64        64.07         154.03
+PRODUCTION ELF CHECK (after the flagged runs): rc=0 byte-exact=True fnv=0x45dd4e2d version=0x53525301 fclk0=125.000 MHz

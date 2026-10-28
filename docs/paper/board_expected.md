@@ -150,12 +150,12 @@ Tree `/home/sreevenkat/Desktop/venkat/sandbox_pipe`. Cross-checks (model re-run 
 |---|---|---|
 | bitstream, sandbox build (tree default) | `/home/sreevenkat/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.bit` | `4e7a28951fd4c5b1939dcdc12b4f7777` |
 | xsa | `/home/sreevenkat/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.xsa` | `2fcec6b7f1ea8c297bc0db87d8389c37` |
-| ELF T1 golden tile (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t1.elf` | `6a6b9842ea4897cf84c3f691bf283ed9` |
-| ELF T2 full frame (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t2.elf` | `0f27910a0eb2f0d8714adcf742419084` |
-| ELF T3 timing, 20 frames (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t3_20f.elf` | `6ab3bd541406f48b30be2caa54952f82` |
-| ELF T3 timing, 200 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t3_200f.elf` | `b6812eeb0ab65826acd5e60ece6ddecb` |
-| ELF T7 ARM only, 1 frame (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t11.elf` | `43d5871e0322e4d99c129ce4130a06f3` |
-| ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t11_20f.elf` | `fc1ef22bb46aeee43ea003e106520fdc` |
+| ELF T1 golden tile (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t1.elf` | `53b91a43c59c9dadc89b0068e693d7de` |
+| ELF T2 full frame (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t2.elf` | `9722ef3c01701d5c9564277207def94f` |
+| ELF T3 timing, 20 frames (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t3_20f.elf` | `ca364f668e2ba457428a254e2606b384` |
+| ELF T3 timing, 200 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t3_200f.elf` | `578930f152ce1d2ff8d02e493dde8243` |
+| ELF T7 ARM only, 1 frame (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t11.elf` | `262b78ecd429b575bc0a723cf5994859` |
+| ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t11_20f.elf` | `b3470edb769fa513fd0d6495419cb8f9` |
 
 ## ps7_init.tcl files (platform and per-XSA)
 

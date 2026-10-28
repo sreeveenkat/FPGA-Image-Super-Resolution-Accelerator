@@ -1,0 +1,152 @@
+diff -ru orig/software/board/sr_app/main.c new/software/board/sr_app/main.c
+--- orig/software/board/sr_app/main.c	2026-10-28 11:03:12.513423109 +0530
++++ new/software/board/sr_app/main.c	2026-10-28 14:51:31.466984800 +0530
+@@ -229,8 +229,16 @@
+ static int finish_output(const sr_geom_t *g, uint32_t tiles, uint32_t test)
+ {
+     const uint32_t bytes = 16u + (uint32_t)sr_out_bytes(g);
++#ifdef SR_NC_OUT
++    sr_write_drain();                                             /* non-cacheable output: only the ARM-written header can still be in a write buffer */
++    const uint64_t tf0 = now_ticks();
++#else
+     Xil_DCacheFlushRange((UINTPTR)SR_OUT_ADDR, bytes);            /* the host reads DDR over JTAG: write the cache back first */
++#endif
+     const uint32_t fnv = sr_fnv1a32((const uint8_t *)(SR_OUT_ADDR + 16), sr_out_bytes(g));
++#ifdef SR_NC_OUT
++    xil_printf("NC: ARM read of the output buffer (FNV-1a over %u bytes, non-cacheable): %u us\r\n", (unsigned)sr_out_bytes(g), ticks_to_us(now_ticks() - tf0));
++#endif
+     write_marker(0, bytes, fnv, tiles, test);
+     xil_printf("SR_READY test=%u out=0x%08x bytes=%u tiles=%u fnv1a32=0x%08x\r\n", test, (unsigned)SR_OUT_ADDR, bytes, tiles, fnv);
+     return 0;
+@@ -289,8 +297,16 @@
+         if (cy < cyc_min) cyc_min = cy;
+         if (cy > cyc_max) cyc_max = cy;
+         cyc_sum += cy; cyc_n++; tiles = tm.tiles;
++#ifndef SR_NC_OUT
+         Xil_DCacheFlushRange((UINTPTR)SR_OUT_ADDR, 16u + (uint32_t)sr_out_bytes(&g));
++#endif
++#ifdef SR_NC_OUT
++        const uint64_t tf0 = now_ticks();
++#endif
+         const uint32_t fnv = sr_fnv1a32((const uint8_t *)(SR_OUT_ADDR + 16), sr_out_bytes(&g));
++#ifdef SR_NC_OUT
++        if (f == 0) xil_printf("  ARM read of the output buffer (FNV-1a over %u bytes, non-cacheable): %u us\r\n", (unsigned)sr_out_bytes(&g), ticks_to_us(now_ticks() - tf0));
++#endif
+         if (f == 0) fnv0 = fnv; else if (fnv != fnv0) same = 0;
+     }
+     const uint32_t mean_us = (uint32_t)(tot_sum / SR_T3_FRAMES);
+@@ -439,6 +455,21 @@
+     int rc = sr_init(&dev);
+     if (rc != SR_RC_OK) { xil_printf("sr_init failed: %d\r\n", rc); write_marker((uint32_t)rc, 0, 0, 0, 0); return rc; }
+     xil_printf("init ok: VERSION 0x%08x, MAX_W %u\r\n", sr_reg_read(&dev, SR_REG_VERSION), sr_reg_read(&dev, SR_REG_MAX_W));
++#if defined(SR_NC_OUT) || defined(SR_NC_PAD)
++    { const uint64_t tn0 = now_ticks(); sr_nc_init();
++      xil_printf("NC: output region %s, padded-input region %s non-cacheable (set-up %u us)\r\n",
++#ifdef SR_NC_OUT
++                 "0x12000000+16MB",
++#else
++                 "-",
++#endif
++#ifdef SR_NC_PAD
++                 "0x14000000+32MB",
++#else
++                 "-",
++#endif
++                 ticks_to_us(now_ticks() - tn0)); }
++#endif
+ #if SR_TEST >= 6 && SR_TEST <= 9
+     /* stale-state programs for software/board/stale_test.sh: leave the DMA / core in a half-finished state, then spin (they never finish).
+      *   9 = MM2S started with the full tile, core NOT started: the DMA stays blocked in the middle of its transfer
+diff -ru orig/software/board/sr_app/sr_driver.c new/software/board/sr_app/sr_driver.c
+--- orig/software/board/sr_app/sr_driver.c	2026-10-28 11:03:12.513288695 +0530
++++ new/software/board/sr_app/sr_driver.c	2026-10-28 14:51:31.466890082 +0530
+@@ -3,6 +3,43 @@
+ #include "xil_io.h"
+ #include "xil_printf.h"
+ #include "xstatus.h"
++#if defined(SR_NC_OUT) || defined(SR_NC_PAD)
++#include "xil_mmu.h"
++#include "xpseudo_asm.h"
++#include "xparameters_ps.h"
++#include "xl2cc.h"
++#include "sr_memmap.h"
++_Static_assert((SR_OUT_ADDR & 0xFFFFFu) == 0 && (SR_OUT_SIZE & 0xFFFFFu) == 0 && (SR_PAD_ADDR & 0xFFFFFu) == 0 && (SR_PAD_SIZE & 0xFFFFFu) == 0,
++               "non-cacheable regions must be whole 1 MB sections");
++
++static inline int sr_inside(const void *p, uint32_t base, uint32_t size) { const uintptr_t a = (uintptr_t)p; return a >= base && a < (uintptr_t)base + size; }
++
++/* every ARM write before this point is in DDR when it returns: DSB, then the PL310 cache-sync (drains its write buffers), then DSB */
++void sr_write_drain(void)
++{
++    dsb();
++    Xil_Out32(XPS_L2CC_BASEADDR + XPS_L2CC_CACHE_SYNC_OFFSET, 0u);
++    while (Xil_In32(XPS_L2CC_BASEADDR + XPS_L2CC_CACHE_SYNC_OFFSET) & 1u) { }
++    dsb();
++}
++
++static void nc_region(uint32_t base, uint32_t size)
++{
++    Xil_DCacheFlushRange((UINTPTR)base, size);                     /* nothing of the region may stay in L1 / L2 when its attributes change */
++    for (uint32_t a = base; a < base + size; a += 0x100000u) Xil_SetTlbAttributes((INTPTR)a, NORM_NONCACHE);
++}
++
++void sr_nc_init(void)
++{
++#ifdef SR_NC_OUT
++    nc_region(SR_OUT_ADDR, SR_OUT_SIZE);
++#endif
++#ifdef SR_NC_PAD
++    nc_region(SR_PAD_ADDR, SR_PAD_SIZE);
++#endif
++    dsb();
++}
++#endif
+ #if defined(SDT)
+ #include "xiltimer.h"
+ #else
+@@ -187,8 +224,14 @@
+ 
+     /* Caches: the DMA reads/writes DDR directly.  FLUSH (clean + invalidate) the input so the DMA sees the ARM's bytes, and flush the OUTPUT buffer too, so no
+      * dirty line of it can be evicted later on top of the DMA's data; invalidate it again after the DMA is done so the ARM reads DDR, not stale cache lines. */
++#ifdef SR_NC_PAD
++    if (sr_inside(in, SR_PAD_ADDR, SR_PAD_SIZE)) sr_write_drain(); else
++#endif
+     Xil_DCacheFlushRange((UINTPTR)in, in_bytes > in_len ? in_bytes : in_len);
+     SR_TS(1);
++#ifdef SR_NC_OUT
++    if (!sr_inside(out, SR_OUT_ADDR, SR_OUT_SIZE))
++#endif
+     Xil_DCacheFlushRange((UINTPTR)out, out_bytes);
+     SR_TS(2);
+ 
+@@ -219,6 +262,9 @@
+     if (st & SR_STATUS_ERROR) { d->last_error_code = reg_rd(d, SR_REG_ERROR_CODE); sr_dump(d, "core reported an error"); recover(d); return SR_RC_HW_ERROR; }
+     if ((dma_sr(d, XAXIDMA_DMA_TO_DEVICE) | dma_sr(d, XAXIDMA_DEVICE_TO_DMA)) & XAXIDMA_ERR_ALL_MASK) { sr_dump(d, "DMA error bits"); recover(d); return SR_RC_DMA_ERROR; }
+ 
++#ifdef SR_NC_OUT
++    if (!sr_inside(out, SR_OUT_ADDR, SR_OUT_SIZE))
++#endif
+     Xil_DCacheInvalidateRange((UINTPTR)out, out_bytes);
+     d->last_cycles = reg_rd(d, SR_REG_CYCLES);
+     SR_TS(5);
+diff -ru orig/software/board/sr_app/sr_driver.h new/software/board/sr_app/sr_driver.h
+--- orig/software/board/sr_app/sr_driver.h	2026-10-28 11:03:12.513149984 +0530
++++ new/software/board/sr_app/sr_driver.h	2026-10-28 14:51:31.466782015 +0530
+@@ -25,6 +25,17 @@
+ extern uint32_t sr_split_calls;
+ #endif
+ 
++/* Optional non-cacheable DMA buffers (compile-time flags, both OFF by default: the code is then the same as without this block).
++ *   -DSR_NC_OUT : the output-image region [SR_OUT_ADDR, +SR_OUT_SIZE) = 0x12000000 + 16 MB = sections 0x120..0x12F (the DMA writes it)
++ *   -DSR_NC_PAD : the padded-input region [SR_PAD_ADDR, +SR_PAD_SIZE) = 0x14000000 + 32 MB = sections 0x140..0x15F (the DMA reads it)
++ * sr_nc_init() (main.c calls it once after sr_init) cleans + invalidates each region, then marks its 1 MB sections Normal Non-cacheable with Xil_SetTlbAttributes.
++ * sr_run_frame_len() then skips the flush / invalidate of a buffer INSIDE such a region; for the padded input it drains the write buffers instead (DSB + PL310 cache
++ * sync), so the DMA sees every byte the ARM wrote.  Buffers outside the regions (T1 / T5 tile buffers, test arrays) keep the cached path. */
++#if defined(SR_NC_OUT) || defined(SR_NC_PAD)
++void sr_nc_init(void);
++void sr_write_drain(void);
++#endif
++
+ /* Base address of sr_accel_top/s_axi: from the Vivado Address Editor of the block design (project m6_sr), 4K range.  Override with -DSR_BASE=... if the design changes.
+  * A wrong value is dangerous: reading an address nobody decodes can hang the AXI bus or raise a data abort on the Zynq; sr_init() reads VERSION first for that reason. */
+ #ifndef SR_BASE
