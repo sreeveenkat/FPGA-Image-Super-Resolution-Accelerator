@@ -1,6 +1,6 @@
 # FPGA Image Super-Resolution Accelerator: Complete Project Guide
 
-*Updated 27 October 2026, after the first full board session. All six bitstreams were run on the board; every output was byte-exact.*
+*Updated 28 October 2026, after the second board session. Session 1 (27 Oct): all six bitstreams ran on the board at a 100 MHz PL clock, every output byte-exact. Session 2 (28 Oct): VERSION-refusal controls passed, and the three 125 MHz designs (r0_125, r3q_125, pipe) ran at a read-back 125.000 MHz, byte-exact on all 119 images each. One board, one temperature range (47.9–49.2 °C), no margin sweep. Power is still not measured.*
 
 This guide explains the whole project from zero: what it is, every concept you need, every step that was done, every result, and what is still left. It assumes you know nothing. Read it in order the first time.
 
@@ -217,7 +217,9 @@ Measured on the PC with `software/analysis/cpu_baseline.py`:
 | RTX 3050 GPU | 6.7 ms (7.9 ms with copies) | measured ~70 W → about **0.55 J per frame** |
 | ARM Cortex-A9 only (test T7) | **≈13,400 ms** | measured 27 Oct, byte-exact; timed from UART timestamps (±0.2 s) because the program's own timer was not enabled |
 | ZedBoard R0 | 1,311.7 ms | measured |
-| **ZedBoard pipeline** | **112.1 ms** | measured 27 Oct, at 100 MHz |
+| ZedBoard R0 at 125 MHz (r0_125 / r3q_125) | 1,061.9 / 1,061.7 ms | measured 28 Oct, 125 MHz |
+| ZedBoard pipeline at 100 MHz | 112.1 ms | measured 27 Oct |
+| **ZedBoard pipeline at 125 MHz** | **95.4 ms (10.5 fps)** | measured 28 Oct, PL clock read back as 125.000 MHz |
 
 **Honest conclusion:** an FPGA this small will never beat a desktop GPU on speed. The fair comparison is:
 1. **Same chip with and without the accelerator** (ARM-only vs FPGA), and
@@ -306,9 +308,19 @@ Seam tests, anchor-specific requantizer and layer-4 tests, a randomized saturati
 - Cost: +4 cycles per tile (926,205 instead of 926,201).
 - **Predicted** frame time: 1,061.8 ms (0.94 fps), about 1.24× faster than R0 (+24%).
 - 150 MHz was not pursued: it needs more changes for only about 1.2× more.
-- **r3q_125** = R3q (best quality) at 125 MHz. Built and simulated.
+- **r3q_125** = R3q (best quality) at 125 MHz. Built, simulated, and measured on the board on 28 Oct (see below).
 
-**Important board finding (27 Oct):** every board run was actually at **100 MHz**. The init script used by `run_board.tcl` was generated for 100 MHz and sets the clock divisors after loading (read back: DIV0=5, DIV1=2). So **125 MHz has not been tested on the board yet**. The 125 MHz designs were byte-exact at 100 MHz and gave the same tile times as their 100 MHz versions. The next session will use each design's own XSA init script to run them at 125 MHz.
+**Board finding (27 Oct):** every run of that session was actually at **100 MHz**. The init script used by `run_board.tcl` was generated for 100 MHz and sets the clock divisors after the bitstream is loaded (read back: DIV0=5, DIV1=2). The 125 MHz designs were byte-exact at 100 MHz and gave the same tile times as their 100 MHz versions.
+
+**Real 125 MHz runs (28 Oct):** each design was run with its **own XSA's `ps7_init.tcl`** (the three are byte-identical, md5 `d2a7789c…`). It differs from the platform script (md5 `86bd78c7…`) in one register value only, `FPGA0_CLK_CTRL` (0xF8000170): `0x00200500` → `0x00200400`, i.e. DIVISOR0 5 → 4. Before every run the script read the clock registers back: `FPGA0_CLK_CTRL = 0x00200400`, `IO_PLL_CTRL` FDIV = 30, PLL locked, so FCLK0 = 33.333 MHz × 30 / (4 × 2) = **125.000 MHz**; it refuses to run otherwise. Vivado timing of the three builds was met (WNS +0.632 / +0.393 / +0.267 ns, WHS +0.032 / +0.025 / +0.014 ns, TNS 0).
+
+| Design | T3 20-frame mean / min / max | fps | 119 images | Predicted |
+|---|---|---|---|---|
+| r0_125 | 1,061.85 / 1,061.26 / 1,062.96 ms | 0.942 | 119/119 byte-exact | 1,061.8 ms |
+| r3q_125 | 1,061.68 / 1,061.26 / 1,063.29 ms | 0.942 | 119/119 byte-exact | about 1,062 ms |
+| pipe | 95.36 / 95.19 / 96.79 ms | 10.49 | 119/119 byte-exact | 95.2 ms |
+
+All three agree with the model within 0.2 %; the cycle counts are unchanged from 100 MHz, so the gain is the clock (tiled 1.235×). **Limits of this result:** one board, die temperature 47.9–49.2 °C, no voltage or temperature margin sweep, no long soak. It shows that the three builds run correctly at 125 MHz on this board, not how much margin they have.
 
 ---
 
@@ -329,20 +341,21 @@ Fix the gap from section 7: let **all four layers work at the same time** on dif
 |---|---|---|
 | DSPs | 170 of 220 | synthesis |
 | Timing | built for 125 MHz, WNS +0.267 ns | timing met |
-| **Clock on the board** | **100 MHz** (125 MHz not yet tested) | measured read-back |
+| **Clock on the board** | **100 MHz on 27 Oct, 125.000 MHz on 28 Oct** | measured read-back both days |
 | Cycles per 960×540 frame | 8,398,481 (sim) / 8,398,491–8,398,508 (board) | **simulation and board agree to within 27 cycles (0.0003%)** |
 | Golden-tile cycles | 74,641 (sim) / 74,651–74,654 (board) | agree to within 13 cycles |
 | Core compute time at 100 MHz | 8.40 M cycles / 100 MHz ≈ 84.0 ms | calculated from measured cycles |
 | PL time per frame | 106.4 ms (~22 ms outside the core cycles, not yet explained) | measured |
-| **End-to-end frame time** | **112.1 ms mean (112.0–113.6), ≈ 8.9 fps** | **measured, 20 frames** |
-| Byte-exact | **119/119 test images**, full frame, error-recovery test (T5) | measured |
+| **End-to-end frame time, 100 MHz (27 Oct)** | **112.1 ms mean (112.0–113.6), ≈ 8.9 fps** | **measured, 20 frames** |
+| **End-to-end frame time, 125 MHz (28 Oct)** | **95.36 ms mean (95.19–96.79), ≈ 10.5 fps; core 67.2 ms + 28.2 ms overhead** | **measured, 20 frames** |
+| Byte-exact | **119/119 test images** at 100 MHz and again at 125 MHz, full frame, error-recovery test (T5, 100 MHz) | measured |
 | Output checksum | 0x45dd4e2d (same as R3q) | measured |
 | DSP efficiency (core) | 1.33 G MACs / (170 × 8.40 M) ≈ **93%** | calculated |
 | Die temperature | 42–50.3 °C | measured |
 
-**Measured speed-up: 11.7× over R0 with the PL at the same 100 MHz clock in both runs, and about 120× over the ARM alone (ARM-only time is host-timed, ±0.2 s).** So the speed-up over R0 comes from the architecture, not from the clock. DSP efficiency goes from about 16% to about 93%. Throughput: about **24 GOPS** end to end (R0: about 2 GOPS).
+**Measured speed-up: 11.7× over R0 with the PL at the same 100 MHz clock in both runs, and about 120× over the ARM alone (ARM-only time is host-timed, ±0.2 s).** So the speed-up over R0 comes from the architecture, not from the clock. At 125 MHz (28 Oct) the pipeline is 13.8× faster than R0 at 100 MHz and about 140× faster than the ARM alone; throughput about 28 GOPS end to end. DSP efficiency goes from about 16% to about 93%. Throughput: about **24 GOPS** end to end (R0: about 2 GOPS).
 
-At 125 MHz, the frame time would be roughly 95 ms. That's an **estimate**; measure it next session.
+**Where the 95.4 ms go at 125 MHz (28 Oct, from the logs):** the frame time is exactly the sum of two timed parts: ARM padding of the input before the DMA (5.79 ms) + the wait for DMA and compute (89.57 ms). The core needs 8,398,495 cycles = 67.19 ms, so 28.2 ms are overhead: 5.79 ms ARM padding + 22.4 ms inside the DMA wait that is not core cycles (by the driver code this window also contains the cache flush of the input and output buffers, the DMA set-up, polling latency and the cache invalidate of the output; the split is not measured). The 22.4 ms is the same at 100 MHz (106.4 − 84.0 ms) and grows linearly with the image size over the 119 test images (about 3.9 ns per output byte, intercept 0.04 ms, no fixed part), so it is ARM/DDR-side work, not PL-clock time. How it splits between flush, set-up and invalidate has not been measured yet.
 
 **Note:** the layer pipeline idea itself is not new (the PKU group published it; `docs/paper/related_work_and_venues.md`. A Nagasaki University paper is also mentioned in this guide, but it is not in the repo notes: verify it). Cite them; do not claim the idea as yours. Your contribution is the measured gap analysis + fix on a cheap chip, with bit-exact verification.
 
@@ -387,10 +400,11 @@ All values below were **measured on the board on 27 Oct 2026, all at 100 MHz**. 
 | **r3q_125** | R3q timed for 125 MHz | 125 MHz | 0x53524301 | 0x45dd4e2d | 1,311.8 ms | 1.00× |
 | **pipe** | layer pipeline, R3q weights + anchor | 125 MHz | 0x53525301 | 0x45dd4e2d | **112.1 ms** | **11.7×** |
 
-- ARM only (T7): ≈13.4 s per frame, byte-exact. Every tiled design is about 10.2× faster than ARM-only; the pipeline is about 120× faster.
+- The table above is the 27 Oct (100 MHz) session. On 28 Oct the three 125 MHz designs were run again at a real 125.000 MHz: r0_125 1,061.9 ms, r3q_125 1,061.7 ms, pipe 95.4 ms, all byte-exact on 119/119 images (section 11).
+- ARM only (T7): ≈13.4 s per frame, byte-exact. Every tiled design is about 10.2× faster than ARM-only; the pipeline is about 120× faster (about 140× at 125 MHz).
 - Negative controls: pipeline output differs from R0's expected file (77.8% of bytes), and R2q's differs too (80.1%), as required.
 - Logs and the summary: `results/board/2026-10-27/SUMMARY.md`.
-- Each driver program accepts only its own bitstream family; running it on the wrong bitstream should be refused. This VERSION-refusal control is **planned for the next session**.
+- Each driver program accepts only its own bitstream family. **VERSION-refusal controls (28 Oct): passed.** (a) pipeline bitstream + R3q program, (b) R2q bitstream + R0 program: both printed `SR: VERSION 0x…, expected 0x… (wrong SR_BASE … or wrong bitstream)` and `sr_init failed: 2`, and **refused before any transfer; no DDR writes**: four DDR regions (output image buffer, pad buffer, tile buffers) were filled with random patterns beforehand and read back identical afterwards; the DMA source, destination and length registers stayed 0; no tile or frame message was printed. Each matching pair then ran byte-exact. Caveat: the driver resets the DMA *before* it checks VERSION, so "no transfer" is shown, not "the DMA was never touched" (a planned driver change moves the check first). Other mismatched pairs were not run.
 
 - Expected values for everything are in `docs/paper/board_expected.md`.
 
@@ -432,14 +446,13 @@ VERSION, checksum (pass/fail), CYCLES, **PL compute time and end-to-end frame ti
 - Pipeline: 119/119 test images byte-exact, T1/T2/T5 passed, 112.1 ms per frame.
 - T7 (ARM only): ≈13.4 s per frame, byte-exact.
 - Die temperature stayed at 42–50.3 °C.
-- **All runs were at 100 MHz** (see section 11).
+- **All runs of this session were at 100 MHz** (see section 11 for the 125 MHz session).
 - **No meter available, so power was not measured.**
 
-### 15.6 Next session plan
-1. VERSION-refusal controls (wrong program on a bitstream must be refused).
-2. 125 MHz runs for r0_125, r3q_125 and the pipeline, using each design's own XSA init script. Read back the divisors, watch the temperature, revert to 100 MHz on any failure.
-3. Find where the pipeline's extra ~22 ms (PL time vs core cycles) goes.
-4. Re-run T7 with its timer working.
+### 15.6 Second session (28 Oct) and what is left
+Done on 28 Oct: (1) VERSION-refusal controls (passed, section 14); (2) 125 MHz runs for r0_125, r3q_125 and the pipeline with each design's own init script, clock read back, die temperature 47.9–49.2 °C, all byte-exact (section 11). Still open:
+3. Split the pipeline's ~22.4 ms DMA-wait overhead into flush / DMA set-up / invalidate (needs a timing build, proposed, not yet approved).
+4. Re-run T7 with its timer working (proposed, not yet approved).
 5. Power, once you have a multimeter.
 
 ---
@@ -451,7 +464,7 @@ The FPGA can't beat a GPU on speed, but it might on **energy per frame**:
 ```
 energy per frame (J) = power while processing (W) × frame time (s)
 ```
-GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the measured 112.1 ms, the pipeline would be about 0.45–0.56 J **if** the whole board draws about 4–5 W. That's a guess until measured, and it would be roughly equal to the GPU. At 125 MHz it would be a little lower.
+GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the measured 95.4 ms at 125 MHz, the pipeline would be about 0.38–0.48 J **if** the whole board draws about 4–5 W (112.1 ms at 100 MHz: 0.45–0.56 J). That's a guess until measured; it would be roughly equal to or a little below the GPU's 0.55 J.
 
 ### 16.2 How (needs a digital multimeter)
 - The ZedBoard is said to have a **10 mΩ resistor** in series with the 12 V input, with header **J21** across it. This comes from forum quotes of the user guide and is **not verified yet**; read the guide before relying on it.
@@ -477,7 +490,7 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 **FPL 2027** (main FPGA conference). FPL 2026's deadline was late March 2026, so 2027 is probably similar (**to be confirmed** at 2027.fpl.org). Page limit and review type are **not checked yet**; read the call when it is published.
 
 ### 17.3 The paper's story
-"We measured why a verified INT8 SR accelerator on a low-cost Zynq-7020 FPGA was slow (16% DSP efficiency), fixed it with a layer pipeline (~93% efficiency, **11.7× faster measured at the same 100 MHz clock, ~120× faster than the ARM alone**), improved quality by about +0.5 to +1.1 dB (PSNR-Y, BSD100 to Set5) through training, and kept everything byte-exact on all 119 test images on the board, with a verification flow that found a deadlock that regression and mutation testing missed."
+"We measured why a verified INT8 SR accelerator on a low-cost Zynq-7020 FPGA was slow (16% DSP efficiency), fixed it with a layer pipeline (~93% efficiency, **11.7× faster measured at the same 100 MHz clock, 13.8× at 125 MHz, ~120–140× faster than the ARM alone**), improved quality by about +0.5 to +1.1 dB (PSNR-Y, BSD100 to Set5) through training, and kept everything byte-exact on all 119 test images on the board, with a verification flow that found a deadlock that regression and mutation testing missed."
 
 ### 17.4 What it needs before submission
 - Board numbers for every claim (speed, byte-exact, **power**).
@@ -550,11 +563,12 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 - [x] Pipeline deadlock bug found and fixed; counter audit
 - [x] Board checklist, runbook, expected values
 - [x] **Board session (27 Oct): all six bitstreams byte-exact; pipeline 112.1 ms = 11.7× vs R0, ~120× vs ARM; 119/119 images**
+- [x] **Board session 2 (28 Oct): VERSION-refusal controls passed (refused before any transfer, no DDR writes); r0_125, r3q_125 and pipe at a read-back 125.000 MHz, 119/119 byte-exact each; 1,061.9 / 1,061.7 / 95.4 ms (one board, 47.9–49.2 °C, no margin sweep)**
 - [x] T7 ARM-only baseline (≈13.4 s, timer to be fixed)
 - [x] Paper draft updated with measured numbers (6 pages incl. references; related work still TODO)
 
 ### Left
-- [ ] Next board session: VERSION-refusal controls, 125 MHz runs, the extra ~22 ms, T7 with its timer
+- [ ] Next board session: split the ~22.4 ms overhead, T7 with its timer (both need a driver build, not yet approved), then power
 - [ ] **Power measurement** (needs a multimeter)
 - [ ] Merge the winning design (pipeline, or R3q) into `main` after board results
 - [ ] Update the public GitHub README (it is stale)
@@ -583,7 +597,7 @@ A: The accumulator is multiplied by an integer M, a rounding constant 2^(S−1) 
 A: Four layer engines ran one after another, so three engines' DSPs were always idle. Efficiency was only 16–17%. The cycle model confirmed it.
 
 **Q: How did you fix it?**
-A: A layer pipeline: all four layers run at the same time, connected by line buffers and FIFOs, with DSPs shared out in proportion to each layer's work. DSP efficiency went from about 16% to about 93%. On the board it is 11.7× faster (1,311.7 → 112.1 ms) at the same 100 MHz clock, byte-exact on all 119 test images.
+A: A layer pipeline: all four layers run at the same time, connected by line buffers and FIFOs, with DSPs shared out in proportion to each layer's work. DSP efficiency went from about 16% to about 93%. On the board it is 11.7× faster (1,311.7 → 112.1 ms) at the same 100 MHz clock, and 95.4 ms (13.8×) at 125 MHz, byte-exact on all 119 test images both times.
 
 **Q: What is a line buffer?**
 A: A memory holding only the last few image rows a layer needs (3 rows for a 3×3 filter), instead of a whole tile. It saves memory and avoids recomputing halo pixels.

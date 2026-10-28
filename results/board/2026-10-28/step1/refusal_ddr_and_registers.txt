@@ -1,0 +1,58 @@
+== s1a_pipebit_r3qelf
+pre out: identical to the pattern (7340032 bytes, md5 4dee57a5435b)
+post out: identical to the pattern (7340032 bytes, md5 4dee57a5435b)
+pre pad: identical to the pattern (2097152 bytes, md5 d97aaee50d00)
+post pad: identical to the pattern (2097152 bytes, md5 d97aaee50d00)
+pre tin: identical to the pattern (65536 bytes, md5 5b9a7a573463)
+post tin: identical to the pattern (65536 bytes, md5 5b9a7a573463)
+pre tout: identical to the pattern (65536 bytes, md5 37886f96d946)
+post tout: identical to the pattern (65536 bytes, md5 37886f96d946)
+REG pre DMA_MM2S_DMASR 0x40400004 0x00000001
+REG pre DMA_MM2S_SA 0x40400018 0x00000000
+REG pre DMA_MM2S_LENGTH 0x40400028 0x00000000
+REG pre DMA_S2MM_DMASR 0x40400034 0x00000001
+REG pre DMA_S2MM_DA 0x40400048 0x00000000
+REG pre DMA_S2MM_LENGTH 0x40400058 0x00000000
+REG pre SR_STATUS 0x40000004 0x00000000
+REG pre SR_CYCLES 0x4000000c 0x00000000
+REG pre SR_VERSION 0x40000014 0x53525301
+READY 1 after 1 s
+MARKER result=2 bytes=0 fnv=0x00000000 tiles=0 test=0
+REG post DMA_MM2S_DMASR 0x40400004 0x00000001
+REG post DMA_MM2S_SA 0x40400018 0x00000000
+REG post DMA_MM2S_LENGTH 0x40400028 0x00000000
+REG post DMA_S2MM_DMASR 0x40400034 0x00000001
+REG post DMA_S2MM_DA 0x40400048 0x00000000
+REG post DMA_S2MM_LENGTH 0x40400058 0x00000000
+REG post SR_STATUS 0x40000004 0x00000000
+REG post SR_CYCLES 0x4000000c 0x00000000
+REG post SR_VERSION 0x40000014 0x53525301
+== s1b_r2qbit_r0elf
+pre out: identical to the pattern (7340032 bytes, md5 4dee57a5435b)
+post out: identical to the pattern (7340032 bytes, md5 4dee57a5435b)
+pre pad: identical to the pattern (2097152 bytes, md5 d97aaee50d00)
+post pad: identical to the pattern (2097152 bytes, md5 d97aaee50d00)
+pre tin: identical to the pattern (65536 bytes, md5 5b9a7a573463)
+post tin: identical to the pattern (65536 bytes, md5 5b9a7a573463)
+pre tout: identical to the pattern (65536 bytes, md5 37886f96d946)
+post tout: identical to the pattern (65536 bytes, md5 37886f96d946)
+REG pre DMA_MM2S_DMASR 0x40400004 0x00000001
+REG pre DMA_MM2S_SA 0x40400018 0x00000000
+REG pre DMA_MM2S_LENGTH 0x40400028 0x00000000
+REG pre DMA_S2MM_DMASR 0x40400034 0x00000001
+REG pre DMA_S2MM_DA 0x40400048 0x00000000
+REG pre DMA_S2MM_LENGTH 0x40400058 0x00000000
+REG pre SR_STATUS 0x40000004 0x00000000
+REG pre SR_CYCLES 0x4000000c 0x00000000
+REG pre SR_VERSION 0x40000014 0x53522201
+READY 1 after 0 s
+MARKER result=2 bytes=0 fnv=0x00000000 tiles=0 test=0
+REG post DMA_MM2S_DMASR 0x40400004 0x00000001
+REG post DMA_MM2S_SA 0x40400018 0x00000000
+REG post DMA_MM2S_LENGTH 0x40400028 0x00000000
+REG post DMA_S2MM_DMASR 0x40400034 0x00000001
+REG post DMA_S2MM_DA 0x40400048 0x00000000
+REG post DMA_S2MM_LENGTH 0x40400058 0x00000000
+REG post SR_STATUS 0x40000004 0x00000000
+REG post SR_CYCLES 0x4000000c 0x00000000
+REG post SR_VERSION 0x40000014 0x53522201

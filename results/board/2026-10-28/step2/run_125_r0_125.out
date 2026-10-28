@@ -1,0 +1,30 @@
+md5 OK: bitstream ecceb982, ps7_init (XSA) d2a7789c, ELFs ['64a235f6', '6e5906e2', 'c1c1c638']
+10:08:01 before r0_125: XADC_TEMP_C 47.9 VCCINT 0.994 VCCAUX 1.803
+T1: rc=0 CLOCK FPGA0_CLK_CTRL=0x00200400 SRCSEL=0 DIVISOR0=4 DIVISOR1=2 IO_PLL_CTRL=0x0001e008 PLL_FDIV=30 PLL_STATUS=0x0000003f (io_pll_locked=1) -> FCLK0 = 33.3333 MHz x 30 / (4 x 2) = 125.000 MHz
+T1: result=0 version=0x53524201 CYCLES min/max/mean 926222/926225/926224 repeats=20 fclk0_mhz=125.000
+T2: rc=0 byte-exact=True fnv=0xcf947f22 (expected 0xcf947f22) version=0x53524201 total=1061280 us DMA+compute=1028959 us CYCLES min/max/mean 926222/926247/926225 fclk0_mhz=125.000
+T3: rc=0 20 frames: mean 1061.9 ms min 1061.3 max 1063.0 ms byte-exact=True fnv=0xcf947f22 fclk0_mhz=125.000
+   T3: timing, 20 frames of the image at 0x10000000
+   T3: per frame mean 1061853 us (1061 ms), min 1061264 us, max 1062956 us; mean split: pad 5972 us, ARM copy 26405 us, DMA+compute 1029445 us
+   T3: DMA+compute per frame min/max 1028954/1030583 us; frames per second x1000 (mean): 941
+   T3: CYCLES per tile min 926222, max 926252, mean 926225 (135 tiles x 20 frames); all frames gave the same output: yes
+10:09:21 after T3 r0_125: XADC_TEMP_C 48.5 VCCINT 0.993 VCCAUX 1.803
+images: 119 from /home/sreevenkat/Desktop/venkat/sem_project_all/data/board/testsets
+  10/119 ok (last Set14/comic: 46.9 ms, expected 47.2)
+  20/119 ok (last BSD100/101085: 93.6 ms, expected 94.4)
+  30/119 ok (last BSD100/119082: 93.7 ms, expected 94.4)
+  40/119 ok (last BSD100/148026: 93.6 ms, expected 94.4)
+10:13:15 after image 40 r0_125: XADC_TEMP_C 48.5 VCCINT 0.995 VCCAUX 1.803
+  50/119 ok (last BSD100/170057: 93.7 ms, expected 94.4)
+  60/119 ok (last BSD100/21077: 93.7 ms, expected 94.4)
+  70/119 ok (last BSD100/241048: 93.7 ms, expected 94.4)
+  80/119 ok (last BSD100/299086: 93.7 ms, expected 94.4)
+10:17:01 after image 80 r0_125: XADC_TEMP_C 48.8 VCCINT 0.993 VCCAUX 1.802
+  90/119 ok (last BSD100/37073: 93.7 ms, expected 94.4)
+  100/119 ok (last BSD100/45096: 93.7 ms, expected 94.4)
+  110/119 ok (last BSD100/76053: 93.7 ms, expected 94.4)
+10:20:40 after image 119 r0_125: XADC_TEMP_C 48.7 VCCINT 0.994 VCCAUX 1.804
+IMAGES r0_125: 119 byte-exact of 119 run (119 attempted)
+  ms per frame over the images: mean 96.65 min 31.31 max 235.04; sum tiles 1473; ms per tile (sum) 7.808
+  CYCLES (per tile for tiled / per frame for pipe) over images: min 926224 max 926227
+r0_125: all requested stages passed

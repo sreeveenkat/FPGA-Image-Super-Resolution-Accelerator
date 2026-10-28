@@ -1,0 +1,5 @@
+name s1a_pipebit_r3qelf
+date 2026-10-28T09:55:40+05:30
+elf /home/sreevenkat/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t2.elf c60eaa6e74fe22052a200b4be284c88e
+bitstream /home/sreevenkat/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.bit 4e7a28951fd4c5b1939dcdc12b4f7777
+xsdb_exit 0

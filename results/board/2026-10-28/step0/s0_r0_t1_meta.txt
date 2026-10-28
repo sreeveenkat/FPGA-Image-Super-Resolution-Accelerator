@@ -1,0 +1,8 @@
+name s0_r0_t1
+date 2026-10-28T09:52:05+05:30
+cwd /home/sreevenkat/Desktop/venkat/sem_project_all
+git 4640566 main
+elf software/board/build/sr_app_t1.elf 5c1047248aba2946cbc8da2d805661ea
+bitstream /home/sreevenkat/Desktop/venkat/vitis/m6_sr_0602/m6_sr.runs/impl_1/design_1_wrapper.bit a44744b2ab9b5cbd2da43d421e80e439
+command xsdb software/board/run_board.tcl software/board/build/sr_app_t1.elf - - data/board/2026-10-28/s0_r0_t1_stats.txt
+xsdb_exit 0
