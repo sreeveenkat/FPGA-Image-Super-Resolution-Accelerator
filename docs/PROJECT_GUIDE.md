@@ -232,7 +232,7 @@ Goal: better pictures **without changing the network shape**, mostly by training
 ### 9.1 First, the evaluation was checked
 - Low-res test images made with Pillow's anti-aliased bicubic: bit-exact with the official Set5/Set14 files.
 - PSNR on Y with a 2-pixel border; HR images cropped to an even size first.
-- Our bicubic scores (33.67 / 30.32 / 29.56) match the published ones, so the evaluation is correct.
+- Our bicubic scores (33.67 / 30.32 / 29.56) are close to the FSRCNN paper's bicubic row (33.66 / 30.23 / 29.70), but only Set5 matches. Set14 is 0.09 dB higher, and the paper's last column is BSD200, not BSD100, so it is not comparable image for image (`results/quality/image_quality_ladder.md`, Reference points). Our LR images are bit-exact with the official ones for all even-sized images (Set5 5/5, Set14 11/11); Set14 and BSD100 contain odd-sized images that were re-aligned on purpose, so they can differ slightly from the literature.
 - No test image overlaps with any training image (checked against 3,642 training images).
 - Choices were made using **42 clean DIV2K validation images** only; test sets only for final numbers.
 
@@ -330,8 +330,8 @@ Fix the gap from section 7: let **all four layers work at the same time** on dif
 | DSPs | 170 of 220 | synthesis |
 | Timing | built for 125 MHz, WNS +0.267 ns | timing met |
 | **Clock on the board** | **100 MHz** (125 MHz not yet tested) | measured read-back |
-| Cycles per 960×540 frame | 8,398,481 (sim) / 8,398,491–8,398,508 (board) | **simulation and board agree** |
-| Golden-tile cycles | 74,641 (sim) / 74,651–74,654 (board) | agree |
+| Cycles per 960×540 frame | 8,398,481 (sim) / 8,398,491–8,398,508 (board) | **simulation and board agree to within 27 cycles (0.0003%)** |
+| Golden-tile cycles | 74,641 (sim) / 74,651–74,654 (board) | agree to within 13 cycles |
 | Core compute time at 100 MHz | 8.40 M cycles / 100 MHz ≈ 84.0 ms | calculated from measured cycles |
 | PL time per frame | 106.4 ms (~22 ms outside the core cycles, not yet explained) | measured |
 | **End-to-end frame time** | **112.1 ms mean (112.0–113.6), ≈ 8.9 fps** | **measured, 20 frames** |
@@ -340,11 +340,11 @@ Fix the gap from section 7: let **all four layers work at the same time** on dif
 | DSP efficiency (core) | 1.33 G MACs / (170 × 8.40 M) ≈ **93%** | calculated |
 | Die temperature | 42–50.3 °C | measured |
 
-**Measured speed-up: 11.7× over R0, and about 120× over the ARM alone, at the same 100 MHz clock.** So the whole speed-up comes from the architecture, not from the clock. DSP efficiency goes from about 16% to about 93%. Throughput: about **24 GOPS** end to end (R0: about 2 GOPS).
+**Measured speed-up: 11.7× over R0 with the PL at the same 100 MHz clock in both runs, and about 120× over the ARM alone (ARM-only time is host-timed, ±0.2 s).** So the speed-up over R0 comes from the architecture, not from the clock. DSP efficiency goes from about 16% to about 93%. Throughput: about **24 GOPS** end to end (R0: about 2 GOPS).
 
 At 125 MHz, the frame time would be roughly 95 ms. That's an **estimate**; measure it next session.
 
-**Note:** the layer pipeline idea itself is not new (PKU and Nagasaki University groups published it). Cite them; do not claim the idea as yours. Your contribution is the measured gap analysis + fix on a cheap chip, with bit-exact verification.
+**Note:** the layer pipeline idea itself is not new (the PKU group published it; `docs/paper/related_work_and_venues.md`. A Nagasaki University paper is also mentioned in this guide, but it is not in the repo notes: verify it). Cite them; do not claim the idea as yours. Your contribution is the measured gap analysis + fix on a cheap chip, with bit-exact verification.
 
 ### 12.4 Verification
 Quick suite 48/48, full suite 65/65, mutation 34 mutants (33 caught, 1 equivalent), netlist simulation 4/4, full 960×540 frame bit-exact at every stage, plus a counter-width audit (section 13).
@@ -354,7 +354,7 @@ Quick suite 48/48, full suite 65/65, mutation 34 mutants (33 caught, 1 equivalen
 ## 13. The deadlock bug and what it teaches
 
 ### 13.1 What happened
-The first full 960×540 simulation of the pipeline **stopped after 5 rows** (14,400 of 1,555,200 outputs). The testbench then sat in an unbounded status poll for about 6.5 hours before it was stopped (the poll is now bounded).
+The first full 960×540 simulation of the pipeline **stopped after 5 rows** (14,400 of 1,555,200 output words/beats). The testbench then sat in an unbounded status poll for about 6.5 hours before it was stopped (the poll is now bounded).
 
 ### 13.2 The cause (a classic Verilog trap)
 The anchor FIFO computed how full it is as `write_pointer − read_pointer`. The pointers are 13 bits, but Verilog evaluated the subtraction in **32 bits**. After 8,192 pushes the pointers wrap back to 0, the 32-bit result becomes negative, the FIFO wrongly says "full", the input stops, and the whole pipeline **deadlocks**.
@@ -483,6 +483,7 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 - Board numbers for every claim (speed, byte-exact, **power**).
 - Comparison table with the closest papers (GOPS, GOPS/W, fps, DSPs, PSNR).
 - You must **read** the related work yourself:
+  (Only the PKU paper and a few others are listed in `docs/paper/related_work_and_venues.md`. The authors, venues and years below are NOT checked against the papers; confirm each one when you read it. In particular, that file calls the 4K UHD 60 fps paper "Chang et al.", this guide says "Kim et al.", and the QARepVGG year may be AAAI 2024, not 2023.)
   1. Quantized SR on PYNQ, FCCM 2020 (same chip, closest competitor)
   2. PKU real-time UHD SR system (layer pipeline)
   3. Nagasaki University pipelined SR on FPGA
