@@ -38,6 +38,19 @@ uint64_t sr_now_ticks(void)
 
 uint64_t sr_ticks_per_sec(void) { return SR_TICKS_PER_SEC; }
 
+/* Timing split of one transfer, compiled in only with -DSR_TIMING_SPLIT (see sr_driver.h); empty macros otherwise. */
+#ifdef SR_TIMING_SPLIT
+uint64_t sr_split[SR_SPLIT_N], sr_split_sum[SR_SPLIT_N];
+uint32_t sr_split_calls;
+#define SR_TS_BEGIN()  uint64_t sr_ts_prev = sr_now_ticks(); const uint64_t sr_ts_start = sr_ts_prev
+#define SR_TS(i)       do { const uint64_t sr_ts_now = sr_now_ticks(); sr_split[i] = sr_ts_now - sr_ts_prev; sr_ts_prev = sr_ts_now; } while (0)
+#define SR_TS_END()    do { sr_split[6] = sr_ts_prev - sr_ts_start; for (int sr_k = 0; sr_k < SR_SPLIT_N; sr_k++) sr_split_sum[sr_k] += sr_split[sr_k]; sr_split_calls++; } while (0)
+#else
+#define SR_TS_BEGIN()
+#define SR_TS(i)
+#define SR_TS_END()
+#endif
+
 static inline uint32_t reg_rd(const sr_dev_t *d, uint32_t off) { return Xil_In32(d->base + off); }
 static inline void reg_wr(const sr_dev_t *d, uint32_t off, uint32_t v) { Xil_Out32(d->base + off, v); }
 uint32_t sr_reg_read(const sr_dev_t *d, uint32_t off) { return reg_rd(d, off); }
@@ -127,17 +140,19 @@ int sr_init(sr_dev_t *d)
     d->last_cycles = 0;
     d->last_error_code = 0;
     d->version = 0;
-    XAxiDma_Config *cfg = XAxiDma_LookupConfig(SR_DMA_BASE);       /* SDT flow: takes the BASE ADDRESS, not a device id */
-    if (cfg == NULL) { xil_printf("SR: DMA config for 0x%08x not found\r\n", (unsigned)SR_DMA_BASE); return SR_RC_DMA_INIT; }
-    if (XAxiDma_CfgInitialize(&d->dma, cfg) != XST_SUCCESS) { xil_printf("SR: DMA init failed\r\n"); return SR_RC_DMA_INIT; }
-    if (XAxiDma_HasSg(&d->dma)) { xil_printf("SR: DMA is in scatter-gather mode, simple mode expected\r\n"); return SR_RC_DMA_INIT; }
-
+    /* VERSION first: a program built for another bitstream must stop here, before anything is written to the DMA (XAxiDma_CfgInitialize resets it) or to the core. */
     const uint32_t ver = reg_rd(d, SR_REG_VERSION);
     d->version = ver;
     if ((ver & SR_VERSION_MASK) != (SR_VERSION & SR_VERSION_MASK)) {
         xil_printf("SR: VERSION 0x%08x, expected 0x%08x (wrong SR_BASE 0x%08x or wrong bitstream)\r\n", ver, (unsigned)SR_VERSION, (unsigned)SR_BASE);
         return SR_RC_VERSION;
     }
+
+    XAxiDma_Config *cfg = XAxiDma_LookupConfig(SR_DMA_BASE);       /* SDT flow: takes the BASE ADDRESS, not a device id */
+    if (cfg == NULL) { xil_printf("SR: DMA config for 0x%08x not found\r\n", (unsigned)SR_DMA_BASE); return SR_RC_DMA_INIT; }
+    if (XAxiDma_CfgInitialize(&d->dma, cfg) != XST_SUCCESS) { xil_printf("SR: DMA init failed\r\n"); return SR_RC_DMA_INIT; }
+    if (XAxiDma_HasSg(&d->dma)) { xil_printf("SR: DMA is in scatter-gather mode, simple mode expected\r\n"); return SR_RC_DMA_INIT; }
+
     const uint32_t mw = reg_rd(d, SR_REG_MAX_W);
     if (mw != SR_MAX_W) { xil_printf("SR: MAX_W %u, expected %u\r\n", mw, (unsigned)SR_MAX_W); return SR_RC_TILE_SIZE; }
     return sr_reset_all(d);                                           /* (XAxiDma_CfgInitialize resets the DMA too, but with a loop-count timeout and before the core) */
@@ -165,13 +180,17 @@ int sr_run_frame_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, u
     int rc;
     const uint32_t in_bytes = 4u * SR_FRAME_IN_BEATS(w, h), out_bytes = SR_FRAME_OUT_BYTES(w, h);
     if (reg_rd(d, SR_REG_STATUS) & SR_STATUS_BUSY) { sr_dump(d, "core busy before start"); recover(d); return SR_RC_BUSY; }
+    SR_TS_BEGIN();
     reg_wr(d, SR_REG_FRAME_W, w);
     reg_wr(d, SR_REG_FRAME_H, h);
+    SR_TS(0);
 
     /* Caches: the DMA reads/writes DDR directly.  FLUSH (clean + invalidate) the input so the DMA sees the ARM's bytes, and flush the OUTPUT buffer too, so no
      * dirty line of it can be evicted later on top of the DMA's data; invalidate it again after the DMA is done so the ARM reads DDR, not stale cache lines. */
     Xil_DCacheFlushRange((UINTPTR)in, in_bytes > in_len ? in_bytes : in_len);
+    SR_TS(1);
     Xil_DCacheFlushRange((UINTPTR)out, out_bytes);
+    SR_TS(2);
 
     /* arm the receiver first, then the sender; the core takes no data before CONTROL.START, so the order of these three steps is free except that START comes last */
     if (XAxiDma_SimpleTransfer(&d->dma, (UINTPTR)out, out_len, XAXIDMA_DEVICE_TO_DMA) != XST_SUCCESS) { sr_dump(d, "S2MM start refused"); recover(d); return SR_RC_DMA_START; }
@@ -182,6 +201,7 @@ int sr_run_frame_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, u
         reg_wr(d, SR_REG_CONTROL, SR_CTRL_START);
         if (XAxiDma_SimpleTransfer(&d->dma, (UINTPTR)in, in_len, XAXIDMA_DMA_TO_DEVICE) != XST_SUCCESS) { sr_dump(d, "MM2S start refused"); recover(d); return SR_RC_DMA_START; }
     }
+    SR_TS(3);
 
     /* wait: core DONE (or ERROR) and both DMA channels idle, one shared timeout of about 2 s */
     uint64_t t0, t;
@@ -193,6 +213,7 @@ int sr_run_frame_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, u
         t = sr_now_ticks();
         if (t - t0 > SR_TIMEOUT_TICKS) { sr_dump(d, "TIMEOUT"); recover(d); return SR_RC_TIMEOUT; }
     }
+    SR_TS(4);
 
     const uint32_t st = reg_rd(d, SR_REG_STATUS);
     if (st & SR_STATUS_ERROR) { d->last_error_code = reg_rd(d, SR_REG_ERROR_CODE); sr_dump(d, "core reported an error"); recover(d); return SR_RC_HW_ERROR; }
@@ -200,6 +221,8 @@ int sr_run_frame_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, u
 
     Xil_DCacheInvalidateRange((UINTPTR)out, out_bytes);
     d->last_cycles = reg_rd(d, SR_REG_CYCLES);
+    SR_TS(5);
+    SR_TS_END();
     rc = SR_RC_OK;
     return rc;
 }
