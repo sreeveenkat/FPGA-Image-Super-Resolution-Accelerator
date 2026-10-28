@@ -1,0 +1,5 @@
+name s5b_old_r2qbit_r0elf
+date 2026-10-28T11:17:27+05:30
+elf software/board/build/sr_app_t2_before_20261028.elf fdecdb826b564f8c72d4f9857d9e70ea
+bitstream /home/sreevenkat/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit b4fd445778bcb7e1f5cd2a552df14ea5
+xsdb_exit 0

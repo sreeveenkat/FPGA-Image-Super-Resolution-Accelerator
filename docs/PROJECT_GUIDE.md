@@ -215,7 +215,7 @@ Measured on the PC with `software/analysis/cpu_baseline.py`:
 |---|---|---|
 | PC CPU, FP32, 1 thread | 115–129 ms | varies between runs |
 | RTX 3050 GPU | 6.7 ms (7.9 ms with copies) | measured ~70 W → about **0.55 J per frame** |
-| ARM Cortex-A9 only (test T7) | **≈13,400 ms** | measured 27 Oct, byte-exact; timed from UART timestamps (±0.2 s) because the program's own timer was not enabled |
+| ARM Cortex-A9 only (test T7) | **13,433 ms** | measured 28 Oct with the ARM timer fixed, byte-exact, one frame, one run (UART host timestamps: 13.423 s). On 27 Oct the program's timer was not enabled and only a host-timed ≈13.4 s (±0.2 s) existed |
 | ZedBoard R0 | 1,311.7 ms | measured |
 | ZedBoard R0 at 125 MHz (r0_125 / r3q_125) | 1,061.9 / 1,061.7 ms | measured 28 Oct, 125 MHz |
 | ZedBoard pipeline at 100 MHz | 112.1 ms | measured 27 Oct |
@@ -355,7 +355,7 @@ Fix the gap from section 7: let **all four layers work at the same time** on dif
 
 **Measured speed-up: 11.7× over R0 with the PL at the same 100 MHz clock in both runs, and about 120× over the ARM alone (ARM-only time is host-timed, ±0.2 s).** So the speed-up over R0 comes from the architecture, not from the clock. At 125 MHz (28 Oct) the pipeline is 13.8× faster than R0 at 100 MHz and about 140× faster than the ARM alone; throughput about 28 GOPS end to end. DSP efficiency goes from about 16% to about 93%. Throughput: about **24 GOPS** end to end (R0: about 2 GOPS).
 
-**Where the 95.4 ms go at 125 MHz (28 Oct, from the logs):** the frame time is exactly the sum of two timed parts: ARM padding of the input before the DMA (5.79 ms) + the wait for DMA and compute (89.57 ms). The core needs 8,398,495 cycles = 67.19 ms, so 28.2 ms are overhead: 5.79 ms ARM padding + 22.4 ms inside the DMA wait that is not core cycles (by the driver code this window also contains the cache flush of the input and output buffers, the DMA set-up, polling latency and the cache invalidate of the output; the split is not measured). The 22.4 ms is the same at 100 MHz (106.4 − 84.0 ms) and grows linearly with the image size over the 119 test images (about 3.9 ns per output byte, intercept 0.04 ms, no fixed part), so it is ARM/DDR-side work, not PL-clock time. How it splits between flush, set-up and invalidate has not been measured yet.
+**Where the 95.4 ms go at 125 MHz (28 Oct, from the logs):** the frame time is exactly the sum of two timed parts: ARM padding of the input before the DMA (5.79 ms) + the wait for DMA and compute (89.57 ms). The core needs 8,398,495 cycles = 67.19 ms, so 28.2 ms are overhead: 5.79 ms ARM padding + 22.4 ms inside the DMA wait that is not core cycles (by the driver code this window also contains the cache flush of the input and output buffers, the DMA set-up, polling latency and the cache invalidate of the output; the split is not measured). The 22.4 ms is the same at 100 MHz (106.4 − 84.0 ms), so it is not PL-clock time. **A timing build (28 Oct, flagged driver, 125 MHz, 20-frame means) split it:** flush of the input buffer 2.86 ms, flush of the output buffer 9.57 ms, DMA set-up + START 0.0025 ms, the wait loop 67.188 ms (equal to the core cycles to the microsecond), and check + cache invalidate of the output 9.87 ms. So **the 22.4 ms is cache maintenance** (99.97 %); the DMA itself adds nothing beyond the core's cycles. The tiled designs show the same: 28.1 of 28.9 ms non-core time in the DMA window is cache maintenance. Nothing was changed in the cache handling; the output-buffer flush plus invalidate (19.4 ms) are about a fifth of the pipeline's frame time, which is where a future optimisation would look (it would need its own design check and the full byte-exact re-verification).
 
 **Note:** the layer pipeline idea itself is not new (the PKU group published it; `docs/paper/related_work_and_venues.md`. A Nagasaki University paper is also mentioned in this guide, but it is not in the repo notes: verify it). Cite them; do not claim the idea as yours. Your contribution is the measured gap analysis + fix on a cheap chip, with bit-exact verification.
 
@@ -404,7 +404,7 @@ All values below were **measured on the board on 27 Oct 2026, all at 100 MHz**. 
 - ARM only (T7): ≈13.4 s per frame, byte-exact. Every tiled design is about 10.2× faster than ARM-only; the pipeline is about 120× faster (about 140× at 125 MHz).
 - Negative controls: pipeline output differs from R0's expected file (77.8% of bytes), and R2q's differs too (80.1%), as required.
 - Logs and the summary: `results/board/2026-10-27/SUMMARY.md`.
-- Each driver program accepts only its own bitstream family. **VERSION-refusal controls (28 Oct): passed.** (a) pipeline bitstream + R3q program, (b) R2q bitstream + R0 program: both printed `SR: VERSION 0x…, expected 0x… (wrong SR_BASE … or wrong bitstream)` and `sr_init failed: 2`, and **refused before any transfer; no DDR writes**: four DDR regions (output image buffer, pad buffer, tile buffers) were filled with random patterns beforehand and read back identical afterwards; the DMA source, destination and length registers stayed 0; no tile or frame message was printed. Each matching pair then ran byte-exact. Caveat: the driver resets the DMA *before* it checks VERSION, so "no transfer" is shown, not "the DMA was never touched" (a planned driver change moves the check first). Other mismatched pairs were not run.
+- Each driver program accepts only its own bitstream family. **VERSION-refusal controls (28 Oct): passed.** (a) pipeline bitstream + R3q program, (b) R2q bitstream + R0 program: both printed `SR: VERSION 0x…, expected 0x… (wrong SR_BASE … or wrong bitstream)` and `sr_init failed: 2`, and **refused before any transfer; no DDR writes**: four DDR regions (output image buffer, pad buffer, tile buffers) were filled with random patterns beforehand and read back identical afterwards; the DMA source, destination and length registers stayed 0; no tile or frame message was printed. Each matching pair then ran byte-exact. Caveat for that first run: the driver reset the DMA *before* it checked VERSION, so only "no transfer, no DDR write" was shown. **Fixed and re-tested the same day (driver change, 28 Oct):** the check now comes first. A marker was written into the DMA address registers (both channels halted beforehand, only those two registers written); the old program cleared it (the DMA reset ran), the new program left it intact, on both pairs. A mismatched program therefore no longer touches the DMA. Other mismatched pairs were not run.
 
 - Expected values for everything are in `docs/paper/board_expected.md`.
 
@@ -450,9 +450,9 @@ VERSION, checksum (pass/fail), CYCLES, **PL compute time and end-to-end frame ti
 - **No meter available, so power was not measured.**
 
 ### 15.6 Second session (28 Oct) and what is left
-Done on 28 Oct: (1) VERSION-refusal controls (passed, section 14); (2) 125 MHz runs for r0_125, r3q_125 and the pipeline with each design's own init script, clock read back, die temperature 47.9–49.2 °C, all byte-exact (section 11). Still open:
-3. Split the pipeline's ~22.4 ms DMA-wait overhead into flush / DMA set-up / invalidate (needs a timing build, proposed, not yet approved).
-4. Re-run T7 with its timer working (proposed, not yet approved).
+Done on 28 Oct: (1) VERSION-refusal controls (passed, section 14); (2) 125 MHz runs for r0_125, r3q_125 and the pipeline with each design's own init script, clock read back, die temperature 47.9–49.2 °C, all byte-exact (section 11). Also done on 28 Oct after owner approval: a driver change (VERSION check before the DMA is touched, T7 timer, optional timing split); all six designs were re-verified with the new production ELFs (byte-exact, T3 within ±2 ms of the old means; the tiled designs read 0.3–0.75 ms slower, all in the ARM tile copy; an A/B on R0 gave +0.35 / +0.51 ms there. Label: **unresolved, ≤0.5 ms (<0.04 % of the frame)**; the pre-registered rule was not met and the cause was not isolated). Still open:
+3. ~~Split the pipeline's ~22.4 ms overhead~~ **done 28 Oct**: it is cache maintenance (section 12).
+4. ~~Re-run T7 with its timer working~~ **done 28 Oct**: 13.433 s per frame, byte-exact.
 5. Power, once you have a multimeter.
 
 ---
@@ -568,7 +568,7 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 - [x] Paper draft updated with measured numbers (6 pages incl. references; related work still TODO)
 
 ### Left
-- [ ] Next board session: split the ~22.4 ms overhead, T7 with its timer (both need a driver build, not yet approved), then power
+- [ ] Power measurement (needs a meter); optionally look at the cache handling (19.4 ms of the pipeline's frame time), which would be a new driver change
 - [ ] **Power measurement** (needs a multimeter)
 - [ ] Merge the winning design (pipeline, or R3q) into `main` after board results
 - [ ] Update the public GitHub README (it is stale)

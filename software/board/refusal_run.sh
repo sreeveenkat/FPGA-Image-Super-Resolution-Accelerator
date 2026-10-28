@@ -23,7 +23,7 @@ grep -q "^# capture started" "$DIR/$NAME.log" || { echo "UART capture did not st
 SR_BIT=$BIT timeout --foreground -k 5 400 xsdb software/board/refusal_test.tcl "$ELF" data/board/div2k_img0193_lr_960x540.raw "$PAT" "$OUT" < /dev/null > "$DIR/${NAME}_xsdb.log" 2>&1
 RC=$?; sleep 2; kill $CPID 2>/dev/null; wait $CPID 2>/dev/null
 echo "xsdb_exit $RC" >> "$DIR/${NAME}_meta.txt"
-echo "== xsdb exit $RC"; grep -E "^(REG|MARKER|READY|PATTERNS|ERROR)" "$DIR/${NAME}_xsdb.log"
+echo "== xsdb exit $RC"; grep -E "^(GUARD|DMAMARK|REG|MARKER|READY|PATTERNS|ERROR)" "$DIR/${NAME}_xsdb.log"
 echo "== DDR compare (cmp; no output = identical)"
 for r in out pad tin tout; do
   cmp "$PAT/pat_$r.bin" "$OUT/pre_$r.bin"  && echo "pre  $r: identical to the pattern ($(stat -c%s "$OUT/pre_$r.bin") bytes)"

@@ -1,0 +1,60 @@
+== s5a_old_pipebit_r3qelf
+GUARD DMA_MM2S_DMACR 0x40400000 0x00010002 RS=0
+GUARD DMA_S2MM_DMACR 0x40400030 0x00010002 RS=0
+GUARD DMA_MM2S_DMASR 0x40400004 0x00000001 HALTED=1
+GUARD DMA_S2MM_DMASR 0x40400034 0x00000001 HALTED=1
+DMAMARK set: MM2S_SA=0xa5a5a5a0 S2MM_DA=0x5a5a5a50 (read back)
+READY 1 after 1 s
+MARKER result=2 bytes=0 fnv=0x00000000 tiles=0 test=0
+DMAMARK_RESULT MM2S_SA=0x00000000 S2MM_DA=0x00000000 -> cleared
+post out: identical to the pattern
+post pad: identical to the pattern
+post tin: identical to the pattern
+post tout: identical to the pattern
+ SR: VERSION 0x53525301, expected 0x53523201 (wrong SR_BASE 0x40000000 or wrong bitstream)
+ sr_init failed: 2
+== s5a_new_pipebit_r3qelf
+GUARD DMA_MM2S_DMACR 0x40400000 0x00010002 RS=0
+GUARD DMA_S2MM_DMACR 0x40400030 0x00010002 RS=0
+GUARD DMA_MM2S_DMASR 0x40400004 0x00000001 HALTED=1
+GUARD DMA_S2MM_DMASR 0x40400034 0x00000001 HALTED=1
+DMAMARK set: MM2S_SA=0xa5a5a5a0 S2MM_DA=0x5a5a5a50 (read back)
+READY 1 after 0 s
+MARKER result=2 bytes=0 fnv=0x00000000 tiles=0 test=0
+DMAMARK_RESULT MM2S_SA=0xa5a5a5a0 S2MM_DA=0x5a5a5a50 -> intact
+post out: identical to the pattern
+post pad: identical to the pattern
+post tin: identical to the pattern
+post tout: identical to the pattern
+ SR: VERSION 0x53525301, expected 0x53523201 (wrong SR_BASE 0x40000000 or wrong bitstream)
+ sr_init failed: 2
+== s5b_old_r2qbit_r0elf
+GUARD DMA_MM2S_DMACR 0x40400000 0x00010002 RS=0
+GUARD DMA_S2MM_DMACR 0x40400030 0x00010002 RS=0
+GUARD DMA_MM2S_DMASR 0x40400004 0x00000001 HALTED=1
+GUARD DMA_S2MM_DMASR 0x40400034 0x00000001 HALTED=1
+DMAMARK set: MM2S_SA=0xa5a5a5a0 S2MM_DA=0x5a5a5a50 (read back)
+READY 1 after 1 s
+MARKER result=2 bytes=0 fnv=0x00000000 tiles=0 test=0
+DMAMARK_RESULT MM2S_SA=0x00000000 S2MM_DA=0x00000000 -> cleared
+post out: identical to the pattern
+post pad: identical to the pattern
+post tin: identical to the pattern
+post tout: identical to the pattern
+ SR: VERSION 0x53522201, expected 0x53520602 (wrong SR_BASE 0x40000000 or wrong bitstream)
+ sr_init failed: 2
+== s5b_new_r2qbit_r0elf
+GUARD DMA_MM2S_DMACR 0x40400000 0x00010002 RS=0
+GUARD DMA_S2MM_DMACR 0x40400030 0x00010002 RS=0
+GUARD DMA_MM2S_DMASR 0x40400004 0x00000001 HALTED=1
+GUARD DMA_S2MM_DMASR 0x40400034 0x00000001 HALTED=1
+DMAMARK set: MM2S_SA=0xa5a5a5a0 S2MM_DA=0x5a5a5a50 (read back)
+READY 1 after 1 s
+MARKER result=2 bytes=0 fnv=0x00000000 tiles=0 test=0
+DMAMARK_RESULT MM2S_SA=0xa5a5a5a0 S2MM_DA=0x5a5a5a50 -> intact
+post out: identical to the pattern
+post pad: identical to the pattern
+post tin: identical to the pattern
+post tout: identical to the pattern
+ SR: VERSION 0x53522201, expected 0x53520602 (wrong SR_BASE 0x40000000 or wrong bitstream)
+ sr_init failed: 2

@@ -1,0 +1,12 @@
+11:29:59 before old1: XADC_TEMP_C 50.9 VCCINT 0.995 VCCAUX 1.803
+old1: frame mean 1312.151 ms (min 1311.433, max 1313.066), ARM tile copy 26.564 ms, DMA+compute 1279.668 ms, pad 5.888 ms, byte-exact=True
+11:30:55 before new1: XADC_TEMP_C 51.7 VCCINT 0.995 VCCAUX 1.802
+new1: frame mean 1312.322 ms (min 1311.861, max 1313.518), ARM tile copy 26.909 ms, DMA+compute 1279.494 ms, pad 5.887 ms, byte-exact=True
+11:31:52 before old2: XADC_TEMP_C 51.9 VCCINT 0.994 VCCAUX 1.802
+old2: frame mean 1311.702 ms (min 1311.424, max 1312.997), ARM tile copy 26.400 ms, DMA+compute 1279.382 ms, pad 5.888 ms, byte-exact=True
+11:32:48 before new2: XADC_TEMP_C 52.2 VCCINT 0.994 VCCAUX 1.803
+new2: frame mean 1312.505 ms (min 1311.872, max 1314.222), ARM tile copy 26.910 ms, DMA+compute 1279.589 ms, pad 5.974 ms, byte-exact=True
+11:33:44 after A/B: XADC_TEMP_C 52.0 VCCINT 0.994 VCCAUX 1.803
+tile-copy gap (new - old): pair 1 +0.345 ms, pair 2 +0.510 ms; run-to-run difference inside the same ELF: old 0.164, new 0.001 ms
+frame-mean gap (new - old): pair 1 +0.171 ms, pair 2 +0.803 ms
+VERDICT: not persistent -> drift

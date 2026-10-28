@@ -1,0 +1,8 @@
+name s5b_healthy_r2q_t2
+date 2026-10-28T11:19:22+05:30
+cwd /home/sreevenkat/Desktop/venkat/sandbox_R2q
+git 380b4fb r2q
+elf software/board/build/sr_app_t2.elf d8ea7dda5bcef522d656edfbc6f2e163
+bitstream /home/sreevenkat/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit b4fd445778bcb7e1f5cd2a552df14ea5
+command xsdb software/board/run_board.tcl software/board/build/sr_app_t2.elf /home/sreevenkat/Desktop/venkat/sem_project_all/data/board/div2k_img0193_lr_960x540.raw data/board/2026-10-28/s5b_healthy_r2q_t2.raw data/board/2026-10-28/s5b_healthy_r2q_t2_stats.txt
+xsdb_exit 0

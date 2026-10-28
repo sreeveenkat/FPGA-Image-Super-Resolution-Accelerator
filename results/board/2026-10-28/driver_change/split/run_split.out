@@ -1,0 +1,49 @@
+11:20:56 before split r0_125: XADC_TEMP_C 49.0 VCCINT 0.995 VCCAUX 1.803
+[r0_125] T2 split: rc=0 byte-exact=True fnv=0xcf947f22 fclk0=125.000 MHz; split lines 1
+[r0_125] T3 split (20 frames): mean 1061.71 ms (production 1062.21), min 1061.32, max 1062.96, max-min 1.64, byte-exact=True
+[r0_125] split per frame, mean of 20 frames, 135 DMA call(s) per frame, us:
+      busy+regs                          32.8
+      flush in                         6171.2
+      flush out                       11301.5
+      DMA set-up+START                  366.6
+      wait                          1000739.6
+      check+invalidate+CYCLES         10628.8
+      sum                           1029242.9
+      (T3 'DMA/compute wait' window, mean: 1029314.2 us; split sum minus window: -71.3 us)
+      core cycles per frame = 1000323.0 us at 125 MHz (CYCLES 926225 x 135); wait minus core cycles = 416.6 us
+11:22:08 after split r0_125: XADC_TEMP_C 50.2 VCCINT 0.993 VCCAUX 1.803
+== r0_125 OK
+11:22:17 before split r3q_125: XADC_TEMP_C 49.8 VCCINT 0.993 VCCAUX 1.800
+[r3q_125] T2 split: rc=0 byte-exact=True fnv=0x45dd4e2d fclk0=125.000 MHz; split lines 1
+[r3q_125] T3 split (20 frames): mean 1061.96 ms (production 1062.35), min 1061.32, max 1063.05, max-min 1.74, byte-exact=True
+[r3q_125] split per frame, mean of 20 frames, 135 DMA call(s) per frame, us:
+      busy+regs                          32.8
+      flush in                         6170.9
+      flush out                       11386.1
+      DMA set-up+START                  366.8
+      wait                          1000819.1
+      check+invalidate+CYCLES         10628.9
+      sum                           1029406.8
+      (T3 'DMA/compute wait' window, mean: 1029478.2 us; split sum minus window: -71.3 us)
+      core cycles per frame = 1000323.0 us at 125 MHz (CYCLES 926225 x 135); wait minus core cycles = 496.1 us
+11:23:29 after split r3q_125: XADC_TEMP_C 50.3 VCCINT 0.993 VCCAUX 1.802
+== r3q_125 OK
+11:23:38 before split pipe: XADC_TEMP_C 49.8 VCCINT 0.992 VCCAUX 1.802
+[pipe] T2 split: rc=0 byte-exact=True fnv=0x45dd4e2d fclk0=125.000 MHz; split lines 1
+[pipe] T3 split (20 frames): mean 95.20 ms (production 95.36), min 95.18, max 95.21, max-min 0.03, byte-exact=True
+[pipe] split per frame, mean of 20 frames, 1 DMA call(s) per frame, us:
+      busy+regs                           0.0
+      flush in                         2855.6
+      flush out                        9570.2
+      DMA set-up+START                    2.5
+      wait                            67188.0
+      check+invalidate+CYCLES          9870.3
+      sum                             89489.3
+      (T3 'DMA/compute wait' window, mean: 89490.6 us; split sum minus window: -1.3 us)
+      core cycles per frame = 67188.0 us at 125 MHz (CYCLES 8398494 x 1); wait minus core cycles = 0.0 us
+11:24:29 after split pipe: XADC_TEMP_C 49.1 VCCINT 0.995 VCCAUX 1.802
+== pipe OK
+[R0 T7] rc=0 byte-exact=True fnv=0xcf947f22 (expected 0xcf947f22)
+[R0 T7] ARM timer: total 13433337 us = pad 5971 + ARM tile copy 21234 + ARM compute 13406098; host timestamps (T7 start line -> frame line): 13.423 s
+== t7 OK
+ALL OK

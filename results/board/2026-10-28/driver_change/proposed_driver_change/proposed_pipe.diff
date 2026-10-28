@@ -1,0 +1,181 @@
+diff -ru orig/build_elf.sh new/build_elf.sh
+--- orig/build_elf.sh	2026-10-26 12:14:15.909732401 +0530
++++ new/build_elf.sh	2026-10-28 10:57:05.808313647 +0530
+@@ -1,6 +1,7 @@
+ #!/usr/bin/env bash
+ # Build the board program for one SR_TEST variant into software/board/build/sr_app_t<N>.elf (git-ignored), against the m6_platform BSP.  Does not touch any Vitis project.
+ #   software/board/build_elf.sh <N> [extra gcc flags, e.g. -DSR_T3_FRAMES=3]
++# SR_ELF_SUFFIX=_split (with -DSR_TIMING_SPLIT) names the output sr_app_t<N>_split.elf so the production ELF is not overwritten.
+ # Env overrides (for a fresh checkout / new platform): SR_BSP=<platform>/export/<name>/sw/standalone_ps7_cortexa9_0 (made by create_platform.py),
+ # SR_LSCRIPT=<linker script> (sr_app/lscript.ld in this repo is a copy of the Vitis sr_app one). Output always goes to software/board/build of THIS checkout.
+ set -eu
+@@ -14,5 +15,5 @@
+ CF="-O2 -DSDT -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -g -Wall -Wextra -Werror=implicit-function-declaration -fno-tree-loop-distribute-patterns -specs=$P/Xilinx.spec -I$P/include -Isoftware/board -Isoftware/board/sr_app -DSR_TEST=$N $*"
+ "$BIN/arm-none-eabi-gcc" $CF -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -specs="$P/Xilinx.spec" -Wl,-T -Wl,"$LS" -L"$P/lib" \
+     software/board/sr_app/main.c software/board/sr_app/sr_driver.c software/board/sr_app/sr_tiling.c $EXTRA \
+-    -Wl,--start-group,-lxilstandalone,-lxiltimer,-lxil,-lgcc,-lc,--end-group -o software/board/build/sr_app_t$N.elf 2> software/board/build/link_t$N.log || { grep -E "error|undefined" software/board/build/link_t$N.log; exit 1; }
+-ls -l software/board/build/sr_app_t$N.elf
++    -Wl,--start-group,-lxilstandalone,-lxiltimer,-lxil,-lgcc,-lc,--end-group -o software/board/build/sr_app_t$N${SR_ELF_SUFFIX:-}.elf 2> software/board/build/link_t$N${SR_ELF_SUFFIX:-}.log || { grep -E "error|undefined" software/board/build/link_t$N${SR_ELF_SUFFIX:-}.log; exit 1; }
++ls -l software/board/build/sr_app_t$N${SR_ELF_SUFFIX:-}.elf
+diff -ru orig/sr_app/main.c new/sr_app/main.c
+--- orig/sr_app/main.c	2026-10-27 00:20:17.234275752 +0530
++++ new/sr_app/main.c	2026-10-28 10:57:05.808246127 +0530
+@@ -53,6 +53,18 @@
+ 
+ static sr_dev_t dev;
+ 
++#ifdef SR_TIMING_SPLIT
++/* prints and clears the driver's summed split (sr_driver.h); only in -DSR_TIMING_SPLIT builds */
++static void print_split(const char *tag)
++{
++    xil_printf("%s split over %u call(s), us: busy+regs %u, flush in %u, flush out %u, DMA set-up+START %u, wait %u, check+invalidate+CYCLES %u, sum %u\r\n", tag, sr_split_calls,
++               ticks_to_us(sr_split_sum[0]), ticks_to_us(sr_split_sum[1]), ticks_to_us(sr_split_sum[2]), ticks_to_us(sr_split_sum[3]), ticks_to_us(sr_split_sum[4]),
++               ticks_to_us(sr_split_sum[5]), ticks_to_us(sr_split_sum[6]));
++    for (int k = 0; k < SR_SPLIT_N; k++) sr_split_sum[k] = 0;
++    sr_split_calls = 0;
++}
++#endif
++
+ /* ------------------------------------------------------------------ memory map sanity (run time part)
+  * The program is linked at 0x00100000 (lscript.ld): code, rodata, data, bss, heap and finally the stack.  _stack is the top of the stack = the highest address the
+  * program uses; it must stay below the first data buffer (SR_IN_ADDR).  (Measured when linked against zed_platform: program ends at 0x00120870.) */
+@@ -238,6 +250,9 @@
+     rc = process_frame(&g, NULL, NULL, &tp, &tm, &tt);
+     if (rc) { xil_printf("T2 FAIL: frame returned %d\r\n", rc); write_marker((uint32_t)rc, 0, 0, 0, 2); return rc; }
+     xil_printf("T2: frame done in %u ms (pad %u us, DMA + compute %u us), CYCLES %u\r\n", ticks_to_us(tt) / 1000u, ticks_to_us(tp), ticks_to_us(tm.t_run), dev.last_cycles);
++#ifdef SR_TIMING_SPLIT
++    print_split("T2");
++#endif
+     g_stats[0] = ticks_to_us(tt); g_stats[1] = ticks_to_us(tp); g_stats[2] = 0u; g_stats[3] = ticks_to_us(tm.t_run);
+     g_stats[4] = dev.last_cycles; g_stats[5] = dev.last_cycles; g_stats[6] = dev.last_cycles;   /* frame CYCLES (min = max = mean: one frame) */
+     return finish_output(&g, tm.tiles, 2);
+@@ -263,6 +278,9 @@
+         const uint32_t us_tot = ticks_to_us(tt), us_pad = ticks_to_us(tp), us_copy = ticks_to_us(tm.t_cut + tm.t_place), us_run = ticks_to_us(tm.t_run);
+         xil_printf("  frame %d: total %u us = pad %u + ARM tile copy %u + DMA/compute wait %u (+ loop overhead %d)\r\n", f, us_tot, us_pad, us_copy, us_run,
+                    (int)us_tot - (int)(us_pad + us_copy + us_run));
++#ifdef SR_TIMING_SPLIT
++        print_split("  frame");
++#endif
+         tot_sum += us_tot; pad_sum += us_pad; copy_sum += us_copy; run_sum += us_run;
+         if (us_tot < tot_min) tot_min = us_tot;
+         if (us_tot > tot_max) tot_max = us_tot;
+@@ -377,6 +395,7 @@
+ static int test7(void)
+ {
+     sr_geom_t g;
++    sr_timer_init();   /* T7 never calls sr_init(), which is where the A9 global timer is enabled: without this every T7 time read 0 (2026-10-27) */
+     xil_printf("T7: ARM-only baseline (no FPGA), %d frame(s) of the image at 0x%08x\r\n", SR_T7_FRAMES, (unsigned)SR_IN_ADDR);
+     int rc = read_input_header(&g);
+     if (rc) { write_marker((uint32_t)rc, 0, 0, 0, 11); return rc; }
+diff -ru orig/sr_app/sr_driver.c new/sr_app/sr_driver.c
+--- orig/sr_app/sr_driver.c	2026-10-26 13:10:16.596822307 +0530
++++ new/sr_app/sr_driver.c	2026-10-28 10:57:05.808108631 +0530
+@@ -38,6 +38,19 @@
+ 
+ uint64_t sr_ticks_per_sec(void) { return SR_TICKS_PER_SEC; }
+ 
++/* Timing split of one transfer, compiled in only with -DSR_TIMING_SPLIT (see sr_driver.h); empty macros otherwise. */
++#ifdef SR_TIMING_SPLIT
++uint64_t sr_split[SR_SPLIT_N], sr_split_sum[SR_SPLIT_N];
++uint32_t sr_split_calls;
++#define SR_TS_BEGIN()  uint64_t sr_ts_prev = sr_now_ticks(); const uint64_t sr_ts_start = sr_ts_prev
++#define SR_TS(i)       do { const uint64_t sr_ts_now = sr_now_ticks(); sr_split[i] = sr_ts_now - sr_ts_prev; sr_ts_prev = sr_ts_now; } while (0)
++#define SR_TS_END()    do { sr_split[6] = sr_ts_prev - sr_ts_start; for (int sr_k = 0; sr_k < SR_SPLIT_N; sr_k++) sr_split_sum[sr_k] += sr_split[sr_k]; sr_split_calls++; } while (0)
++#else
++#define SR_TS_BEGIN()
++#define SR_TS(i)
++#define SR_TS_END()
++#endif
++
+ static inline uint32_t reg_rd(const sr_dev_t *d, uint32_t off) { return Xil_In32(d->base + off); }
+ static inline void reg_wr(const sr_dev_t *d, uint32_t off, uint32_t v) { Xil_Out32(d->base + off, v); }
+ uint32_t sr_reg_read(const sr_dev_t *d, uint32_t off) { return reg_rd(d, off); }
+@@ -127,17 +140,19 @@
+     d->last_cycles = 0;
+     d->last_error_code = 0;
+     d->version = 0;
+-    XAxiDma_Config *cfg = XAxiDma_LookupConfig(SR_DMA_BASE);       /* SDT flow: takes the BASE ADDRESS, not a device id */
+-    if (cfg == NULL) { xil_printf("SR: DMA config for 0x%08x not found\r\n", (unsigned)SR_DMA_BASE); return SR_RC_DMA_INIT; }
+-    if (XAxiDma_CfgInitialize(&d->dma, cfg) != XST_SUCCESS) { xil_printf("SR: DMA init failed\r\n"); return SR_RC_DMA_INIT; }
+-    if (XAxiDma_HasSg(&d->dma)) { xil_printf("SR: DMA is in scatter-gather mode, simple mode expected\r\n"); return SR_RC_DMA_INIT; }
+-
++    /* VERSION first: a program built for another bitstream must stop here, before anything is written to the DMA (XAxiDma_CfgInitialize resets it) or to the core. */
+     const uint32_t ver = reg_rd(d, SR_REG_VERSION);
+     d->version = ver;
+     if ((ver & SR_VERSION_MASK) != (SR_VERSION & SR_VERSION_MASK)) {
+         xil_printf("SR: VERSION 0x%08x, expected 0x%08x (wrong SR_BASE 0x%08x or wrong bitstream)\r\n", ver, (unsigned)SR_VERSION, (unsigned)SR_BASE);
+         return SR_RC_VERSION;
+     }
++
++    XAxiDma_Config *cfg = XAxiDma_LookupConfig(SR_DMA_BASE);       /* SDT flow: takes the BASE ADDRESS, not a device id */
++    if (cfg == NULL) { xil_printf("SR: DMA config for 0x%08x not found\r\n", (unsigned)SR_DMA_BASE); return SR_RC_DMA_INIT; }
++    if (XAxiDma_CfgInitialize(&d->dma, cfg) != XST_SUCCESS) { xil_printf("SR: DMA init failed\r\n"); return SR_RC_DMA_INIT; }
++    if (XAxiDma_HasSg(&d->dma)) { xil_printf("SR: DMA is in scatter-gather mode, simple mode expected\r\n"); return SR_RC_DMA_INIT; }
++
+     const uint32_t mw = reg_rd(d, SR_REG_MAX_W);
+     if (mw != SR_MAX_W) { xil_printf("SR: MAX_W %u, expected %u\r\n", mw, (unsigned)SR_MAX_W); return SR_RC_TILE_SIZE; }
+     return sr_reset_all(d);                                           /* (XAxiDma_CfgInitialize resets the DMA too, but with a loop-count timeout and before the core) */
+@@ -165,13 +180,17 @@
+     int rc;
+     const uint32_t in_bytes = 4u * SR_FRAME_IN_BEATS(w, h), out_bytes = SR_FRAME_OUT_BYTES(w, h);
+     if (reg_rd(d, SR_REG_STATUS) & SR_STATUS_BUSY) { sr_dump(d, "core busy before start"); recover(d); return SR_RC_BUSY; }
++    SR_TS_BEGIN();
+     reg_wr(d, SR_REG_FRAME_W, w);
+     reg_wr(d, SR_REG_FRAME_H, h);
++    SR_TS(0);
+ 
+     /* Caches: the DMA reads/writes DDR directly.  FLUSH (clean + invalidate) the input so the DMA sees the ARM's bytes, and flush the OUTPUT buffer too, so no
+      * dirty line of it can be evicted later on top of the DMA's data; invalidate it again after the DMA is done so the ARM reads DDR, not stale cache lines. */
+     Xil_DCacheFlushRange((UINTPTR)in, in_bytes > in_len ? in_bytes : in_len);
++    SR_TS(1);
+     Xil_DCacheFlushRange((UINTPTR)out, out_bytes);
++    SR_TS(2);
+ 
+     /* arm the receiver first, then the sender; the core takes no data before CONTROL.START, so the order of these three steps is free except that START comes last */
+     if (XAxiDma_SimpleTransfer(&d->dma, (UINTPTR)out, out_len, XAXIDMA_DEVICE_TO_DMA) != XST_SUCCESS) { sr_dump(d, "S2MM start refused"); recover(d); return SR_RC_DMA_START; }
+@@ -182,6 +201,7 @@
+         reg_wr(d, SR_REG_CONTROL, SR_CTRL_START);
+         if (XAxiDma_SimpleTransfer(&d->dma, (UINTPTR)in, in_len, XAXIDMA_DMA_TO_DEVICE) != XST_SUCCESS) { sr_dump(d, "MM2S start refused"); recover(d); return SR_RC_DMA_START; }
+     }
++    SR_TS(3);
+ 
+     /* wait: core DONE (or ERROR) and both DMA channels idle, one shared timeout of about 2 s */
+     uint64_t t0, t;
+@@ -193,6 +213,7 @@
+         t = sr_now_ticks();
+         if (t - t0 > SR_TIMEOUT_TICKS) { sr_dump(d, "TIMEOUT"); recover(d); return SR_RC_TIMEOUT; }
+     }
++    SR_TS(4);
+ 
+     const uint32_t st = reg_rd(d, SR_REG_STATUS);
+     if (st & SR_STATUS_ERROR) { d->last_error_code = reg_rd(d, SR_REG_ERROR_CODE); sr_dump(d, "core reported an error"); recover(d); return SR_RC_HW_ERROR; }
+@@ -200,6 +221,8 @@
+ 
+     Xil_DCacheInvalidateRange((UINTPTR)out, out_bytes);
+     d->last_cycles = reg_rd(d, SR_REG_CYCLES);
++    SR_TS(5);
++    SR_TS_END();
+     rc = SR_RC_OK;
+     return rc;
+ }
+diff -ru orig/sr_app/sr_driver.h new/sr_app/sr_driver.h
+--- orig/sr_app/sr_driver.h	2026-10-26 13:10:16.597005910 +0530
++++ new/sr_app/sr_driver.h	2026-10-28 10:57:05.807976620 +0530
+@@ -14,6 +14,17 @@
+ uint64_t sr_now_ticks(void);
+ uint64_t sr_ticks_per_sec(void);
+ 
++/* Optional split of the time inside one sr_run_tile / sr_run_frame call.  Built ONLY with -DSR_TIMING_SPLIT (software/board/build_elf.sh <N> -DSR_TIMING_SPLIT with
++ * SR_ELF_SUFFIX=_split); without the flag every SR_TS* macro in sr_driver.c is empty, so the production code is the same source as before.
++ * sr_split[]: global-timer ticks of the LAST call: 0 busy check + register writes, 1 flush input, 2 flush output, 3 arm S2MM + MM2S + START, 4 wait loop (core compute
++ * + whatever the DMA and polling add), 5 status/error checks + invalidate output + CYCLES read, 6 sum of 0..5.  sr_split_sum[] / sr_split_calls: the same, summed over calls. */
++#ifdef SR_TIMING_SPLIT
++#define SR_SPLIT_N 7
++extern uint64_t sr_split[SR_SPLIT_N];
++extern uint64_t sr_split_sum[SR_SPLIT_N];
++extern uint32_t sr_split_calls;
++#endif
++
+ /* Base address of sr_accel_top/s_axi: from the Vivado Address Editor of the block design (project m6_sr), 4K range.  Override with -DSR_BASE=... if the design changes.
+  * A wrong value is dangerous: reading an address nobody decodes can hang the AXI bus or raise a data abort on the Zynq; sr_init() reads VERSION first for that reason. */
+ #ifndef SR_BASE

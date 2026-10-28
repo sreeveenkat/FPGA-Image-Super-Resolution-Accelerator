@@ -1,0 +1,8 @@
+name s5a_healthy_pipe_t2
+date 2026-10-28T11:19:43+05:30
+cwd /home/sreevenkat/Desktop/venkat/sandbox_pipe
+git 1775166 pipe
+elf software/board/build/sr_app_t2.elf 0f27910a0eb2f0d8714adcf742419084
+bitstream /home/sreevenkat/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.bit 4e7a28951fd4c5b1939dcdc12b4f7777
+command xsdb software/board/run_board.tcl software/board/build/sr_app_t2.elf /home/sreevenkat/Desktop/venkat/sem_project_all/data/board/div2k_img0193_lr_960x540.raw data/board/2026-10-28/s5a_healthy_pipe_t2.raw data/board/2026-10-28/s5a_healthy_pipe_t2_stats.txt
+xsdb_exit 0

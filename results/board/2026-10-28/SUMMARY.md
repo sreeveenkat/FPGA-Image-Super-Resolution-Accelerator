@@ -50,3 +50,47 @@ Per set (mean ms): tiled Set5 68.67, Set14 128.05, BSD100 93.66 (all 100 images 
 * Pipeline at 125 MHz vs R0 at 100 MHz: 13.76x; vs the ARM alone (about 13.4 s, host-timed): about 140x. Throughput 1.33 G MAC x 2 / 95.36 ms = about 27.8 GOPS end to end.
 
 Not done this session (as agreed): step 3 (overhead timing), step 4 (T7 timer fix), power (no meter). New scripts of this session (committed with this summary): `software/board/{xadc_temp.tcl, run_board_clk.tcl, run_125.py, refusal_test.tcl, refusal_run.sh}`; `software/analysis/board_expected.py` and `docs/paper/board_expected.md` gained a ps7_init section.
+
+# Part 2 (same day): driver change, refusal re-test, timing split, T7 timer, A/B (`driver_change/`)
+
+Approved changes (patch: `driver_change/proposed_driver_change/`, applied to the five tiled trees and the pipeline tree, committed in main and in each sandbox branch on 2026-10-28): (1) VERSION check before `XAxiDma_CfgInitialize`; (2) `sr_timer_init()` at the start of T7; (3) `-DSR_TIMING_SPLIT` timing split, compiled out otherwise. With the flag off the compiled objects are identical to the old ones except `sr_init` (and `main` for SR_TEST=11); 0 warnings from our code.
+
+## New production ELFs on all six designs (`verify/`)
+T1, T2 byte-exact, T3 20 frames, all inside +-2 ms of the old-ELF means, max - min <= 3 ms; T5 PASS on R0 and the pipeline. Clock read back: 100.000 MHz (R0, R2q, R3q), 125.000 MHz (r0_125, r3q_125, pipe).
+| Design | VERSION | T2 | T3 mean new ELF (old ELF) ms |
+|---|---|---|---|
+| R0 | 0x53520602 | byte-exact | 1,312.45 (1,311.7) |
+| R2q | 0x53522201 | byte-exact | 1,312.29 (1,312.0) |
+| R3q | 0x53523201 | byte-exact | 1,312.35 (1,311.6) |
+| r0_125 | 0x53524201 | byte-exact | 1,062.21 (1,061.85) |
+| r3q_125 | 0x53524301 | byte-exact | 1,062.35 (1,061.68) |
+| pipe | 0x53525301 | byte-exact | 95.36 (95.36) |
+The paper reports the new-ELF numbers (the production ELF).
+
+## Refusal re-test with a DMA marker (`refusal_retest/`)
+Guard: both channels halted (DMASR.Halted = 1, DMACR.RS = 0, read only) before the write; only `MM2S_SA` and `S2MM_DA` were written (0xA5A5A5A0 / 0x5A5A5A50), read back equal. Old ELF (control) -> marker cleared to 0 (the DMA reset ran): the test discriminates. New ELF -> marker intact: **the DMA is not touched on a VERSION mismatch.** Both pairs (pipe bitstream + R3q ELF; R2q bitstream + R0 ELF), same result; DDR patterns unchanged; UART shows only the VERSION message and `sr_init failed: 2`. Healthy pair afterwards byte-exact (R2q 0x2afbc9ae, pipe 0x45dd4e2d).
+
+## Where the DMA-wait overhead goes (`split/`, 125 MHz, flagged ELFs, 20-frame means, us per frame)
+| Part | pipe (1 transfer) | r0_125 (135 tiles) | r3q_125 (135 tiles) |
+|---|---|---|---|
+| busy check + registers | 0.0 | 32.8 | 32.8 |
+| flush input | 2,855.6 | 6,171.2 | 6,170.9 |
+| flush output | 9,570.2 | 11,301.5 | 11,386.1 |
+| DMA set-up + START | 2.5 | 366.6 | 366.8 |
+| wait loop | 67,188.0 | 1,000,739.6 | 1,000,819.1 |
+| check + invalidate output + CYCLES | 9,870.3 | 10,628.8 | 10,628.9 |
+| sum (= the DMA/compute window, -1.3 / -71 us) | 89,489.3 | 1,029,242.9 | 1,029,406.8 |
+| core cycles / clock | 67,188.0 (wait - core = 0.0) | 1,000,323.0 (wait - core = +416.6) | same (+496.1) |
+The pipeline's wait equals its core cycles to the microsecond, so **cache maintenance is the whole ~22.3 ms of overhead** (flush in 2.86 + flush out 9.57 + invalidate 9.87 ms; DMA set-up 2.5 us). For the tiled designs the non-core part of the window is 28.9 ms, of which 28.1 ms is cache maintenance. Per byte: flush in 1.80 ns, flush out 1.54 ns, invalidate 1.59 ns (pipeline). Flagged T3 means 1,061.71 / 1,061.96 / 95.20 ms, byte-exact (within +-2 ms of the production ELF). Not done: any change to the cache handling (it would be a driver change needing approval and the full byte-exact re-verification). Observation only: the output-buffer flush plus invalidate are 19.4 ms of the pipeline's 95.2 ms.
+
+## T7 with the timer fixed (`split/R0_t7/`)
+R0 tree, 100 MHz, byte-exact (0xcf947f22). ARM timer: total **13,433,337 us** = pad 5,971 + ARM tile copy 21,234 + ARM compute 13,406,098; host timestamps of the UART lines 13.423 s (agree within 10 ms; the 27 Oct host-timed 13.4 s +-0.2 s is confirmed). One frame, one run. Speed-ups with this number: pipeline at 125 MHz 140.9x, r0_125 12.65x, R0 at 100 MHz 10.24x.
+
+## A/B of the ARM tile-copy shift, R0 at 100 MHz, 20-frame T3 (`ab/`)
+| Run | frame mean ms | ARM tile copy ms | DMA+compute ms | pad ms | die C before |
+|---|---|---|---|---|---|
+| old 1 | 1,312.151 | 26.564 | 1,279.668 | 5.888 | 50.9 |
+| new 1 | 1,312.322 | 26.909 | 1,279.494 | 5.887 | 51.7 |
+| old 2 | 1,311.702 | 26.400 | 1,279.382 | 5.888 | 51.9 |
+| new 2 | 1,312.505 | 26.910 | 1,279.589 | 5.974 | 52.2 |
+Tile-copy gap (new - old): +0.345 ms (pair 1), +0.510 ms (pair 2); every new run is above every old run (26.909, 26.910 vs 26.564, 26.400). Frame-mean gap +0.17 / +0.80 ms. The script's pre-registered rule (gap > 3 x the old-ELF run-to-run difference of 0.164 ms) was NOT met and printed "drift"; that rule was the right test. Temperature rose 50.9 -> 52.2 C over the four runs but the hottest old run (old 2) had the lowest copy time. **Label (owner, 2026-10-28): unresolved, <= 0.5 ms (< 0.04 % of the frame).** The tile-copy code is unchanged at object level; the cause (code placement or something else) was not isolated.
