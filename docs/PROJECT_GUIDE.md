@@ -215,11 +215,13 @@ Measured on the PC with `software/analysis/cpu_baseline.py`:
 |---|---|---|
 | PC CPU, FP32, 1 thread | 115–129 ms | varies between runs |
 | RTX 3050 GPU | 6.7 ms (7.9 ms with copies) | measured ~70 W → about **0.55 J per frame** |
-| ARM Cortex-A9 only (test T7) | **13,433 ms** | measured 28 Oct with the ARM timer fixed, byte-exact, one frame, one run (UART host timestamps: 13.423 s). On 27 Oct the program's timer was not enabled and only a host-timed ≈13.4 s (±0.2 s) existed |
+| ARM Cortex-A9 only (test T7) | **13,437 ms** (mean of 3 runs: 13,433 / 13,435 / 13,443 ms) | measured 28 Oct with the ARM timer fixed, byte-exact each time; baseline defined below. On 27 Oct the program's timer was not enabled and only a host-timed ≈13.4 s (±0.2 s) existed |
 | ZedBoard R0 | 1,311.7 ms | measured |
 | ZedBoard R0 at 125 MHz (r0_125 / r3q_125) | 1,061.9 / 1,061.7 ms | measured 28 Oct, 125 MHz |
 | ZedBoard pipeline at 100 MHz | 112.1 ms | measured 27 Oct |
 | **ZedBoard pipeline at 125 MHz** | **95.4 ms (10.5 fps)** | measured 28 Oct, PL clock read back as 125.000 MHz |
+
+**What the ARM-only baseline is (T7, exact):** `sr_swmodel.c`, the same INT8 integer model in plain C (int8 weights, int32 accumulators, int64 requantisation), run tile by tile through the same tile loop as the FPGA path with the accelerator not touched. Bare metal on **one Cortex-A9 core (core 0)**; the second core is not used. CPU clock 650 MHz (ARM PLL 1300 MHz / 2; the A9 global timer used for timing runs at 325 MHz), L1 and L2 caches enabled. Compiler `arm-none-eabi-gcc` 12.2.0 (Vitis 2024.1), flags `-O2 -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -fno-tree-loop-distribute-patterns` (see `software/board/build_elf.sh`). **No NEON**: `-mfpu=vfpv3` has no NEON and the linked ELF contains no NEON/SIMD instruction (checked with objdump), no hand-written assembly, no threading, no tuning of the loops. Measured on 28 Oct: three runs of one 960x540 frame (DIV2K img0193), byte-exact each (0xcf947f22): 13.433 / 13.435 / 13.443 s, **mean 13.437 s**, spread 9.5 ms, standard deviation 5.1 ms (UART host timestamps 13.418-13.423 s). So the speed-up figures (pipeline at 125 MHz about 141x, R0 at 100 MHz about 10.2x) are against this simple single-core C baseline; a NEON-optimised or two-core implementation would be faster, and no such version was built or measured.
 
 **Honest conclusion:** an FPGA this small will never beat a desktop GPU on speed. The fair comparison is:
 1. **Same chip with and without the accelerator** (ARM-only vs FPGA), and
