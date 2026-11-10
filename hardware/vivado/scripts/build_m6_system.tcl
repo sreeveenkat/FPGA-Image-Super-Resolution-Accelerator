@@ -11,7 +11,7 @@ set jobs [expr {[llength $argv] > 1 ? [lindex $argv 1] : 2}]
 set root [file normalize [file dirname [info script]]/../../..]
 if {[file exists $out]} { error "$out already exists: choose a new folder (this script never overwrites a project)" }
 set wdir $root/hardware/rtl/weights/
-foreach f {wpipe_L1.mem wpipe_L2.mem wpipe_L3.mem wpipe_L4.mem bias_L4.mem mult_L4.mem} {
+foreach f {wpipe8_L1.mem wpipe8_L2.mem wpipe8_L3.mem wpipe8_L4.mem bias_L4.mem mult_L4.mem} {   ;# branch pipe2: NS = 8 ROMs
     if {![file exists $wdir$f]} { error "missing $wdir$f (run software/ai/quantization/export_rtl.py and export_pipe.py)" }
 }
 
@@ -20,7 +20,7 @@ set_property BOARD_PART digilentinc.com:zedboard:part0:1.1 [current_project]
 set_property ip_repo_paths [list $root/hardware/vivado/ip_repo] [current_project]
 update_ip_catalog
 set rtl $root/hardware/rtl
-add_files -norecurse [concat [list $rtl/top/sr_accel_top.v $rtl/common/requant.v] [glob $rtl/pipe/*.v]]   ;# branch pipe: the whole-frame pipeline
+add_files -norecurse [concat [list $rtl/top/sr_accel_top.v $rtl/common/requant.v] [glob $rtl/pipe/*.v]]   ;# branch pipe2: the whole-frame pipeline v2 (NS = 8, incl. pipe_mul_lut.v)
 update_compile_order -fileset sources_1
 
 source $root/hardware/vivado/bd/design_1_m6.tcl

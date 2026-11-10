@@ -1,4 +1,4 @@
-"""Mutation test of the whole-frame pipeline RTL (branch `pipe`): apply ONE deliberate defect to a copy of an RTL file, run a set of the pipeline tests
+"""Mutation test of the whole-frame pipeline RTL (branch `pipe2`: stage tests at NS = 8, L4 with LUT and DSP lanes; the top at NS = 8): apply ONE deliberate defect to a copy of an RTL file, run a set of the pipeline tests
 (fast first, stop at the first FAIL), and require that some test FAILS.  An unmutated control run must pass every test of the set.
 Run from anywhere:  .venv/bin/python hardware/verification/mutate_pipe.py [--jobs N] [--only ID,...]      (~20 min with 4 jobs)
 A mutant that no test catches is printed as SURVIVED.  A test that hangs past its timeout counts as caught (a hang is a visible failure on the board too).
@@ -25,13 +25,21 @@ MUTANTS = [
     ("S5", "pipe/pipe_stage.v", "assign px_start = win_rdy && out_ok && (!run || s == NS - 1);", "assign px_start = win_rdy && (!run || s == NS - 1);", "consumer room (out_ok) ignored"),
     ("S6", "pipe/pipe_stage.v", "assign px_start = win_rdy && out_ok && (!run || s == NS - 1);", "assign px_start = win_rdy && out_ok && !run;", "one idle cycle per pixel (throughput only, output still exact)"),
     ("S7", "pipe/pipe_stage.v", "if (px_start) hold <= 1'b0;", "if (px_start && 1'b0) hold <= 1'b0;", "input never released after a window (hang)"),
-    ("S8", "pipe/pipe_stage.v", "bias_r <= bias_mem[sd[D-1]];", "bias_r <= bias_mem[sd[D]];", "output-serial bias one slot late"),
-    ("S9", "pipe/pipe_stage.v", "acc[gi] <= ((sd[D] == 4'd0) ? bias_mem[gi] : acc[gi])", "acc[gi] <= ((sd[D] == 4'd1) ? bias_mem[gi] : acc[gi])", "input-serial accumulator restarts at slot 1"),
+    ("S8", "pipe/pipe_stage.v", "bias_r <= bias_mem[sd[D-1] * P + r];", "bias_r <= bias_mem[sd[D] * P + r];", "output-serial bias one slot late"),
+    ("S9", "pipe/pipe_stage.v", "acc[gi] <= ((sd[D] == 0) ? bias_mem[gi] : acc[gi])", "acc[gi] <= ((sd[D] == 1) ? bias_mem[gi] : acc[gi])", "input-serial accumulator restarts at slot 1"),
     ("S10", "pipe/pipe_stage.v", "                        if (sd[D] == NS - 1)\n", "                        if (sd[D] == NS - 2)\n", "input-serial result captured one slot early"),
-    ("S11", "pipe/pipe_stage.v", "assign a_l = snap[((L % KK) * C_IN + s) * 8 +: 8];", "assign a_l = snap[((L / KK) % KK * C_IN + s) * 8 +: 8];", "wrong tap for MODE 1/2 lanes"),
-    ("S12", "pipe/pipe_stage.v", "assign a_l = snap[((L / C_IN) * C_IN + (L % C_IN)) * 8 +: 8];", "assign a_l = snap[((L % C_IN) * C_IN + (L / C_IN) % C_IN) * 8 +: 8];", "MODE 0 lane reads the wrong window byte"),
-    ("S13", "pipe/pipe_stage.v", "rq_add_r <= ANCHOR ? anc_data[8 * (j >> 2) +: 8] : 8'd0;", "rq_add_r <= ANCHOR ? anc_data[8 * (j >> 1 & 3) % 24 +: 8] : 8'd0;", "anchor colour from the wrong channel index"),
+    ("S11", "pipe/pipe_stage.v", "assign a_l = snap[((t % KK) * C_IN + s * P + g) * 8 +: 8];", "assign a_l = snap[(((t + 1) % KK) * C_IN + s * P + g) * 8 +: 8];", "wrong tap for MODE 1 lanes"),
+    ("S11b", "pipe/pipe_stage.v", "assign a_l = snap[((t % KK) * C_IN + s * P + t / KK) * 8 +: 8];", "assign a_l = snap[((t % KK) * C_IN + s * P) * 8 +: 8];", "MODE 2: both channels of a slot read channel s*P (v2 only)"),
+    ("S12", "pipe/pipe_stage.v", "assign a_l = snap[t * 8 +: 8];", "assign a_l = snap[((t % C_IN) * C_IN + (t / C_IN) % C_IN) * 8 +: 8];", "MODE 0 lane reads the wrong window byte"),
+    ("S13", "pipe/pipe_stage.v", "rq_add_r <= ANCHOR ? anc_data[8 * (ch >> 2) +: 8] : 8'd0;", "rq_add_r <= ANCHOR ? anc_data[8 * (ch >> 1 & 3) % 24 +: 8] : 8'd0;", "anchor colour from the wrong channel index"),
     ("S14", "pipe/pipe_stage.v", "                if (ix == in_w - 1) begin\n", "                if (ix == in_w) begin\n", "row length one pixel too long"),
+    ("V1", "pipe/pipe_stage.v", "acc_c  <= sd[D] * P + r;", "acc_c  <= sd[D] * P;", "MODE 0/1: both requantizers get channel s*P (v2 only)"),
+    ("V2", "pipe/pipe_stage.v", "wire [4:0]        ch = j * NRQ + r;", "wire [4:0]        ch = j + r;", "MODE 2: requantizer channels overlap (v2 only)"),
+    ("V3", "pipe/pipe_stage.v", "for (ri = 0; ri < NRQ; ri = ri + 1)", "for (ri = 0; ri < 1; ri = ri + 1)", "only the first requantizer writes the output word (v2 only)"),
+    ("V4", "pipe/pipe_stage.v", "if (L < NDSP) begin : g_dsp", "if (L < NDSP - 1) begin : g_dsp", "one more lane in LUTs (function unchanged)",
+     "EQUIV: pipe_mul and pipe_mul_lut compute the same product with the same latency; only the DSP/LUT mapping changes"),
+    ("V5", "pipe/sr_pipe_core.v", 'localparam WP = (NS == 16) ? "/wpipe_" : "wpipe8_";', 'localparam WP = (NS == 16) ? "/wpipe_" : "/wpipe_";', "core loads the 16-slot weight ROMs at NS = 8"),
+    ("M2", "pipe/pipe_mul_lut.v", "wire signed [8:0] a_s = {1'b0, a_r};", "wire signed [8:0] a_s = {a_r[7], a_r};", "LUT multiplier lanes read the activation as signed"),
     ("M1", "pipe/pipe_mul.v", "wire signed [8:0] a_s = {1'b0, a_r};", "wire signed [8:0] a_s = {a_r[7], a_r};", "activation read as signed"),
     ("T1", "pipe/adder_tree.v", "+ ((2*j + 1 < CP) ? $signed({{(OW-IW){inx[(2*j+1)*IW+IW-1]}}, inx[(2*j+1)*IW +: IW]}) : $signed({OW{1'b0}}));",
      "+ ((2*j + 1 < CP) ? $signed({{(OW-IW){1'b0}}, inx[(2*j+1)*IW +: IW]}) : $signed({OW{1'b0}}));", "second term of each first-level pair zero-extended"),
@@ -62,14 +70,19 @@ MUTANTS = [
 FILES = ["common/requant.v"] + [f"pipe/{p.name}" for p in sorted((RTL / "pipe").glob("*.v"))]
 TOPF = FILES + ["top/sr_accel_top.v"]
 
+def NS8(layer: int) -> list[str]:
+    """Stage tests run the v2 configuration: NS = 8; L4 with NDSP = 50 (DSP and LUT multiplier lanes both used)."""
+    return ["tb_pipe_stage.NS=8"] + (["tb_pipe_stage.NDSP=50"] if layer == 4 else [])
+
+
 # (name, rtl files, testbench, iverilog params, plusargs, timeout s); fast first
 TESTS = (
     [("fifos (pointer wrap)", ["pipe/anchor_fifo.v", "pipe/pipe_fifo.v"], "tb_fifos.v", [], [], 120)]
-    + [(f"stage L{L} random", FILES, "tb_pipe_stage.v", [f"tb_pipe_stage.LAYER={L}", "tb_pipe_stage.REAL=0"], ["+STALL=1", "+SWEEP=2"], 120) for L in (1, 2, 3, 4)]
-    + [(f"stage L{L} random, slow consumer", FILES, "tb_pipe_stage.v", [f"tb_pipe_stage.LAYER={L}", "tb_pipe_stage.REAL=0"], ["+STALL=2"], 120) for L in (1, 4)]
+    + [(f"stage L{L} random", FILES, "tb_pipe_stage.v", [f"tb_pipe_stage.LAYER={L}", "tb_pipe_stage.REAL=0"] + NS8(L), ["+STALL=1", "+SWEEP=2"], 120) for L in (1, 2, 3, 4)]
+    + [(f"stage L{L} random, slow consumer", FILES, "tb_pipe_stage.v", [f"tb_pipe_stage.LAYER={L}", "tb_pipe_stage.REAL=0"] + NS8(L), ["+STALL=2"], 120) for L in (1, 4)]
     + [("adder tree N=27", ["pipe/adder_tree.v"], "tb_adder_tree.v", ["tb_adder_tree.N=27"], [], 60),
        ("adder tree N=9", ["pipe/adder_tree.v"], "tb_adder_tree.v", ["tb_adder_tree.N=9"], [], 60)]
-    + [(f"stage L{L} network weights", FILES, "tb_pipe_stage.v", [f"tb_pipe_stage.LAYER={L}", "tb_pipe_stage.REAL=1"], ["+FRAME=p13x7"], 180) for L in (1, 4)]
+    + [(f"stage L{L} network weights", FILES, "tb_pipe_stage.v", [f"tb_pipe_stage.LAYER={L}", "tb_pipe_stage.REAL=1"] + NS8(L), ["+FRAME=p13x7"], 180) for L in (1, 2, 3, 4)]
     + [("top small frames + stage outputs", TOPF, "tb_sr_pipe_top.v", [], ["+F0=p13x7", "+F1=p1x1", "+F2=p2x3", "+F3=psat", "+F4=p5x4", "+LAYERS=1"], 300),
        ("top errors + soft-reset aborts", TOPF, "tb_sr_pipe_top.v", [], ["+F0=p5x4", "+ERR=1", "+SWEEP=3"], 300),
        ("top stalls", TOPF, "tb_sr_pipe_top.v", [], ["+F0=pramp", "+F1=p2x3", "+STALL=1"], 300),

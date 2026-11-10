@@ -2,7 +2,7 @@
 
 Source of truth: `hardware/rtl/top/sr_accel_top.v` (header comment + code). C view: `software/board/sr_regs.h`.
 `software/board/test_regs.py` (part of `hardware/verification/run_tests.sh quick`) fails when the header, the Verilog and this table disagree.
-**This is the whole-frame PIPELINE version (branch `pipe`, VERSION 0x53525301, `docs/ARCHITECTURE_PIPELINE.md`). It has NOT run on a board.**
+**This is the whole-frame PIPELINE v2 version (branch `pipe2`, VERSION 0x53526301, 8 cycles per LR pixel, `docs/ARCHITECTURE_PIPELINE_V2.md`; same registers as the `pipe` design, VERSION 0x53525301). v2 ran on the board on 2026-11-10 (byte-exact, 27.1 fps; results in main `results/board/2026-11-10/`).**
 The tiled designs (R0 0x53520602, R2q 0x53522201, R3q 0x53523201, r0_125 0x53524201, r3q_125 0x53524301) keep the old map (TILE_SIZE at 0x08, debug
 registers 0x18-0x30). Each tree's driver accepts only its own VERSION family (`VERSION & 0xFFFFFF00`).
 
@@ -16,7 +16,7 @@ registers 0x18-0x30). Each tree's driver accepts only its own VERSION family (`V
 | 0x08 | FRAME_W | RW | LR frame width W, 1..MAX_W; bits 15:0 (byte lanes 0 and 1); sampled at START; 0 after reset |
 | 0x0C | CYCLES | R | clock cycles from the accepted START to the last output beat of the frame (counts while busy, holds its value afterwards) |
 | 0x10 | ERROR_CODE | R | 0 none, 1 early `tlast` (on an input beat that is not the last), 2 last input beat without `tlast`, 3 `tkeep` != 0xF on an accepted input beat, 4 frame size out of range (W 1..MAX_W, H 1..4096; START refused, nothing runs, DONE unchanged), 5 internal FIFO error (never expected). The FIRST error is kept. |
-| 0x14 | VERSION | R | `0x53525301` (pipeline, R3q weights + anchor, 125 MHz) |
+| 0x14 | VERSION | R | `0x53526301` (pipeline v2, 8 cycles per LR pixel, R3q weights + anchor) |
 | 0x18 | FRAME_H | RW | LR frame height H, 1..4096; bits 15:0; sampled at START; 0 after reset (H + 6 must fit the core's 16-bit row counters) |
 | 0x1C | MAX_W | R | largest W: MAXW - 6 = 1018 (line-buffer depth 1024) |
 | 0x20 | DBG_IN_BEATS | R | input beats accepted in the current / last frame |

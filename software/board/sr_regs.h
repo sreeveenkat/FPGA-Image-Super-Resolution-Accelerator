@@ -34,7 +34,7 @@
 #define SR_ERR_INTERNAL        5u   /* an internal FIFO was misused (never expected; a design error) */
 
 /* ---- constants */
-#define SR_VERSION          0x53525301u   /* "SR" 53 01 = whole-frame pipeline, R3q weights + anchor, 125 MHz; this tree's driver accepts only VERSION & 0xFFFFFF00 == 0x53525300 */
+#define SR_VERSION          0x53526301u   /* "SR" 63 01 = whole-frame pipeline v2 (8 cycles per LR pixel, branch pipe2), R3q weights + anchor; this tree's driver accepts only VERSION & 0xFFFFFF00 == 0x53526300 */
 #define SR_VERSION_MASK     0xFFFFFF00u   /* the driver checks VERSION & mask == SR_VERSION & mask */
 #define SR_MAX_W            1018u         /* MAX_W register of the default build (MAXW - 6, MAXW = 1024) */
 #define SR_MAX_H            4096u         /* MAXH of sr_accel_top.v (H + 6 must fit the core's 16-bit row counters) */

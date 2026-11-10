@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# RTL regression of the whole-frame PIPELINE (branch `pipe`, docs/ARCHITECTURE_PIPELINE.md; Icarus Verilog).  Run from anywhere:
+# RTL regression of the whole-frame PIPELINE v2 (branch `pipe2`, docs/ARCHITECTURE_PIPELINE_V2.md; Icarus Verilog).  Run from anywhere:
+#   Every stage and the top are tested with NS = 8 (v2, the default) AND NS = 16 (the original `pipe` design, which must stay exact).
 #   hardware/verification/run_tests.sh [quick|full]
 #   quick (default): requantizer + adder-tree unit tests; every stage with random weights (distinct M per channel, non-square frames) with stalls and
 #                    reset aborts; every stage with the network weights on small frames; the accelerator top (AXI-Lite + AXI-Stream) on 9 frames back to
@@ -43,19 +44,25 @@ for s in 21 22 25; do build rqa$s -P tb_requant_add.SHIFT=$s hardware/rtl/common
 for n in 2 3 5 9 16 27; do build at$n -P tb_adder_tree.N=$n hardware/rtl/pipe/adder_tree.v $TB/tb_adder_tree.v && run at$n; done
 build fifos hardware/rtl/pipe/anchor_fifo.v hardware/rtl/pipe/pipe_fifo.v $TB/tb_fifos.v && run fifos       # far past the pointer wrap (the 2026-10-26 deadlock)
 out="$($PY software/ai/quantization/export_pipe.py --check)"; echo "$out"
-if echo "$out" | grep -q FAIL; then fail=$((fail+1)); echo "FAIL wpipe_L*.mem are not up to date (run export_pipe.py)"; else pass=$((pass+1)); echo "PASS wpipe_L1..4.mem match weights_L1..4.mem"; fi
+if echo "$out" | grep -q FAIL; then fail=$((fail+1)); echo "FAIL wpipe_L*.mem / wpipe8_L*.mem are not up to date (run export_pipe.py)"; else pass=$((pass+1)); echo "PASS wpipe_L1..4.mem and wpipe8_L1..4.mem match weights_L1..4.mem"; fi
 
 echo "== pipeline stages, random weights (distinct M per channel, both clamp ends, non-square frames), with stalls, 8 reset aborts, a slow consumer"
-for L in 1 2 3 4; do
-    build sr$L -P tb_pipe_stage.LAYER=$L -P tb_pipe_stage.REAL=0 $PIPE $TB/tb_pipe_stage.v && { run sr$L; run sr$L +STALL=1 +SWEEP=8; run sr$L +STALL=2; }
+for NS in 8 16; do
+    for L in 1 2 3 4; do
+        # NS = 8: L4 with NDSP = 50 so LUT and DSP multiplier lanes are both used (same function in simulation; checks the lane split)
+        if [ $NS = 8 ] && [ $L = 4 ]; then ND="-P tb_pipe_stage.NDSP=50"; else ND=""; fi
+        build sr$L$NS -P tb_pipe_stage.LAYER=$L -P tb_pipe_stage.REAL=0 -P tb_pipe_stage.NS=$NS $ND $PIPE $TB/tb_pipe_stage.v && { run sr$L$NS; run sr$L$NS +STALL=1 +SWEEP=8; run sr$L$NS +STALL=2; }
+    done
 done
 
 echo "== pipeline stages, network weights, against each layer's golden output of whole frames"
 if [ "$MODE" = full ]; then FR="p13x7 preal2 preal"; else FR="p13x7"; fi
-for L in 1 2 3 4; do
-    build sn$L -P tb_pipe_stage.LAYER=$L -P tb_pipe_stage.REAL=1 $PIPE $TB/tb_pipe_stage.v || continue
-    for f in $FR; do run sn$L +FRAME=$f; done
-    run sn$L +FRAME=pramp +STALL=1
+for NS in 8 16; do
+    for L in 1 2 3 4; do
+        build sn$L$NS -P tb_pipe_stage.LAYER=$L -P tb_pipe_stage.REAL=1 -P tb_pipe_stage.NS=$NS $PIPE $TB/tb_pipe_stage.v || continue
+        for f in $FR; do run sn$L$NS +FRAME=$f; done
+        run sn$L$NS +FRAME=pramp +STALL=1
+    done
 done
 
 echo "== accelerator top (sr_accel_top + sr_pipe_core): AXI4-Lite registers + AXI-Stream, driven like the ARM/DMA, whole frames vs integer_reference.upscale"
@@ -71,6 +78,11 @@ build top $PIPE hardware/rtl/top/sr_accel_top.v $TB/tb_sr_pipe_top.v && {
         run top +F0=preal +F1=preal2 +STALL=1
         run top +F0=preal2 +SWEEP=12 +STALL=1
     fi
+}
+echo "== accelerator top with NS = 16 (the original pipeline; cycle counts must equal branch pipe: p13x7 3241, pramp 4433, preal2 22089)"
+build top16 -P tb_sr_pipe_top.NS=16 $PIPE hardware/rtl/top/sr_accel_top.v $TB/tb_sr_pipe_top.v && {
+    out="$(vvp -n "$TMP/top16.vvp" +F0=p13x7 +F1=pramp +F2=preal2 +LAYERS=1 2>&1 | grep -v 'finish called\|Not enough words')"; echo "$out"
+    if echo "$out" | grep -q '^PASS' && ! echo "$out" | grep -q '^FAIL' && echo "$out" | grep -q 'CYCLES 3241).*CYCLES 4433).*CYCLES 22089)'; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL NS=16 top differs from branch pipe"; fi
 }
 
 echo "== board software (no board): register header vs Verilog, host tools, C tiling code + frame padding"

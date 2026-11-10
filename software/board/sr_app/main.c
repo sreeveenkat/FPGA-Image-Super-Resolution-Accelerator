@@ -1,4 +1,4 @@
-/* Super-resolution accelerator test program (bare metal, ZedBoard), whole-frame PIPELINE version (branch `pipe`, VERSION 0x53525301; NOT run on a board).
+/* Super-resolution accelerator test program (bare metal, ZedBoard), whole-frame PIPELINE v2 version (branch `pipe2`, VERSION 0x53526301, 8 cycles per LR pixel; NOT run on a board. The `pipe` design, VERSION 0x53525301, ran on the board 2026-10-27/28).
  * Differences to the tiled program: T2/T3 pad the frame to (W+6) x (H+6) and send it with ONE DMA transfer each way (no tile loop, no ARM tile copy; the
  * output lands directly in the output image); CYCLES is per frame.  T1/T5/T6 use the golden tile as a 64 x 64 frame.  T7 (ARM only) keeps the tile loop.
  *
