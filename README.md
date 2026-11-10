@@ -1,8 +1,11 @@
 # FPGA Image Super-Resolution Accelerator (ZedBoard / Zynq-7020)
 
-A small **INT8 convolutional neural network** that upscales images **2×** (960×540 → 1920×1080), trained in PyTorch and run by a tile-based
-accelerator in the fabric of a **Zynq XC7Z020** (Digilent ZedBoard). The ARM core controls the accelerator over AXI-Lite and moves image tiles
-with AXI DMA. `main` holds this deployed tile design; faster whole-frame layer pipelines live on branches `pipe`, `pipe2` and `pipe2p` (see the headline results and the table of the designs below).
+A small **INT8 convolutional neural network** that upscales images **2×** (960×540 → 1920×1080), trained in PyTorch and run by a Verilog
+accelerator in the fabric of a **Zynq XC7Z020** (Digilent ZedBoard). The ARM core controls the accelerator over AXI-Lite and moves the image
+with AXI DMA. The output of every design is checked **byte for byte** against a NumPy integer model of the network.
+
+`main` holds the first, tile-based design (R0) together with all tools, documentation and results. The faster designs live on their own
+branches; the fastest is the **packed pipeline v2 on branch `pipe2p`: 27.1 fps** (see the table of designs below).
 
 ## Headline results
 
@@ -12,20 +15,23 @@ Measured on a ZedBoard unless marked as an estimate. All outputs are compared by
   with the default cached buffers), measured on the board on 2026-11-10, byte-exact on 119/119 test images, using **190 DSP and 13,323 LUT**. Pipeline v2
   without packing (branch `pipe2`) runs at the same speed with 220 DSP and 20,651 LUT. **35.5× the deployed tile design R0** and 364× the ARM core alone.
   Details: [`results/board/2026-11-10/SUMMARY.md`](results/board/2026-11-10/SUMMARY.md).
-
-* **Whole-frame layer pipeline (branch [`pipe`](../../tree/pipe), not on `main`): 95.4 ms per 960×540 → 1920×1080 frame = 10.49 fps at 125 MHz** (mean of 20 frames, clock read back from the PS registers; 95.36 ms, min 95.19, max 96.79).
-  With optional **non-cacheable DMA buffers: 70.5 ms = 14.2 fps**, a second configuration that is *not* the default: it applies when the output goes to another DMA master such as a display,
-  because ARM reads of the output buffer become about 10× slower (620 vs 64 ms for the 6.2 MB checksum read).
-* **13.8× faster than the deployed tile design R0** (1,311.7 ms = 0.762 fps at 100 MHz) and about **140× faster than the ARM core alone** (13.437 s per frame, mean of 3 runs: one Cortex-A9 core at 650 MHz, plain C, no NEON, `-O2`).
-* **Byte-exact on 119 of 119 test images** (Set5, Set14, BSD100) on the board for R0, r0_125, r3q_125 and the pipeline; R2q and R3q were checked byte-exact on the 960×540 frame only.
-  Quality of the R3q weights (the pipeline uses them): +1.1 dB PSNR-Y over R0 on Set5 (Set5 36.05 / Set14 32.05 / BSD100 30.96 dB, 2-seed mean of the recipe, vs 34.93 / 31.35 / 30.48 for R0; bicubic 33.67 / 30.32 / 29.56).
-* **Efficiency, Vivado estimate from simulated switching activity (not measured): 12.5 GOPS/W for the whole chip and 42.5 GOPS/W for the programmable logic alone** (27.8 GOPS end to end; 17.0 / 57.5 GOPS/W with non-cacheable buffers).
-  **Power has not been measured with an instrument yet** (no meter); the Vivado numbers are in [`results/power_estimate/SUMMARY.md`](results/power_estimate/SUMMARY.md).
-* Resources of the pipeline: 170 DSP (77 %), 27 BRAM, 9,888 LUT, timing met at 125 MHz (WNS +0.267 ns). The deployed R0: 68 DSP (31 %), 72 BRAM (51 %), 100 MHz.
+* **How it got there.** The first design (R0, 1,311.7 ms = 0.762 fps at 100 MHz) kept only 17 % of its DSPs busy, because its four layer engines run one
+  after another. A whole-frame layer pipeline (branch [`pipe`](../../tree/pipe)) runs all four layers at once: 95.4 ms = 10.49 fps at 125 MHz with 170 DSP.
+  Pipeline v2 doubles its multiplier lanes (8 instead of 16 cycles per pixel), and the packed version fits two INT8 products into each DSP48E1.
+* **Non-cacheable DMA buffers** remove 22.3 ms of ARM cache maintenance per frame (61.6 → 37.0 ms for v2). They suit a consumer that takes the frame by DMA,
+  such as a display; ARM reads of the output become about 10× slower (620 vs 64 ms for the 6.2 MB checksum read), so the cached build stays the default.
+* **Byte-exact on 119 of 119 test images** (Set5, Set14, BSD100) on the board for R0, r0_125, r3q_125, the pipeline, pipeline v2 and pipeline v2 packed;
+  R2q and R3q were checked on the 960×540 frame only.
+* **Quality** of the R3q weights used by all pipelines: Set5 36.20 / Set14 32.12 / BSD100 31.01 dB PSNR-Y (built seed; 2-seed recipe mean 36.05 / 32.05 / 30.96),
+  against 35.02 / 31.40 / 30.53 for R0 and 33.67 / 30.32 / 29.56 for bicubic.
+* **Latency** (simulation): 0.32 ms from the first input pixel to the first output pixel for pipeline v2, because the pipeline streams the frame row by row.
+* **Power has not been measured with an instrument** (no meter). Vivado estimates: 2.51 W on chip for v2 packed (vectorless) and 2.219 W for the first pipeline
+  (with simulated switching activity); details in [`results/power_estimate/SUMMARY.md`](results/power_estimate/SUMMARY.md).
 
 ## The designs (which branch holds which)
 
-**The pipeline design is on branch `pipe`.** `main` holds the deployed tile design R0, the documentation, results and all tools; the other designs are variants on their own branches, each with its own bitstream VERSION.
+`main` holds the tile design R0, the documentation, results and all tools; every other design is on its own branch with its own bitstream VERSION,
+so a program built for one design refuses to run on another design's bitstream.
 Board times are the 20-frame means of 2026-10-27 (100 MHz), 2026-10-28 (125 MHz) and 2026-11-10 (pipe2, pipe2p, 125 MHz).
 
 | Design | Branch | What it is | PL clock | Frame time on the board | fps |
@@ -42,7 +48,7 @@ Board times are the 20-frame means of 2026-10-27 (100 MHz), 2026-10-28 (125 MHz)
 Details, VERSION values, checksums and every measurement: [`docs/STATUS.md`](docs/STATUS.md), [`results/board/2026-10-27/SUMMARY.md`](results/board/2026-10-27/SUMMARY.md),
 [`results/board/2026-10-28/SUMMARY.md`](results/board/2026-10-28/SUMMARY.md), [`results/board/2026-11-10/SUMMARY.md`](results/board/2026-11-10/SUMMARY.md). Clone a design with `git checkout <branch>`.
 
-## Earlier headline (the deployed design R0, measured 2026-10-12)
+## The first design R0 (measured 2026-10-12)
 
 A 960×540 frame is upscaled to 1920×1080 in **1.312 s (0.76 fps)** at 100 MHz, and the output is **byte-identical to the software integer model** on all **119** test images (Set5, Set14, BSD100).
 Quality: **+1.0 to +1.4 dB PSNR-Y over bicubic** (Set5 35.02 / Set14 31.40 / BSD100 30.53 dB vs 33.67 / 30.32 / 29.56), better than bicubic on 119 of 119 images. The design uses 68 DSPs (31 %) and
@@ -64,13 +70,14 @@ Quality: **+1.0 to +1.4 dB PSNR-Y over bicubic** (Set5 35.02 / Set14 31.40 / BSD
 | M4 | Convolution engine in Verilog, bit-exact with the integer model | simulation | **done** |
 | M5 | Full network RTL, pixel shuffle, tiling with halo | simulation | **done** |
 | M6 | AXI wrapper, DMA, ARM driver, running on the board | yes | **done** 2026-10-11 (0602 build 2026-10-12) |
-| M7 | Benchmark, resource/timing/power report, reproducible build | yes | **mostly done**: tables A-D measured, build reproduced from a clean clone; report in progress |
+| M7 | Benchmark, resource/timing/power report, reproducible build | yes | **done** except measured power: tables A-D measured, build reproduced from a clean clone |
+| — | Faster designs: layer pipeline, pipeline v2, v2 packed | yes | **done** 2026-10-27 to 2026-11-10, all byte-exact on the board (branches `pipe`, `pipe2`, `pipe2p`) |
 | M8 | Optional: HDMI, ×4, luma-only, ray-traced input, custom multiplier | — | not started |
 
 Checking everything yourself:
 [`docs/VERIFY_YOURSELF.md`](docs/VERIFY_YOURSELF.md). Demo script for a review: [`docs/DEMO.md`](docs/DEMO.md).
 
-## Results on the board (M6/M7)
+## Results on the board for R0 (M6/M7)
 
 | Table | What | Value | Record |
 |---|---|---|---|
@@ -193,7 +200,8 @@ ARM Cortex-A9 (bare-metal C, software/board/sr_app)          FPGA fabric, 100 MH
 ## Repository layout
 
 ```
-docs/          demo script (DEMO.md), demo figures, register map, verification guide, project guide, status
+docs/          status, project guide, register map, verification guide, demo script (DEMO.md) + figures, pipeline architecture,
+               docs/paper/ = analysis notes (cycle model, timing, mutation study, board checklists, related-work table)
 software/ai/   dataset, models, training, quantization, evaluation (Python)
 software/board/   ARM program (sr_app/), board scripts (xsdb, bash), platform + ELF build
 software/host_tools/   PC helpers: png <-> raw, expected output, compare, figures
@@ -201,7 +209,7 @@ hardware/rtl/  Verilog: common, conv_engine, sr_core, axi_wrapper, top; rtl/weig
 hardware/verification/   testbenches (tb/), run_tests.sh, run_postsynth.sh, demo_sim.sh
 hardware/vivado/   scripts/ (synthesis, system build, power), bd/ (block design as Tcl), ip_repo/ (M0 adder IP)
 data/          datasets, golden vectors, board files (git-ignored, see data/README.md)
-results/       measured numbers: quality/ speed/ utilization/
+results/       measured numbers: quality/ speed/ utilization/ board/ (per session) power_estimate/ figures/
 ```
 
 ## Reproduce from scratch
@@ -278,7 +286,7 @@ Notes:
 
 ## Newer designs
 
-The six designs, their branches and board times are in the table at the top of this file. They live in separate branches; `main`, its weights and its bitstream are unchanged.
+The eight designs, their branches and board times are in the table at the top of this file. They live in separate branches; `main`, its weights and its bitstream are unchanged.
 Resources and timing are from Vivado (routed); expected board answers: [`docs/paper/board_expected.md`](docs/paper/board_expected.md); checklist: [`docs/paper/board_checklist.md`](docs/paper/board_checklist.md).
 
 * The three 125 MHz designs were first run on 2026-10-27 at 100 MHz by mistake (the loading script's platform init set 100 MHz after the bitstream); on 2026-10-28 they were run with their own init script and the clock
@@ -287,6 +295,15 @@ Resources and timing are from Vivado (routed); expected board answers: [`docs/pa
 * A VERSION check protects every program: a program built for another bitstream stops before it touches the DMA (tested on the board, with a marker in the DMA registers).
 * The pipeline's first full-size simulation found a FIFO bug that the whole regression and the mutation study had missed (a counter that no test wrapped); it is fixed, and every counter now has a test that
   crosses its wrap point (`docs/STATUS.md`).
+* Pipeline v2 (`pipe2`, 2026-11-10): 320 multiplier lanes, 8 cycles per pixel; 118 lanes had to be built from LUTs because the chip has 220 DSPs. Measured 4,203,137 cycles per frame
+  (the first pipeline: 8,398,495), 61.64 ms cached / 36.95 ms non-cacheable. Full regression 94/94, mutation test 41 mutants (39 caught, 2 equivalent).
+* Pipeline v2 packed (`pipe2p`): two INT8 products in one DSP48E1, `A = (w2 << 17) + w1`, `P = A * a`, `a*w1 = P[16:0]`, `a*w2 = P[33:17] + P[16]` (checked for all
+  16.6 million inputs). Same speed as v2 with 190 DSP and 13,323 LUT instead of 220 DSP and 20,651 LUT. Full regression 124/124, mutation test 48 mutants (45 caught, 3 equivalent).
+* A cycle model predicted every pipeline frame time before the board run, within 0.3 % ([`docs/paper/cycle_model.md`](docs/paper/cycle_model.md)).
+* Comparison with published FPGA super-resolution accelerators: [`docs/paper/RELATED_WORK_TABLE.md`](docs/paper/RELATED_WORK_TABLE.md). Ours is slower than designs on
+  larger devices but needs 4.5-10× fewer DSPs and does more work per DSP per clock cycle.
+* Knowledge distillation from a 304k-parameter teacher did not improve the deployed network (two seeds, all differences within 0.03 dB:
+  [`results/quality/kd_distillation.md`](results/quality/kd_distillation.md)).
 
 ## Verification chain
 
@@ -296,25 +313,29 @@ golden tile, whole frames and all 119 test images.
 
 ## Limitations (honest list)
 
-* **The deployed design is 0.76 fps, not real time.** The four layer engines run one after another and are folded (L4 alone is 64 % of the cycles); tile load, compute and
-  output are not overlapped. The whole-frame pipeline (branch `pipe`) answers this: 95.4 ms (10.49 fps) measured on the board at 125 MHz, 70.5 ms with non-cacheable DMA buffers; still not real time at 30 fps, and not merged into `main`. Pipeline v2 (branches `pipe2`, `pipe2p`) reaches 27.1 fps with non-cacheable buffers (61.6 ms cached), measured 2026-11-10; also not merged.
-* **Power is a Vivado estimate** (confidence Low) for the deployed design; **nothing was measured with an instrument** (no meter, power not measured yet for any bitstream; a SAIF-based Vivado estimate for the pipeline and R0 is in `results/power_estimate/`). 82 % of the estimate is the ARM side (PS7).
+* **Not quite real time.** The fastest design reaches 27.1 fps (36.96 ms) only with non-cacheable buffers, and 16.2 fps with the default cached buffers; 30 fps needs about 33 ms per frame,
+  which a build at about 140 MHz should reach (model, not built). The faster designs are on branches and not merged into `main`, whose design R0 runs at 0.76 fps.
+* **Power is a Vivado estimate only** (confidence Low); **nothing was measured with an instrument** (no meter). The ARM side (PS7) is 70-82 % of each estimate.
 * **2 single first-tile failures** seen on 2026-10-11 are still unexplained (`results/speed/m6_board.md`); none happened in the thousands of tiles after
   the PL-isolation fix in the loading script.
 * Images are moved in and out over JTAG (debugger memory access), not from an SD card or a video input: fine for measuring, not a product.
+* All measurements come from one board in one temperature range (46-51 °C), with no voltage or temperature margin test.
 * The INT8 model loses 0.08-0.18 dB against FP32; fine random texture (gravel, fur, fabric) is not recovered by a 2,620-parameter network.
 * PC comparison (measured, [`docs/paper/cpu_baseline.md`](docs/paper/cpu_baseline.md)): the same network in FP32 PyTorch takes 129 ms per frame on one
-  CPU thread of an i5-13450HX and 7.9 ms on an RTX 3050 laptop GPU (incl. copies); the deployed FPGA design (1,312 ms) is slower than both; the pipeline (112.1 ms on the board) is faster than one CPU thread (129 ms) and slower than the GPU (7.9 ms).
+  CPU thread of an i5-13450HX and 7.9 ms on an RTX 3050 laptop GPU (incl. copies); R0 (1,312 ms) is slower than both; pipeline v2 packed (36.96 ms) is 3.5× faster than one CPU thread and about 4.7× slower than the GPU.
 
 ## Future work
 
-* Speed: decide which design is merged into `main` (the pipeline is on branch `pipe`); reduce the ARM-side cache cost (22 ms) without making ARM reads of the output slow.
-* A measured board power figure (needs a meter); the SAIF-based estimate exists (`results/power_estimate/`).
+* A measured board power figure (needs a meter), for the fps-per-watt comparison with other designs.
+* 30 fps: a pipeline build at about 140 MHz; reduce the ARM-side cache cost (22 ms) without making ARM reads of the output slow.
+* Merge the chosen design (pipeline v2 packed) into `main`.
 * M8 options: HDMI output, ×4, luma-only network, ray-traced input.
 
 ## References
 
 * Dong et al., *Accelerating the Super-Resolution Convolutional Neural Network* (FSRCNN), ECCV 2016.
+* He et al., *FPGA-Based Real-Time Super-Resolution System for Ultra High Definition Videos*, FCCM 2018 (layer-pipelined FSRCNN-s).
+* Liu et al., *A High-Performance Accelerator for Real-Time Super-Resolution on Edge FPGAs*, ACM TODAES 29(3), 2024.
 * Ahmed et al., *Super-Resolution CNN Accelerator on Low-Cost Zynq-7000 Series SoC-based FPGA*, URSI 2024.
 * *Quantized Neural Network Architecture for Hardware Efficient Real-Time 4K Image Super-Resolution*, VDAT 2024.
 * *An FPGA implementation of Whitted-style ray tracing accelerator* (used for the optional ray-tracing extension).
