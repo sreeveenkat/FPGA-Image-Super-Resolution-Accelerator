@@ -89,3 +89,31 @@ Both with the R3q network (same layers; the anchor add sits in the last requanti
 | Verification reuse | engines + core tests largely replaced | integer model `upscale()` on whole frames is the golden reference directly (no tiling step), small frames simulate quickly |
 
 Choice: (ii), see `docs/ARCHITECTURE_PIPELINE.md`. Not modelled for either: AXI/DDR stalls, cache maintenance of the whole frame buffers on the ARM, DSP packing of two INT8 multiplies.
+
+## Part 6 - prediction: pipeline v2, more MAC lanes (DSP + LUT multipliers)
+
+Why: the built pipeline is multiplier-bound. 160 lanes x 16 cycles per pixel = 2,560 = the MACs per pixel, so its lanes are 100 % busy while computing; the measured 8,398,481 cycles per frame are 16.2 cycles per LR pixel. A faster frame needs more lanes (or a faster clock). Model, NOT measured; nothing below is built.
+
+Method: same four stages and the same network (R3q weights, anchor in the last requantizer). For a target cycles-per-pixel each layer gets the smallest clean lane count that reaches it (`lane_options`), requantizers = ceil(C_out / cycles), 2 DSP each. Lanes go to DSPs first (220 - requantizers - 2 other), the rest are LUT multipliers. Frame cycles from `pipeline_frame_cycles` x calibration 0.9900 (built pipeline: model 8,483,392 vs simulated 8,398,481). Frame time = cycles / clock + measured overhead: cached 28.2 ms (pad + cache maintenance, depends on image size only) or non-cacheable buffers 3.3 ms (pad only).
+
+Resources scale from the routed pipeline: 36.6 LUT / 68.5 FF per lane, +96 LUT / +50 FF per LUT multiplier (`dsp_vs_lut.md`), plus the measured fixed part (4,032 LUT). Block RAM stays ~25 tiles (line buffers do not grow with lanes).
+
+| Target cyc/px | Lanes L1/L2/L3/L4 (total) | LUT-mult lanes | Requant | DSP | LUT (% of 53,200) | FF (%) | Limit | Frame cycles | 100 MHz cached / NC | 125 MHz cached / NC |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 16 | 27/9/16/108 (160) | 0 | 4 | 170 | 9,888 (19%) | 15,782 (15%) | compute | 8.40 M | 112.2 ms (8.9 fps) / 87.3 ms (11.5 fps) | 95.4 ms (10.5 fps) / 70.5 ms (14.2 fps) |
+| 12 | 36/12/32/144 (224) | 20 | 7 | 220 | 14,150 (27%) | 21,166 (20%) | compute | 6.30 M | 91.2 ms (11.0 fps) / 66.3 ms (15.1 fps) | 78.6 ms (12.7 fps) / 53.7 ms (18.6 fps) |
+| 8 | 54/18/32/216 (320) | 118 | 8 | 220 | 27,072 (51%) | 32,641 (31%) | compute | 4.20 M | 70.2 ms (14.3 fps) / 45.3 ms (22.1 fps) | 61.8 ms (16.2 fps) / 36.9 ms (27.1 fps) |
+| 6 | 72/24/64/288 (448) | 254 | 12 | 220 | 44,813 (84%) | 48,208 (45%) | compute | 3.15 M | 59.7 ms (16.8 fps) / 34.8 ms (28.7 fps) | 53.4 ms (18.7 fps) / 28.5 ms (35.1 fps) |
+| 4 | 108/36/64/432 (640) | 452 | 15 | 220 | 70,848 (133%) | 71,259 (67%) | compute | 2.10 M | 49.2 ms (20.3 fps) / 24.3 ms (41.1 fps) | 45.0 ms (22.2 fps) / 20.1 ms (49.7 fps) |
+| 3 | 144/48/128/576 (896) | 726 | 24 | 220 | 106,522 (200%) | 102,493 (96%) | compute | 1.57 M | 43.9 ms (22.8 fps) / 19.1 ms (52.4 fps) | 40.8 ms (24.5 fps) / 15.9 ms (62.8 fps) |
+
+Row 16 is the built design. It reproduces the routed numbers (DSP 170 vs 170, LUT 9,888 vs 9,888, 125 MHz 95.36 vs board 95.36 ms) BY CONSTRUCTION, because the per-lane costs, the cycle calibration and the overheads are taken from it. It is not an independent check; the other rows are extrapolations.
+
+Reading:
+
+* **12 cycles/px = low-risk step**: only 20 LUT multipliers, 27 % LUT; 18.6 fps at 125 MHz with non-cacheable buffers.
+* **8 cycles/px = the sweet spot**: 2x the lanes (118 as LUT multipliers), about half the LUTs; 36.9 ms = 27 fps at 125 MHz with non-cacheable buffers, 22 fps at 100 MHz. With cached buffers the measured 28.2 ms of padding + cache maintenance stays, so 16 fps: the buffer choice matters as much as the RTL. 30 fps needs 8 cycles/px plus about 140 MHz, or 6 cycles/px.
+* 6 cycles/px reaches 35 fps on paper but needs 84 % of the LUTs; 4 and 3 cycles/px do not fit (over 100 %). Routing and timing at 125 MHz are the main risk above 8 cycles/px (the built pipeline closes 125 MHz with only +0.267 ns slack at 19 % LUT use; one LUT-multiplier engine closed 133 MHz alone, out of context). LUT per lane is assumed constant; wider adder trees (L4: 216 or 288 lanes) may cost more.
+* 3 cycles/px is the 32-bit output stream limit (12 bytes per LR pixel); going below it needs a 64-bit stream (not modelled).
+
+Not modelled: AXI/DDR stalls (the built design shows none: DMA wait = core cycles), placement/routing congestion, DSP packing of two INT8 multiplies (on the DSP48E1 the 25x18 multiplier leaves no guard bits for two accumulated int8 x uint8 products, so it is not counted), power. A 100 MHz build is the safe fallback if 125 MHz does not close.

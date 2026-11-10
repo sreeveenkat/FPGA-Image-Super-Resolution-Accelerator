@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Non-cacheable DMA buffers, pipeline tree, REAL 125 MHz (own XSA init, clock read back and enforced).  Created 2026-10-28.
 
-    .venv/bin/python software/board/run_nc.py
+    .venv/bin/python software/board/run_nc.py [--design pipe|pipe2|pipe2p]
+    (pipe2 added 2026-11-10: pipeline v2, tree sandbox_pipe2, variants fnv and both only, output data/board/<today>/nc_pipe2; pipe = unchanged behaviour)
 
 Variants (ELFs built from the same sources; software/board/build/*_x_<v>.elf in sandbox_pipe):
   fnv  = -DSR_FNV_TIME   cached buffers (reference), only adds the timing print of the ARM's output read
@@ -14,6 +15,7 @@ is done by the test program afterwards to compute the checksum), pad time, DMA+c
 At the end, and after any stop, the PRODUCTION pipeline ELF is loaded and one T2 must be byte-exact.  Temperature between runs only (stop above 70 C).  JTAG only.
 """
 import re
+from datetime import date
 import statistics
 import sys
 from pathlib import Path
@@ -22,15 +24,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import run_125 as R   # noqa: E402
 import verify_driver_change as VD   # noqa: E402
 
-d = VD.DES["pipe"]
+DESIGN = sys.argv[sys.argv.index("--design") + 1] if "--design" in sys.argv else "pipe"
+if DESIGN == "pipe":
+    d = VD.DES["pipe"]
+    out = R.MAIN / "data/board/2026-10-28/nc"
+elif DESIGN in ("pipe2", "pipe2p"):
+    d = dict(R.DESIGNS[DESIGN], name=DESIGN, mhz=125)
+    out = R.MAIN / f"data/board/{date.today().isoformat()}/nc_{DESIGN}"
+else:
+    sys.exit("usage: run_nc.py [--design pipe|pipe2|pipe2p]")
 B = d["tree"] / "software/board/build"
 exp = d["tree"] / "data/board/div2k_img0193_expected_1920x1080.raw"
-out = R.MAIN / "data/board/2026-10-28/nc"
 out.mkdir(parents=True, exist_ok=True)
 tlog = out / "nc_temperature.log"
 # predicted frame-time ranges, ms (model, docs: cached 95.2-95.4; OUT only 75.8; PAD only 92.3 + dpad; both 73.0 + dpad, dpad -1..+4, worst +8)
 RANGE = {"fnv": (93.4, 97.4), "out": (72.0, 81.0), "pad": (89.0, 100.0), "both": (70.0, 83.0)}
 ORDER = ["fnv", "both", "fnv", "both", "out", "pad"]
+if DESIGN in ("pipe2", "pipe2p"):   # PREDICTED (docs/paper/board_checklist.md 5e): 4,203,124 cycles / 125 MHz = 33.6 ms + 28.2 (cached) or + 3.3 (pad only), +-2 ms
+    RANGE = {"fnv": (59.8, 63.8), "both": (35.0, 39.0)}
+    ORDER = ["fnv", "both", "fnv", "both"]
 rows = []
 
 

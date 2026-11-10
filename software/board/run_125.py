@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Step 2 of the 2026-10-28 board session: run one design at its REAL 125 MHz PL clock and check it against its integer model.
 
-    .venv/bin/python software/board/run_125.py <r0_125|r3q_125|pipe> [--out data/board/2026-10-28] [--only t1,t2,t3,sets]
+    .venv/bin/python software/board/run_125.py <r0_125|r3q_125|pipe|pipe2|pipe2p> [--out data/board/2026-10-28] [--only t1,t2,t3,sets]
 
 What it does, in order (stops at the first unexpected result, restores the 100 MHz platform init, proves the board is healthy, and exits non-zero):
   0. md5 of bitstream, XSA init script, every ELF against docs/paper/board_expected.md; die temperature (Vivado XADC read, only BETWEEN xsdb runs).
@@ -55,6 +55,14 @@ DESIGNS = {
     "pipe": dict(tree=V / "sandbox_pipe", bit=V / "pipe_artifacts/design_1_wrapper_pipe.bit", ps7=ps7_from_xsa(V / "pipe_artifacts/design_1_wrapper_pipe.xsa", "pipe"), version=0x53525301, fnv=0x45DD4E2D,
                  sets=V / "sandbox_pipe/data/board/testsets", kind="pipe",
                  pred_cycles_ms=8398481 / 125e3, pred_overhead_ms=28.0),
+    # added 2026-11-10: pipeline v2 (branch pipe2, 8 cycles per LR pixel), NOT yet run on a board; same weights/output as pipe, so the same fnv
+    "pipe2": dict(tree=V / "sandbox_pipe2", bit=V / "pipe2_artifacts/design_1_wrapper_pipe2.bit", ps7=ps7_from_xsa(V / "pipe2_artifacts/design_1_wrapper_pipe2.xsa", "pipe2"), version=0x53526301, fnv=0x45DD4E2D,
+                  sets=V / "sandbox_pipe2/data/board/testsets", kind="pipe",
+                  pred_cycles_ms=4203124 / 125e3, pred_overhead_ms=28.0),
+    # added 2026-11-10: pipeline v2 PACKED (branch pipe2p, two multiplies per DSP48), NOT yet run on a board; same weights/output as pipe
+    "pipe2p": dict(tree=V / "sandbox_pipe2p", bit=V / "pipe2p_artifacts/design_1_wrapper_pipe2p.bit", ps7=ps7_from_xsa(V / "pipe2p_artifacts/design_1_wrapper_pipe2p.xsa", "pipe2p"), version=0x53527301, fnv=0x45DD4E2D,
+                   sets=V / "sandbox_pipe2p/data/board/testsets", kind="pipe",
+                   pred_cycles_ms=4203125 / 125e3, pred_overhead_ms=28.0),
 }
 PS7_125_MD5 = "d2a7789c85395e17649026335f23d938"
 PS7_PLATFORM_MD5 = "86bd78c7e9b40933e57e4e22f8bc7eb6"

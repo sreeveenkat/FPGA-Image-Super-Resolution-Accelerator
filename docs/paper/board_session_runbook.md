@@ -116,3 +116,28 @@ SR_BIT=~/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.bit SR_TREE=~/Deskt
 Pass: VERSION 0x53525301; T1 20/20, CYCLES 74,641-74,700; T2 fnv **0x45dd4e2d** and frame CYCLES 8,398,481-8,440,473; T5 PASS; 119/119; negative controls fail as expected;
 T3 20-frame mean in **73.1-102.3 ms** (prediction; R0 1,311.9 ms). Then power (section 5) with `sr_app_t3_200f.elf` of this tree (200 frames take only ~15-20 s here: read the
 meters during the run or start it twice).
+
+## 10. pipe2, pipeline v2 (tree `~/Desktop/venkat/sandbox_pipe2`, branch `pipe2`; VERSION 0x53526301) - added 2026-11-10, never run on a board
+After section 9 (checklist section 5e). Run at the real 125 MHz with the design's own ps7_init (the script reads FCLK0 back and refuses anything else):
+```bash
+cd ~/Desktop/venkat/sem_project_all
+.venv/bin/python software/board/run_125.py pipe2 --out data/board/$(date +%F) < /dev/null           # T1, T2, T3 (20 frames, cached) and the 119 test images
+.venv/bin/python software/board/run_nc.py --design pipe2 < /dev/null                                # cached (fnv) vs non-cacheable (both), A/B/A/B: T1, T2, T5, T3 each
+BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh
+# negative control (VERSION): the pipe tree's ELF on the pipe2 bitstream must be refused
+SR_BIT=~/Desktop/venkat/pipe2_artifacts/design_1_wrapper_pipe2.bit SR_TREE=~/Desktop/venkat/sandbox_pipe $BR pipe2_neg ~/Desktop/venkat/sandbox_pipe/software/board/build/sr_app_t1.elf - - < /dev/null
+```
+`run_125.py pipe2` and `run_nc.py --design pipe2` (option added 2026-11-10) both load the design's own XSA ps7_init, read FCLK0 back and refuse to run if it is not 125 MHz;
+both were written for and run with `pipe` on 2026-10-28, the `pipe2` entries are NOT yet run. The v2 variant ELFs (t1/t2/t5/t3_20f x fnv/both) are in `sandbox_pipe2/software/board/build/`.
+Pass: see checklist 5e (T1 CYCLES 37,620-37,679, T2 fnv 0x45dd4e2d, cached 59.8-63.8 ms, non-cacheable 35.0-39.0 ms, 119/119). Then power (section 5).
+
+## 11. pipe2p, pipeline v2 packed (tree `~/Desktop/venkat/sandbox_pipe2p`, branch `pipe2p`; VERSION 0x53527301) - added 2026-11-10, never run on a board
+After section 10 (checklist section 5f). Same route as pipe2, 125 MHz with the XSA's own ps7_init:
+```bash
+cd ~/Desktop/venkat/sem_project_all; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh
+.venv/bin/python software/board/run_125.py pipe2p --out data/board/$(date +%F) < /dev/null        # T1, T2, T3 (cached) and the 119 test images
+.venv/bin/python software/board/run_nc.py --design pipe2p < /dev/null                              # cached vs non-cacheable, A/B/A/B
+SR_BIT=~/Desktop/venkat/pipe2p_artifacts/design_1_wrapper_pipe2p.bit SR_TREE=~/Desktop/venkat/sandbox_pipe2 $BR pipe2p_neg ~/Desktop/venkat/sandbox_pipe2/software/board/build/sr_app_t1.elf - - < /dev/null   # must FAIL (VERSION)
+```
+Pass: checklist 5f. Then power (section 5): compare with pipe2 on the same board, same day.
+

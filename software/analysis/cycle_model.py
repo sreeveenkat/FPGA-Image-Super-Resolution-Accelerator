@@ -243,6 +243,7 @@ def report() -> str:
       "The 32-bit stream caps the pipeline at 3 cycles per LR pixel (64-bit would halve that); "
       "DSP packing of two INT8 multiplies is not modelled.")
     p(part5(cur, overhead_ms))
+    p(part6())
     return "\n".join(out) + "\n"
 
 
@@ -303,6 +304,102 @@ def part5(cur: dict, overhead_ms: float) -> str:
 
 
 PIPE_EXTRA_BRAM = 9    # anchor FIFO 4096 x 24 bit (3 BRAM36) + double-buffered 2-HR-row output buffer (2 x 3 BRAM36); estimate
+
+
+# ---------------------------------------------------------------- Part 6: pipeline v2 (more MAC lanes, DSP + LUT multipliers)
+# Calibration data of the BUILT pipeline (branch `pipe`, VERSION 0x53525301). Sources:
+#   cycles: xsim full frame 8,398,481 (docs/STATUS.md, pipeline row), board CYCLES 8,398,495 (results/board/2026-10-28/SUMMARY.md)
+#   frame times at 125 MHz: 95.36 ms cached, 70.52 ms non-cacheable buffers (same SUMMARY, parts 1 and 3)
+#   resources: ~/Desktop/venkat/pipe_artifacts/reports_pipe/utilization_hier.txt (routed): system 9,888 LUT / 15,782 FF / 170 DSP,
+#   sr_accel_top 6,725 LUT / 11,656 FF; stages s1..s4 5,856 LUT / 10,959 FF for 160 MAC lanes; routed WNS +0.267 ns at 125 MHz
+#   LUT multiplier cost: docs/paper/dsp_vs_lut.md (+96 LUT, +50 FF per 9x8 lane moved from DSP to LUT; engine still closed 133 MHz OOC)
+PIPE_SIM_CYCLES = 8_398_481
+PIPE_CORE_MS_125 = PIPE_SIM_CYCLES / 125e6 * 1e3
+PIPE_OVH_CACHED_MS = 95.36 - PIPE_CORE_MS_125     # pad 5.7 + cache maintenance 22.4 ms; scales with image bytes, not with compute
+PIPE_OVH_NC_MS = 70.52 - PIPE_CORE_MS_125         # pad 3.3 ms; non-cacheable DMA buffers
+PIPE_LANES = (27, 9, 16, 108)
+PIPE_DSP = 170
+SYS_LUT_NON_ACCEL = 9_888 - 6_725                 # PS interconnect, DMA, GPIO, adder IP
+SYS_FF_NON_ACCEL = 15_782 - 11_656
+ACC_LUT_FIXED = 6_725 - 5_856                     # FIFOs, anchor FIFO, output packer, control
+ACC_FF_FIXED = 11_656 - 10_959
+LUT_PER_LANE = 5_856 / 160                        # adder tree, window regs, weight ROM share, requant control per lane
+FF_PER_LANE = 10_959 / 160
+LUT_MUL_LUT, LUT_MUL_FF = 96, 50                  # extra cost when a lane's multiplier is built from LUTs
+DSP_OTHER = PIPE_DSP - (sum(PIPE_LANES) + REQ_DSP * 4)   # 2 DSPs outside lanes/requantizers in the built design
+LUT_TOTAL, FF_TOTAL = 53_200, 106_400
+
+
+def v2_point(target: int):
+    """Smallest clean lane count per layer with cycles/px <= target; DSPs first, the rest of the lanes as LUT multipliers."""
+    lanes, costs = [], []
+    for layer in LAYERS:
+        opts = [p for p in lane_options(*layer[1:]) if layer_cost(layer, p)[0] <= target]
+        p = min(opts)
+        lanes.append(p)
+        costs.append(layer_cost(layer, p))
+    req = sum(math.ceil(l[2] / c[0]) for l, c in zip(LAYERS, costs))
+    dsp_lanes = min(sum(lanes), DSP_TOTAL - REQ_DSP * req - DSP_OTHER)
+    lut_lanes = sum(lanes) - dsp_lanes
+    dsp = dsp_lanes + REQ_DSP * req + DSP_OTHER
+    lut = SYS_LUT_NON_ACCEL + ACC_LUT_FIXED + LUT_PER_LANE * sum(lanes) + LUT_MUL_LUT * lut_lanes
+    ff = SYS_FF_NON_ACCEL + ACC_FF_FIXED + FF_PER_LANE * sum(lanes) + LUT_MUL_FF * lut_lanes
+    stage = [c[0] * w * h for c, (w, h) in zip(costs, frame_out_sizes())]
+    cyc, limit = pipeline_frame_cycles(costs, stage, 4)
+    return dict(lanes=lanes, cpp=[c[0] for c in costs], req=req, dsp=dsp, lut_lanes=lut_lanes, lut=lut, ff=ff, cyc=cyc, limit=limit)
+
+
+def part6() -> str:
+    out = []
+    p = out.append
+    base = v2_point(16)
+    calib = PIPE_SIM_CYCLES / base["cyc"]
+    p("\n## Part 6 - prediction: pipeline v2, more MAC lanes (DSP + LUT multipliers)\n")
+    p("Why: the built pipeline is multiplier-bound. 160 lanes x 16 cycles per pixel = 2,560 = the MACs per pixel, so its lanes are "
+      f"100 % busy while computing; the measured {PIPE_SIM_CYCLES:,} cycles per frame are {PIPE_SIM_CYCLES / (LR_W * LR_H):.1f} cycles per LR pixel. "
+      "A faster frame needs more lanes (or a faster clock). Model, NOT measured; nothing below is built.\n")
+    p("Method: same four stages and the same network (R3q weights, anchor in the last requantizer). For a target cycles-per-pixel "
+      "each layer gets the smallest clean lane count that reaches it (`lane_options`), requantizers = ceil(C_out / cycles), 2 DSP each. "
+      f"Lanes go to DSPs first (220 - requantizers - {DSP_OTHER} other), the rest are LUT multipliers. "
+      f"Frame cycles from `pipeline_frame_cycles` x calibration {calib:.4f} (built pipeline: model {base['cyc']:,} vs simulated "
+      f"{PIPE_SIM_CYCLES:,}). Frame time = cycles / clock + measured overhead: cached {PIPE_OVH_CACHED_MS:.1f} ms "
+      f"(pad + cache maintenance, depends on image size only) or non-cacheable buffers {PIPE_OVH_NC_MS:.1f} ms (pad only).\n")
+    p(f"Resources scale from the routed pipeline: {LUT_PER_LANE:.1f} LUT / {FF_PER_LANE:.1f} FF per lane, +{LUT_MUL_LUT} LUT / "
+      f"+{LUT_MUL_FF} FF per LUT multiplier (`dsp_vs_lut.md`), plus the measured fixed part "
+      f"({SYS_LUT_NON_ACCEL + ACC_LUT_FIXED:,} LUT). Block RAM stays ~25 tiles (line buffers do not grow with lanes).\n")
+    p("| Target cyc/px | Lanes L1/L2/L3/L4 (total) | LUT-mult lanes | Requant | DSP | LUT (% of 53,200) | FF (%) | Limit | "
+      "Frame cycles | 100 MHz cached / NC | 125 MHz cached / NC |")
+    p("|---|---|---|---|---|---|---|---|---|---|---|")
+    rows = []
+    for t in (16, 12, 8, 6, 4, 3):
+        r = v2_point(t)
+        cyc = r["cyc"] * calib
+        cells = []
+        for f in (100e6, 125e6):
+            ms_c, ms_n = cyc / f * 1e3 + PIPE_OVH_CACHED_MS, cyc / f * 1e3 + PIPE_OVH_NC_MS
+            cells.append(f"{ms_c:.1f} ms ({1e3 / ms_c:.1f} fps) / {ms_n:.1f} ms ({1e3 / ms_n:.1f} fps)")
+        rows.append((t, r, cyc))
+        p(f"| {t} | {'/'.join(map(str, r['lanes']))} ({sum(r['lanes'])}) | {r['lut_lanes']} | {r['req']} | {r['dsp']} | "
+          f"{r['lut']:,.0f} ({r['lut'] / LUT_TOTAL:.0%}) | {r['ff']:,.0f} ({r['ff'] / FF_TOTAL:.0%}) | {r['limit']} | "
+          f"{cyc / 1e6:.2f} M | " + " | ".join(cells) + " |")
+    p("\nRow 16 is the built design. It reproduces the routed numbers (DSP "
+      f"{rows[0][1]['dsp']} vs {PIPE_DSP}, LUT {rows[0][1]['lut']:,.0f} vs 9,888, 125 MHz {rows[0][2] / 125e3 + PIPE_OVH_CACHED_MS:.2f} vs board "
+      "95.36 ms) BY CONSTRUCTION, because the per-lane costs, the cycle calibration and the overheads are taken from it. "
+      "It is not an independent check; the other rows are extrapolations.\n")
+    p("Reading:\n")
+    p("* **12 cycles/px = low-risk step**: only 20 LUT multipliers, 27 % LUT; 18.6 fps at 125 MHz with non-cacheable buffers.")
+    p("* **8 cycles/px = the sweet spot**: 2x the lanes (118 as LUT multipliers), about half the LUTs; 36.9 ms = 27 fps at 125 MHz "
+      "with non-cacheable buffers, 22 fps at 100 MHz. With cached buffers the measured 28.2 ms of padding + cache maintenance stays, "
+      "so 16 fps: the buffer choice matters as much as the RTL. 30 fps needs 8 cycles/px plus about 140 MHz, or 6 cycles/px.")
+    p("* 6 cycles/px reaches 35 fps on paper but needs 84 % of the LUTs; 4 and 3 cycles/px do not fit (over 100 %). Routing and "
+      "timing at 125 MHz are the main risk above 8 cycles/px (the built pipeline closes 125 MHz with only +0.267 ns slack at 19 % LUT "
+      "use; one LUT-multiplier engine closed 133 MHz alone, out of context). LUT per lane is assumed constant; wider adder trees "
+      "(L4: 216 or 288 lanes) may cost more.")
+    p("* 3 cycles/px is the 32-bit output stream limit (12 bytes per LR pixel); going below it needs a 64-bit stream (not modelled).")
+    p("\nNot modelled: AXI/DDR stalls (the built design shows none: DMA wait = core cycles), placement/routing congestion, "
+      "DSP packing of two INT8 multiplies (on the DSP48E1 the 25x18 multiplier leaves no guard bits for two accumulated int8 x uint8 "
+      "products, so it is not counted), power. A 100 MHz build is the safe fallback if 125 MHz does not close.")
+    return "\n".join(out)
 
 
 def main() -> None:

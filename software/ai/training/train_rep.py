@@ -55,15 +55,15 @@ def validate(net, val, dev):
 class Loader(threading.Thread):
     """Background thread that cuts random (LR window, HR core) pairs out of the memory-mapped crop store."""
 
-    def __init__(self, lr, hr, batch, patch, seed, depth=6):
+    def __init__(self, lr, hr, batch, patch, seed, depth=6, halo=HALO):
         super().__init__(daemon=True)
-        self.lr, self.hr, self.batch, self.patch = lr, hr, batch, patch
+        self.lr, self.hr, self.batch, self.patch, self.halo = lr, hr, batch, patch, halo   # halo > HALO only for distillation (teacher context)
         self.rng = np.random.default_rng(seed)
         self.q = queue.Queue(depth)
 
     def run(self):
         n, (ch, cw) = len(self.lr), self.lr.shape[1:3]
-        win, p = self.patch + 2 * HALO, self.patch
+        win, p, h = self.patch + 2 * self.halo, self.patch, self.halo
         while True:
             xs = np.empty((self.batch, win, win, 3), np.uint8)
             ys = np.empty((self.batch, p * SCALE, p * SCALE, 3), np.uint8)
@@ -71,7 +71,7 @@ class Loader(threading.Thread):
                 k = int(self.rng.integers(n))
                 y0, x0 = int(self.rng.integers(0, ch - win + 1)), int(self.rng.integers(0, cw - win + 1))
                 a = self.lr[k, y0:y0 + win, x0:x0 + win]
-                b = self.hr[k, (y0 + HALO) * SCALE:(y0 + HALO + p) * SCALE, (x0 + HALO) * SCALE:(x0 + HALO + p) * SCALE]
+                b = self.hr[k, (y0 + h) * SCALE:(y0 + h + p) * SCALE, (x0 + h) * SCALE:(x0 + h + p) * SCALE]
                 r = int(self.rng.integers(4))  # 8 dihedral variants: rot90 x {no flip, flip}
                 a, b = np.rot90(a, r), np.rot90(b, r)
                 if self.rng.integers(2):
@@ -103,6 +103,10 @@ def main():
     ap.add_argument("--store", default=str(STORE))
     ap.add_argument("--max-crops", type=int, default=0, help="use only the first N crops (0 = all)")
     ap.add_argument("--init", default="", help="start from a merged plain checkpoint (model plain only)")
+    ap.add_argument("--kd", default="", help="teacher checkpoint (train_teacher.py): loss = L1(HR) + kd_alpha * L1(teacher output) (model plain only)")
+    ap.add_argument("--kd-alpha", type=float, default=0.0, help="weight of the teacher term; 0 with --kd-window = the same fine-tuning without a teacher (control)")
+    ap.add_argument("--kd-window", action="store_true", help="cut windows with the teacher's halo (11 px) and give the student the inner 3 px halo; "
+                    "set for both the distillation run and its control so they see the same crops")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
@@ -135,7 +139,22 @@ def main():
     def deploy(m):
         return m.to_srnet().to(dev) if args.model == "rep" else m
 
-    loader = Loader(lr, hr, args.batch, args.patch, args.seed)
+    kd_halo = HALO
+    teacher = None
+    if args.kd or args.kd_window:
+        from models.teacher import TEACHER_HALO, Teacher
+        assert args.model == "plain", "distillation is implemented for the plain (deployed) SRNet only"
+        kd_halo = TEACHER_HALO
+        if args.kd:
+            ck = torch.load(args.kd, map_location="cpu")
+            teacher = Teacher(SCALE, ck["ch"], ck["body"])
+            teacher.load_state_dict(ck["state"])
+            teacher.to(dev).eval()
+            for p_ in teacher.parameters():
+                p_.requires_grad_(False)
+            print(f"teacher {args.kd}: val PSNR-Y {ck.get('val_psnr_y')}, alpha {args.kd_alpha}", flush=True)
+    cut = kd_halo - HALO                      # student window = inner (patch + 2*HALO) of the loader window
+    loader = Loader(lr, hr, args.batch, args.patch, args.seed, halo=kd_halo)
     loader.start()
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -145,7 +164,13 @@ def main():
             g["lr"] = lr_at(step - 1)
         net.train()
         x, y = loader.get(dev)
-        loss = F.l1_loss(net.forward_merged(x) if args.model == "rep" else net(x), y)
+        xs = x[:, :, cut:x.shape[2] - cut, cut:x.shape[3] - cut] if cut else x
+        out_s = net.forward_merged(xs) if args.model == "rep" else net(xs)
+        loss = F.l1_loss(out_s, y)
+        if teacher is not None and args.kd_alpha > 0:
+            with torch.no_grad():
+                t = teacher.core(x, kd_halo, args.patch)
+            loss = loss + args.kd_alpha * F.l1_loss(out_s, t)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         opt.step()

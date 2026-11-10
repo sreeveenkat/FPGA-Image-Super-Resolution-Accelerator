@@ -56,6 +56,18 @@ TREES = {
                             cycles="74,641-74,700 for the golden tile as a 64 x 64 frame (simulation 74,641, `tb_sr_pipe_top.v +F0=gtile`; +60 allowed for DMA back-pressure, PROPOSED window; measured 2026-10-27: 74,651-74,654, inside it)",
                             t2="one frame, no tiles; stat4..6 = frame CYCLES; " + PIPE_T2_CYCLES,
                             t3=PIPE_T3),
+    # 2026-11-10, branch pipe2: pipeline v2, 8 cycles per LR pixel (docs/ARCHITECTURE_PIPELINE_V2.md in the branch).  Windows PROPOSED from the simulation.
+    "Pipeline v2 (pipe2)": dict(tree=V / "sandbox_pipe2", version_expected="0x53526301", bits=[("sandbox build (tree default)", V / "pipe2_artifacts/design_1_wrapper_pipe2.bit")],
+                                xsa=V / "pipe2_artifacts/design_1_wrapper_pipe2.xsa",
+                                cycles="37,620-37,679 for the golden tile as a 64 x 64 frame (simulation 37,620; PROPOSED)",
+                                t2="one frame; frame CYCLES 4,203,124-4,224,140 (simulation 4,203,124 + 0.5 %, PROPOSED)",
+                                t3="PREDICTED 61.8 ms cached (59.8-63.8), 37.0 ms non-cacheable (35.0-39.0): simulated cycles + pipe's measured overheads"),
+    # 2026-11-10, branch pipe2p: pipeline v2 packed (two multiplies per DSP48), same speed as pipe2 (+1 cycle per frame).
+    "Pipeline v2 packed (pipe2p)": dict(tree=V / "sandbox_pipe2p", version_expected="0x53527301", bits=[("sandbox build (tree default)", V / "pipe2p_artifacts/design_1_wrapper_pipe2p.bit")],
+                                        xsa=V / "pipe2p_artifacts/design_1_wrapper_pipe2p.xsa",
+                                        cycles="37,621-37,680 for the golden tile as a 64 x 64 frame (simulation 37,621; PROPOSED)",
+                                        t2="one frame; frame CYCLES 4,203,125-4,224,141 (simulation 4,203,125 + 0.5 %, PROPOSED)",
+                                        t3="PREDICTED as pipe2: 61.8 ms cached, 37.0 ms non-cacheable"),
 }
 ELFS = [("T1 golden tile", "sr_app_t1.elf"), ("T2 full frame", "sr_app_t2.elf"), ("T3 timing, 20 frames", "sr_app_t3_20f.elf"),
         ("T3 timing, 200 frames (power)", "sr_app_t3_200f.elf"), ("T7 ARM only, 1 frame", "sr_app_t11.elf"), ("T7 ARM only, 20 frames (power)", "sr_app_t11_20f.elf")]

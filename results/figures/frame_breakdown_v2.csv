@@ -1,0 +1,6 @@
+design,frame_ms,accelerator_ms,arm_padding_ms,arm_tile_copy_ms,cache_maintenance_ms,other_ms
+r0_125 (tiled),1061.85,1000.32,5.97,26.41,28.10,1.05
+"pipeline, cached",95.36,67.19,5.79,0.00,22.30,0.09
+"pipeline, non-cacheable",70.52,67.19,3.32,0.00,0.00,0.01
+"pipeline v2, cached",61.64,33.63,5.71,0.00,22.30,0.00
+"pipeline v2, non-cacheable",36.95,33.63,3.32,0.00,0.00,0.00

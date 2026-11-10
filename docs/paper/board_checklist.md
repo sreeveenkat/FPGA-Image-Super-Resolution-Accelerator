@@ -66,7 +66,7 @@ Input files `data/board/div2k_img0193_lr_960x540.raw` (R2q/R3q trees have it; ex
 If T1 fails on R2q: check that the right bitstream was loaded (`SR_BIT`), then run `SR_BIT=~/Desktop/venkat/TESTED_0602.bit` with the R0 T1 to prove the board and
 the tooling are fine; then report the failing tile and the `t1_r2q.txt` stats.
 
-## 4. Power measurement (every bitstream: R0, R2q, R3q, r0_125, r3q_125, pipe; plus ARM only)
+## 4. Power measurement (every bitstream: R0, R2q, R3q, r0_125, r3q_125, pipe, pipe2, pipe2p; plus ARM only)
 
 **What to measure:** the ZedBoard's 12 V input power (whole board: Zynq, DDR, regulators, USB-UART, LEDs). The board overhead is the same in every state, so the
 **differences** between states are the useful numbers. The synthesis power estimates are 1.913 W (0602) and 1.910 W (R2q, current VERSION 0x53522201 build; `m6_system_R2q.md:45` in branch `r2q`; the 1.912 W on its line 6 is the superseded first build), both "low confidence"; the measurement
@@ -166,6 +166,45 @@ no tiles): run ONLY the ELFs of this tree. Commands: `board_session_runbook.md` 
 
 If T1 fails here but passed for the tiled designs: the driver/register map is new (FRAME_W/H, one transfer per frame), so first check `version=` and ERROR_CODE in the stats
 (4 = size refused, 5 = internal FIFO error), and the UART log. Do not retry silently.
+
+## 5e. Pipeline v2 (`pipe2`), from `~/Desktop/venkat/sandbox_pipe2` (bitstream `~/Desktop/venkat/pipe2_artifacts/design_1_wrapper_pipe2.bit`, VERSION 0x53526301; the tree's default board programs are built against `~/Desktop/venkat/vitis_ws_pipe2_platform`)
+**DONE 2026-11-10: every step passed (power not measured); results `results/board/2026-11-10/SUMMARY.md`.**
+Added 2026-11-10. 8 cycles per LR pixel (twice the lanes of `pipe`, 220 DSP + 118 LUT multipliers). Built: routed WNS +0.231 / WHS +0.019 ns at 125 MHz, 20,651 LUT /
+21,612 FF / 27 BRAM / 220 DSP; quick 69/69, mutation 41 (39 caught, 2 equivalent), netlist simulation 4/4, 960x540 bit-exact in xsim (4,203,124 cycles)
+(`results/utilization/m6_system_pipe2.md` in branch `pipe2`); **never run on a board**. Same register map and driver as `pipe`; MUST run at 125 MHz with the XSA's own
+ps7_init (md5 d2a7789c..., identical to the other 125 MHz designs): `run_125.py pipe2` does that and refuses to run if FCLK0 is not 125 MHz. Commands: runbook section 10.
+
+| Step | Pass when |
+|---|---|
+| T1 (golden tile as a 64 x 64 frame) | `result=0`, **`version=0x53526301`**, stat6 = 20, CYCLES each within **37,620-37,679** (simulation 37,620; window = `pipe`'s board offset +11..+40 plus margin, PROPOSED) |
+| T2 (960x540) | `BYTE-EXACT: yes`, fnv1a32 **0x45dd4e2d** (same as `pipe`: same weights); frame CYCLES within **4,203,124-4,224,140** (simulation + 0.5 %, PROPOSED) |
+| T5 error recovery | `T5 PASS` |
+| 119 test images | 119/119 byte-exact (`run_125.py pipe2`) |
+| negative controls | (a) a `pipe`-tree ELF must refuse this bitstream (compares 0x53525300; this tree's ELF compares 0x53526300); (b) this tree's ELF must refuse the `pipe` bitstream |
+| frame time, cached (`sr_app_t3_20f.elf`) | 20-frame mean in **59.8-63.8 ms** (PREDICTED: 33.6 ms compute + `pipe`'s measured 28.2 ms pad + cache maintenance, +-2 ms), max - min <= 3 ms |
+| frame time, non-cacheable (`sr_app_t3_20f_x_both.elf`) | 20-frame mean in **35.0-39.0 ms** = 27 fps (PREDICTED: 33.6 + 3.3 ms pad, +-2 ms), byte-exact; the headline number if it passes (`pipe` NC: 70.52 ms) |
+| temperature | die temperature logged (`xadc_temp.tcl`); stop above 70 C (all 220 DSPs busy: expect more heat than `pipe`'s 47.7-50.6 C) |
+| power | idle and processing (section 4): needed for the fps/W comparison with Liu et al. 2024 (2.12 fps/W at 16.85 W board power, `RELATED_WORK_TABLE.md`) |
+
+If T1 fails here but `pipe` passed in the same session: the only RTL differences are in `pipe_stage.v` (NS = 8 lanes/requantizers, LUT multipliers, `max_fanout` on `d1_v`) and
+`sr_pipe_core.v` (registered stage sizes, `wpipe8_*` ROMs). First check `version=`, ERROR_CODE (5 = internal FIFO error) and that FCLK0 read back 125 MHz.
+
+## 5f. Pipeline v2 PACKED (`pipe2p`), from `~/Desktop/venkat/sandbox_pipe2p` (bitstream `~/Desktop/venkat/pipe2p_artifacts/design_1_wrapper_pipe2p.bit`, VERSION 0x53527301; board programs built against `~/Desktop/venkat/vitis_ws_pipe2p_platform`)
+**DONE 2026-11-10: every step passed (power not measured); results `results/board/2026-11-10/SUMMARY.md`.**
+Added 2026-11-10. Same speed as `pipe2` (8 cycles per LR pixel, +1 cycle per frame), two multiplies per DSP48 (`pipe_mul2.v`). Built: routed WNS +0.450 / WHS +0.007 ns at 125 MHz,
+13,323 LUT / 19,688 FF / 27 BRAM / 190 DSP, 0 LUT multipliers; quick 99/99, mutation 48 (45 caught, 3 equivalent, 0 survived), netlist 4/4, 960x540 bit-exact in xsim
+(4,203,125 cycles); **never run on a board**. Same register map, driver and ps7_init (md5 d2a7789c...) as `pipe2`. Commands: runbook section 11.
+Note the small hold margin (WHS +0.007 ns, met).
+
+| Step | Pass when |
+|---|---|
+| T1 (golden tile as 64 x 64 frame) | `result=0`, **`version=0x53527301`**, stat6 = 20, CYCLES each within **37,621-37,680** (simulation 37,621; PROPOSED) |
+| T2 (960x540) | `BYTE-EXACT: yes`, fnv1a32 **0x45dd4e2d**; frame CYCLES within **4,203,125-4,224,141** (simulation + 0.5 %, PROPOSED) |
+| T5 error recovery | `T5 PASS` |
+| 119 test images | 119/119 byte-exact (`run_125.py pipe2p`) |
+| negative controls | the `pipe2`-tree ELF must refuse this bitstream (0x535263xx vs 0x535273xx) and this tree's ELF must refuse the `pipe2` bitstream |
+| frame time | cached 59.8-63.8 ms, non-cacheable 35.0-39.0 ms (PREDICTED, same as `pipe2`) |
+| temperature / power | as 5e; power should be BELOW `pipe2` (Vivado estimate 2.51 vs 2.90 W): a measured difference is a paper result |
 
 ## 5b. Merge criteria (PROPOSED, the owner confirms; same text as `docs/STATUS.md`)
 A branch goes into `main` only if, with its own bitstream: (1) T1 passes with its own VERSION and T2 is byte-exact with its fnv1a32 (R2q 0x2afbc9ae, R3q 0x45dd4e2d);

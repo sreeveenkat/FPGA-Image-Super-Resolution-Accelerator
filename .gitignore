@@ -56,3 +56,21 @@ docs/paper/draft/build/
 
 # local study notes (not published)
 docs/PROJECT_GUIDE_study_notes.md
+
+# LaTeX build output of the paper drafts (build.sh writes here)
+docs/paper/*/build/
+
+# Paper drafts, reports and presentations stay local (not published before submission)
+docs/paper/draft/
+docs/paper/new_draft/
+docs/paper/paper_v2/
+docs/paper/paper_v2_professor/
+docs/paper/professor_3page/
+docs/paper/professor_5page/
+docs/paper/PAPER_NOTES.md
+docs/paper/THREE_PAPER_DRAFTS.md
+docs/btech_report/
+docs/REPORT/
+docs/REPORT.zip
+docs/presentation/
+results/figures/*.pdf

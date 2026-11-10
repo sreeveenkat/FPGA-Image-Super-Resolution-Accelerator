@@ -488,7 +488,7 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 
 ### 17.1 What happened
 - ISCAS 2027 (22 Oct) and ARC 2027 (25 Oct) deadlines **passed**.
-- A 6-page (including references) IEEE-format draft exists in `docs/paper/draft/` (build with `build.sh`). Author/affiliation and Related Work are still TODO.
+- The IEEE-format paper is kept locally and is not published in this repository before submission; the current version has 7 pages including references.
 
 ### 17.2 Next target
 **FPL 2027** (main FPGA conference). FPL 2026's deadline was late March 2026, so 2027 is probably similar (**to be confirmed** at 2027.fpl.org). Page limit and review type are **not checked yet**; read the call when it is published.
@@ -529,7 +529,7 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 | Board checklist (step by step) | `docs/paper/board_checklist.md` |
 | Board runbook | `docs/paper/board_session_runbook.md` |
 | Expected board values | `docs/paper/board_expected.md` |
-| Paper draft (LaTeX) | `docs/paper/draft/` |
+| Paper draft (LaTeX) | kept locally, not in the repository |
 | Counter/width audit | `docs/PIPELINE_COUNTER_AUDIT.md` (branch `pipe`) |
 | Quality ladder results | `results/quality/image_quality_ladder.md` |
 | Comparison crops | `results/images/ladder_crops_*.png` |
@@ -561,13 +561,16 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 - [x] **Board session 2 (28 Oct): VERSION-refusal controls passed (refused before any transfer, no DDR writes); r0_125, r3q_125 and pipe at a read-back 125.000 MHz, 119/119 byte-exact each; 1,061.9 / 1,061.7 / 95.4 ms (one board, 47.9–49.2 °C, no margin sweep)**
 - [x] T7 ARM-only baseline (≈13.4 s, timer to be fixed)
 - [x] Paper draft updated with measured numbers (6 pages incl. references; related work still TODO)
+- [x] **Pipeline v2 (`pipe2`, 8 cycles per pixel) and v2 packed (`pipe2p`, two INT8 products per DSP48E1): built, fully verified (full regressions 94/94 and 124/124, mutation 41 and 48 mutants, 0 survivors), board session 10 Nov at 125 MHz: 36.95 / 36.96 ms = 27.1 fps (non-cacheable), 61.64 ms cached, 119/119 byte-exact each; packed: 190 DSP, 13,323 LUT** (`results/board/2026-11-10/SUMMARY.md`)
+- [x] Related-work table from papers read (`docs/paper/RELATED_WORK_TABLE.md`), latency 0.32 ms (simulation), distillation tried: no gain (`results/quality/kd_distillation.md`)
+- [x] **Paper v2 written (7 pages incl. references; kept locally until submission)**
 
 ### Left
 - [ ] Power measurement (needs a meter); optionally look at the cache handling (19.4 ms of the pipeline's frame time), which would be a new driver change
 - [ ] **Power measurement** (needs a multimeter)
 - [ ] Merge the winning design (pipeline, or R3q) into `main` after board results
-- [ ] Update the public GitHub README (it is stale)
-- [ ] Final paper numbers, comparison table, AI disclosure, submit (FPL 2027, to be confirmed)
+- [ ] Push the README update and the new branches to GitHub (README updated locally 10 Nov)
+- [ ] Final paper: AI disclosure, author block, check the [CHECK] references (Kim 2019, Chang, Sun, Kim 2018 need the originals; Manabe 2018 full text), submit (FPL 2027, to be confirmed)
 
 ---
 

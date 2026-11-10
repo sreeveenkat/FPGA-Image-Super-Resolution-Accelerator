@@ -1,0 +1,8 @@
+name neg_pipe2_elf_on_pipe2p_bit
+date 2026-11-10T16:45:53+05:30
+cwd /home/sreevenkat/Desktop/venkat/sandbox_pipe2
+git 34e5e04 pipe2
+elf /home/sreevenkat/Desktop/venkat/sandbox_pipe2/software/board/build/sr_app_t1.elf 99ddbeb350fcea52ad858c577dcd156d
+bitstream /home/sreevenkat/Desktop/venkat/pipe2p_artifacts/design_1_wrapper_pipe2p.bit 07dd0689d62564a97a785b25ad9e1875
+command xsdb software/board/run_board.tcl /home/sreevenkat/Desktop/venkat/sandbox_pipe2/software/board/build/sr_app_t1.elf - - data/board/2026-11-10/neg_pipe2_elf_on_pipe2p_bit_stats.txt
+xsdb_exit 1

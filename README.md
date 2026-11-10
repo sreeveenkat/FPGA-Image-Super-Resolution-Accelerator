@@ -2,11 +2,16 @@
 
 A small **INT8 convolutional neural network** that upscales images **2×** (960×540 → 1920×1080), trained in PyTorch and run by a tile-based
 accelerator in the fabric of a **Zynq XC7Z020** (Digilent ZedBoard). The ARM core controls the accelerator over AXI-Lite and moves image tiles
-with AXI DMA. `main` holds this deployed tile design; a faster whole-frame layer pipeline lives on branch `pipe` (see the headline results and the table of the six designs below).
+with AXI DMA. `main` holds this deployed tile design; faster whole-frame layer pipelines live on branches `pipe`, `pipe2` and `pipe2p` (see the headline results and the table of the designs below).
 
 ## Headline results
 
 Measured on a ZedBoard unless marked as an estimate. All outputs are compared byte for byte with the software integer model.
+
+* **Pipeline v2, packed (branch `pipe2p`): 36.96 ms per 960×540 → 1920×1080 frame = 27.1 fps at 125 MHz** with non-cacheable DMA buffers (61.64 ms = 16.2 fps
+  with the default cached buffers), measured on the board on 2026-11-10, byte-exact on 119/119 test images, using **190 DSP and 13,323 LUT**. Pipeline v2
+  without packing (branch `pipe2`) runs at the same speed with 220 DSP and 20,651 LUT. **35.5× the deployed tile design R0** and 364× the ARM core alone.
+  Details: [`results/board/2026-11-10/SUMMARY.md`](results/board/2026-11-10/SUMMARY.md).
 
 * **Whole-frame layer pipeline (branch [`pipe`](../../tree/pipe), not on `main`): 95.4 ms per 960×540 → 1920×1080 frame = 10.49 fps at 125 MHz** (mean of 20 frames, clock read back from the PS registers; 95.36 ms, min 95.19, max 96.79).
   With optional **non-cacheable DMA buffers: 70.5 ms = 14.2 fps**, a second configuration that is *not* the default: it applies when the output goes to another DMA master such as a display,
@@ -18,10 +23,10 @@ Measured on a ZedBoard unless marked as an estimate. All outputs are compared by
   **Power has not been measured with an instrument yet** (no meter); the Vivado numbers are in [`results/power_estimate/SUMMARY.md`](results/power_estimate/SUMMARY.md).
 * Resources of the pipeline: 170 DSP (77 %), 27 BRAM, 9,888 LUT, timing met at 125 MHz (WNS +0.267 ns). The deployed R0: 68 DSP (31 %), 72 BRAM (51 %), 100 MHz.
 
-## The six designs (which branch holds which)
+## The designs (which branch holds which)
 
 **The pipeline design is on branch `pipe`.** `main` holds the deployed tile design R0, the documentation, results and all tools; the other designs are variants on their own branches, each with its own bitstream VERSION.
-Board times are the 20-frame means of 2026-10-27 (100 MHz) and 2026-10-28 (125 MHz).
+Board times are the 20-frame means of 2026-10-27 (100 MHz), 2026-10-28 (125 MHz) and 2026-11-10 (pipe2, pipe2p, 125 MHz).
 
 | Design | Branch | What it is | PL clock | Frame time on the board | fps |
 |---|---|---|---|---|---|
@@ -30,10 +35,12 @@ Board times are the 20-frame means of 2026-10-27 (100 MHz) and 2026-10-28 (125 M
 | R3q | `r3q` | anchor network + QAT weights (+1.12 / +0.70 / +0.49 dB), small RTL change (anchor folded into the requantizer) | 100 MHz | 1,311.6 ms | 0.762 |
 | r0_125 | `r0_125` | R0 with one more register per MAC lane so it closes timing at 125 MHz | 125 MHz | 1,061.9 ms | 0.942 |
 | r3q_125 | `r3q_125` | R3q at 125 MHz | 125 MHz | 1,061.7 ms | 0.942 |
-| **pipeline** | **`pipe`** | **whole-frame layer pipeline** (all four layers work at once, line buffers, no tiles; [`docs/ARCHITECTURE_PIPELINE.md`](docs/ARCHITECTURE_PIPELINE.md) on that branch), R3q weights | 125 MHz | **95.4 ms** (70.5 ms with non-cacheable DMA buffers) | **10.49** (14.2) |
+| pipeline | `pipe` | whole-frame layer pipeline (all four layers work at once, line buffers, no tiles; [`docs/ARCHITECTURE_PIPELINE.md`](docs/ARCHITECTURE_PIPELINE.md) on that branch), R3q weights, 16 cycles per pixel | 125 MHz | 95.4 ms (70.5 ms with non-cacheable DMA buffers) | 10.49 (14.2) |
+| pipeline v2 | `pipe2` | the pipeline with twice the multiplier lanes (8 cycles per pixel; 118 lanes as LUT multipliers), 220 DSP, 20,651 LUT (`docs/ARCHITECTURE_PIPELINE_V2.md` on that branch) | 125 MHz | 61.6 ms (**37.0 ms** non-cacheable) | 16.2 (**27.1**) |
+| **pipeline v2 packed** | **`pipe2p`** | **v2 with two INT8 products per DSP48E1**: same speed, 190 DSP, 13,323 LUT (`docs/ARCHITECTURE_PIPELINE_V2P.md` on that branch) | 125 MHz | 61.6 ms (**37.0 ms** non-cacheable) | 16.2 (**27.1**) |
 
 Details, VERSION values, checksums and every measurement: [`docs/STATUS.md`](docs/STATUS.md), [`results/board/2026-10-27/SUMMARY.md`](results/board/2026-10-27/SUMMARY.md),
-[`results/board/2026-10-28/SUMMARY.md`](results/board/2026-10-28/SUMMARY.md). Clone a design with `git checkout <branch>`.
+[`results/board/2026-10-28/SUMMARY.md`](results/board/2026-10-28/SUMMARY.md), [`results/board/2026-11-10/SUMMARY.md`](results/board/2026-11-10/SUMMARY.md). Clone a design with `git checkout <branch>`.
 
 ## Earlier headline (the deployed design R0, measured 2026-10-12)
 
@@ -290,7 +297,7 @@ golden tile, whole frames and all 119 test images.
 ## Limitations (honest list)
 
 * **The deployed design is 0.76 fps, not real time.** The four layer engines run one after another and are folded (L4 alone is 64 % of the cycles); tile load, compute and
-  output are not overlapped. The whole-frame pipeline (branch `pipe`) answers this: 95.4 ms (10.49 fps) measured on the board at 125 MHz, 70.5 ms with non-cacheable DMA buffers; still not real time at 30 fps, and not merged into `main`.
+  output are not overlapped. The whole-frame pipeline (branch `pipe`) answers this: 95.4 ms (10.49 fps) measured on the board at 125 MHz, 70.5 ms with non-cacheable DMA buffers; still not real time at 30 fps, and not merged into `main`. Pipeline v2 (branches `pipe2`, `pipe2p`) reaches 27.1 fps with non-cacheable buffers (61.6 ms cached), measured 2026-11-10; also not merged.
 * **Power is a Vivado estimate** (confidence Low) for the deployed design; **nothing was measured with an instrument** (no meter, power not measured yet for any bitstream; a SAIF-based Vivado estimate for the pipeline and R0 is in `results/power_estimate/`). 82 % of the estimate is the ARM side (PS7).
 * **2 single first-tile failures** seen on 2026-10-11 are still unexplained (`results/speed/m6_board.md`); none happened in the thousands of tiles after
   the PL-isolation fix in the loading script.
