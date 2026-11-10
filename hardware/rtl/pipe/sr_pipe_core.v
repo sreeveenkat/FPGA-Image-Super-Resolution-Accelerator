@@ -15,7 +15,10 @@ module sr_pipe_core #(
     parameter SHIFT4 = 25,
     parameter ANCHOR = 1,
     parameter MAXW   = 1024,              // line-buffer depth: W + 6 <= MAXW
-    parameter WDIR   = "hardware/rtl/weights/"
+    parameter WDIR   = "hardware/rtl/weights/",
+    parameter NS     = 8,                 // pipe2: slots per LR pixel in every stage (16 = the original `pipe` design, 8 = v2)
+    parameter PACK   = 1,                 // pipe2p: two lanes per DSP48 where trees share activations (L1, L3, L4 at NS = 8; L4 at NS = 16); 0 = branch pipe2
+    parameter NDSP4  = (NS == 8) ? 98 : (1 << 20)   // pipe2: L4 lanes on DSPs (L1-L3 all DSP); 220 DSP - 16 requantizer DSP - 2 core - 104 L1-L3 lanes
 ) (
     input  wire        clk,
     input  wire        rst,
@@ -43,11 +46,14 @@ module sr_pipe_core #(
     reg  [2:0]  prep;                    // 0 = idle or running; counts down after start, the frame runs when it reaches 1 -> 0
     reg         run_f;                   // frame running (from the end of prep until done)
     reg  [15:0] pw_a, ph_a, w_a, h_a;    // multiplier inputs (registered: DSP A/B registers)
+    reg  [15:0] sw6, sh6, sw4, sh4, sw2, sh2;   // stage frame sizes, registered (pipe2 timing fix: fw + 2 feeding s3's column compare was the
+                                                 // critical path, WNS +0.035 ns); fw/fh are fixed from the accepted start, the stages start 5 cycles later
     reg  [31:0] npix_p, nlr_p;           // (W+6)(H+6) and W*H
     reg  [31:0] npix, nbi, nbo;          // input pixels, input beats, output beats
     reg         stage_start;             // one-cycle frame start for the stages and pipe_out
     always @(posedge clk) begin
         pw_a <= fw + 16'd6; ph_a <= fh + 16'd6; w_a <= fw; h_a <= fh;
+        sw6 <= fw + 16'd6; sh6 <= fh + 16'd6; sw4 <= fw + 16'd4; sh4 <= fh + 16'd4; sw2 <= fw + 16'd2; sh2 <= fh + 16'd2;
         npix_p <= pw_a * ph_a;
         nlr_p  <= w_a * h_a;
         stage_start <= 1'b0;
@@ -105,6 +111,8 @@ module sr_pipe_core #(
     end
 
     // ------------------------------------------------------------------ stages
+    localparam WP = (NS == 16) ? "/wpipe_" : "wpipe8_";  // weight ROM layout (export_pipe.py); same length on purpose: a shorter string would be
+                                                         // NUL-padded inside the file name (WDIR ends in "/", so "//" is harmless)
     wire         s1_start, s2_start, s3_start, s4_start;
     wire         s1_ov, s2_ov, s3_ov, s4_ov;
     wire [127:0] s1_od, s2_od, s3_od, f1_d, f2_d, f3_d;
@@ -115,32 +123,32 @@ module sr_pipe_core #(
     wire         nc1, nc2, nc3;
 
     pipe_stage #(.C_IN(3), .C_OUT(16), .K(3), .MODE(0), .SHIFT(SHIFT1), .MAXW(MAXW),
-                 .W_FILE({WDIR, "wpipe_L1.mem"}), .B_FILE({WDIR, "bias_L1.mem"}), .M_FILE({WDIR, "mult_L1.mem"})) s1 (
-        .clk(clk), .rst(rst), .start(stage_start), .in_w(fw + 16'd6), .in_h(fh + 16'd6),
+                 .NS(NS), .PACK(PACK), .W_FILE({WDIR, WP, "L1.mem"}), .B_FILE({WDIR, "bias_L1.mem"}), .M_FILE({WDIR, "mult_L1.mem"})) s1 (
+        .clk(clk), .rst(rst), .start(stage_start), .in_w(sw6), .in_h(sh6),
         .in_valid(l1_valid), .in_data(ub[23:0]), .in_ready(l1_ready), .out_ok(f1_ok), .px_start(s1_start),
         .out_valid(s1_ov), .out_data(s1_od), .anc_pop(nc1), .anc_data(24'd0));
     pipe_fifo #(.W(128)) f1 (.clk(clk), .rst(rst || stage_start), .reserve(s1_start), .ok(f1_ok), .push(s1_ov), .din(s1_od),
         .out_valid(f1_v), .dout(f1_d), .out_ready(s2_rdy), .err(f1_err));
 
     pipe_stage #(.C_IN(16), .C_OUT(16), .K(3), .MODE(1), .SHIFT(SHIFT2), .MAXW(MAXW),
-                 .W_FILE({WDIR, "wpipe_L2.mem"}), .B_FILE({WDIR, "bias_L2.mem"}), .M_FILE({WDIR, "mult_L2.mem"})) s2 (
-        .clk(clk), .rst(rst), .start(stage_start), .in_w(fw + 16'd4), .in_h(fh + 16'd4),
+                 .NS(NS), .W_FILE({WDIR, WP, "L2.mem"}), .B_FILE({WDIR, "bias_L2.mem"}), .M_FILE({WDIR, "mult_L2.mem"})) s2 (
+        .clk(clk), .rst(rst), .start(stage_start), .in_w(sw4), .in_h(sh4),
         .in_valid(f1_v), .in_data(f1_d), .in_ready(s2_rdy), .out_ok(f2_ok), .px_start(s2_start),
         .out_valid(s2_ov), .out_data(s2_od), .anc_pop(nc2), .anc_data(24'd0));
     pipe_fifo #(.W(128)) f2 (.clk(clk), .rst(rst || stage_start), .reserve(s2_start), .ok(f2_ok), .push(s2_ov), .din(s2_od),
         .out_valid(f2_v), .dout(f2_d), .out_ready(s3_rdy), .err(f2_err));
 
     pipe_stage #(.C_IN(16), .C_OUT(16), .K(1), .MODE(0), .SHIFT(SHIFT3), .MAXW(MAXW),
-                 .W_FILE({WDIR, "wpipe_L3.mem"}), .B_FILE({WDIR, "bias_L3.mem"}), .M_FILE({WDIR, "mult_L3.mem"})) s3 (
-        .clk(clk), .rst(rst), .start(stage_start), .in_w(fw + 16'd2), .in_h(fh + 16'd2),
+                 .NS(NS), .PACK(PACK), .W_FILE({WDIR, WP, "L3.mem"}), .B_FILE({WDIR, "bias_L3.mem"}), .M_FILE({WDIR, "mult_L3.mem"})) s3 (
+        .clk(clk), .rst(rst), .start(stage_start), .in_w(sw2), .in_h(sh2),
         .in_valid(f2_v), .in_data(f2_d), .in_ready(s3_rdy), .out_ok(f3_ok), .px_start(s3_start),
         .out_valid(s3_ov), .out_data(s3_od), .anc_pop(nc3), .anc_data(24'd0));
     pipe_fifo #(.W(128)) f3 (.clk(clk), .rst(rst || stage_start), .reserve(s3_start), .ok(f3_ok), .push(s3_ov), .din(s3_od),
         .out_valid(f3_v), .dout(f3_d), .out_ready(s4_rdy), .err(f3_err));
 
     pipe_stage #(.C_IN(16), .C_OUT(12), .K(3), .MODE(2), .SHIFT(SHIFT4), .ANCHOR(ANCHOR), .MAXW(MAXW),
-                 .W_FILE({WDIR, "wpipe_L4.mem"}), .B_FILE({WDIR, "bias_L4.mem"}), .M_FILE({WDIR, "mult_L4.mem"})) s4 (
-        .clk(clk), .rst(rst), .start(stage_start), .in_w(fw + 16'd2), .in_h(fh + 16'd2),
+                 .NS(NS), .NDSP(NDSP4), .PACK(PACK), .W_FILE({WDIR, WP, "L4.mem"}), .B_FILE({WDIR, "bias_L4.mem"}), .M_FILE({WDIR, "mult_L4.mem"})) s4 (
+        .clk(clk), .rst(rst), .start(stage_start), .in_w(sw2), .in_h(sh2),
         .in_valid(f3_v), .in_data(f3_d), .in_ready(s4_rdy), .out_ok(o_ok), .px_start(s4_start),
         .out_valid(s4_ov), .out_data(s4_od), .anc_pop(anc_pop), .anc_data(anc_q));
 

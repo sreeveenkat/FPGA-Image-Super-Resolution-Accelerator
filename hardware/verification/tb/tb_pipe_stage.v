@@ -10,6 +10,9 @@
 module tb_pipe_stage;
     parameter LAYER = 1;
     parameter REAL  = 0;
+    parameter NS    = 16;                       // pipe2: slots per pixel (16 = original, 8 = v2); weight files wpipe8_* for NS = 8
+    parameter NDSP  = 1 << 20;                  // pipe2: lanes on DSPs (the rest LUT multipliers; same function in simulation)
+    parameter PACK  = 0;                        // pipe2p: two lanes per DSP48 where trees share activations (pipe_mul2)
     `include "hardware/rtl/weights/network_params.vh"
     localparam C_IN   = (LAYER == 1) ? 3 : 16;
     localparam C_OUT  = (LAYER == 4) ? 12 : 16;
@@ -19,7 +22,8 @@ module tb_pipe_stage;
     localparam RSHIFT = (LAYER == 1) ? L1_SHIFT : (LAYER == 2) ? L2_SHIFT : (LAYER == 3) ? L3_SHIFT : L4_SHIFT;
     localparam [7:0] LC = "0" + LAYER;
     localparam RD = "data/golden/pipe/rand/randL";
-    localparam WF = REAL ? {"hardware/rtl/weights/wpipe_L", LC, ".mem"} : {RD, LC, "_wpipe.mem"};
+    localparam WF = (NS == 16) ? (REAL ? {"hardware/rtl/weights/wpipe_L", LC, ".mem"} : {RD, LC, "_wpipe.mem"})
+                               : (REAL ? {"hardware/rtl/weights/wpipe8_L", LC, ".mem"} : {RD, LC, "_wpipe8.mem"});
     localparam BF = REAL ? {"hardware/rtl/weights/bias_L", LC, ".mem"}  : {RD, LC, "_bias.mem"};
     localparam MF = REAL ? {"hardware/rtl/weights/mult_L", LC, ".mem"}  : {RD, LC, "_mult.mem"};
     localparam SH = REAL ? RSHIFT : 20;
@@ -35,7 +39,7 @@ module tb_pipe_stage;
     wire [8*C_OUT-1:0] out_data;
     reg  [23:0] anc_data;
 
-    pipe_stage #(.C_IN(C_IN), .C_OUT(C_OUT), .K(K), .MODE(MODE), .SHIFT(SH), .ANCHOR(ANCH), .MAXW(1024),
+    pipe_stage #(.C_IN(C_IN), .C_OUT(C_OUT), .K(K), .MODE(MODE), .SHIFT(SH), .ANCHOR(ANCH), .NS(NS), .NDSP(NDSP), .PACK(PACK), .MAXW(1024),
                  .W_FILE(WF), .B_FILE(BF), .M_FILE(MF)) dut (
         .clk(clk), .rst(rst), .start(start), .in_w(in_w), .in_h(in_h), .in_valid(in_valid), .in_data(in_data), .in_ready(in_ready),
         .out_ok(out_ok), .px_start(px_start), .out_valid(out_valid), .out_data(out_data), .anc_pop(anc_pop), .anc_data(anc_data));
@@ -152,7 +156,7 @@ module tb_pipe_stage;
         run_frame(0, cyc1);
         run_frame(0, cyc2);                                   // immediate re-run
         for (k2 = 0; k2 < sweep; k2 = k2 + 1) begin
-            run_frame(1 + (k2 * 37 + 5) % (16 * n_out), dummy); // abort at a spread of points
+            run_frame(1 + (k2 * 37 + 5) % (NS * n_out), dummy); // abort at a spread of points
             run_frame(0, dummy);
         end
         if (REAL) what = {"frame ", frame}; else what = "random weights";
@@ -161,8 +165,8 @@ module tb_pipe_stage;
         if (stall == 2) extra = ", slow consumer";
         if (sweep) extra = $sformatf("%s, %0d reset aborts + quiet checks", extra, sweep);
         if (fail == 0)
-            $display("PASS pipe_stage L%0d %s: %0dx%0d -> %0d outputs x %0d ch bit-exact, %0d cycles (%0d.%02d per output)%s, re-run OK",
-                     LAYER, what, in_w, in_h, n_out, C_OUT, cyc1, cyc1 / n_out, (cyc1 * 100 / n_out) % 100, extra);
+            $display("PASS pipe_stage L%0d NS=%0d PACK=%0d %s: %0dx%0d -> %0d outputs x %0d ch bit-exact, %0d cycles (%0d.%02d per output)%s, re-run OK",
+                     LAYER, NS, PACK, what, in_w, in_h, n_out, C_OUT, cyc1, cyc1 / n_out, (cyc1 * 100 / n_out) % 100, extra);
         else $display("FAIL pipe_stage L%0d: %0d errors", LAYER, fail);
         $finish;
     end

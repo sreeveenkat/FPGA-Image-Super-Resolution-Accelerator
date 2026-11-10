@@ -11,7 +11,7 @@
 //   0x0C CYCLES     R: cycles from the accepted start to the last output beat of the frame (running count while busy)
 //   0x10 ERROR_CODE R: 0 none | 1 TLAST before the last input beat | 2 last input beat without TLAST | 3 TKEEP != 4'hF | 4 frame size out of range (W 1..MAX_W, H 1..4096)
 //                      (start refused) | 5 internal FIFO error (never expected).  The FIRST error is kept.  Errors are only reported (except 4).
-//   0x14 VERSION    R: 32'h5352_5301  (pipeline, R3q weights + anchor, 125 MHz)
+//   0x14 VERSION    R: 32'h5352_7301  (pipeline v2 PACKED: 8 cycles per LR pixel, two multiplies per DSP48, R3q weights + anchor, branch pipe2p; pipe2 is 32'h5352_6301, pipe 32'h5352_5301)
 //   0x18 FRAME_H    RW: LR frame height H, 1..4096 (sampled at start)
 //   0x1C MAX_W      R: largest W (MAXW - 6)
 //   0x20 DBG_IN_BEATS  R: input beats accepted in the current/last frame
@@ -23,6 +23,8 @@
 // WDIR default is an ABSOLUTE path (the .mem files must be found by $readmemh during synthesis); build_m6_system.tcl points it at the checkout.
 module sr_accel_top #(
     parameter MAXW = 1024,
+    parameter PACK = 1,                   // pipe2p: DSP packing (0 = the pipe2 hardware; VERSION is not changed by it)
+    parameter NS   = 8,                   // pipe2: slots per LR pixel (8 = v2; 16 = the original pipeline, for comparison runs only: VERSION is not changed)
     parameter WDIR = "/home/sreevenkat/Desktop/venkat/sem_project_all/hardware/rtl/weights/"
 ) (
     (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 aclk CLK" *)
@@ -67,7 +69,7 @@ module sr_accel_top #(
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TREADY" *) input  wire        m_axis_tready,
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TLAST" *)  output wire        m_axis_tlast
 );
-    localparam [31:0] VERSION = 32'h5352_5301;
+    localparam [31:0] VERSION = 32'h5352_7301;
 
     // ------------------------------------------------------------------ AXI4-Lite slave: AW and W may arrive in any order, one write at a time
     reg         aw_got, w_got, bvalid, rvalid;
@@ -98,7 +100,7 @@ module sr_accel_top #(
     wire        size_ok  = (frame_w != 16'd0) && (frame_w <= MAXW - 6) && (frame_h != 16'd0) && (frame_h <= MAXH);
     wire        start_ok = start_r && !core_busy && size_ok;
 
-    sr_pipe_core #(.MAXW(MAXW), .WDIR(WDIR)) core (
+    sr_pipe_core #(.MAXW(MAXW), .WDIR(WDIR), .NS(NS), .PACK(PACK)) core (
         .clk(aclk), .rst(!aresetn || srst_r), .start(start_ok), .lr_w(frame_w), .lr_h(frame_h),
         .busy(core_busy), .done(core_done), .cycles(core_cycles), .error_flags(core_flags), .in_beats(in_beats), .out_beats(out_beats),
         .s_axis_tdata(s_axis_tdata), .s_axis_tkeep(s_axis_tkeep), .s_axis_tvalid(s_axis_tvalid), .s_axis_tready(s_axis_tready), .s_axis_tlast(s_axis_tlast),

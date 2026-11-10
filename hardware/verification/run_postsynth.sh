@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Simulate the SYNTHESIZED pipeline accelerator (branch `pipe`: sr_accel_top + sr_pipe_core, post-synthesis functional netlist) with Vivado's xsim, using the
+# Simulate the SYNTHESIZED pipeline accelerator (branch `pipe2`, NS = 8: sr_accel_top + sr_pipe_core, post-synthesis functional netlist) with Vivado's xsim, using the
 # same self-checking top testbench (tb_sr_pipe_top.v, -d POSTSYNTH) on small frames: back to back, with random stalls, error codes 1-4 + frame-size refusal.
 # The netlist is synthesized with MAXW = 32 (line buffers of 32 pixels, MAX_W = 26) so that it stays small; everything else is the real design
 # (DSP inference, ROM contents from $readmemh, BRAM/LUTRAM mapping).  This catches synthesis surprises that RTL simulation cannot.
@@ -18,7 +18,7 @@ fi
 nread=$(grep 'Synth 8-3876' $B/pipe_small.log | grep -o 'weights/[A-Za-z_0-9]*\.mem' | sort -u | wc -l)
 ndsp=$(grep -c 'DSP48E1 #' $N || true)
 echo "netlist: $nread of 12 weight files read during synthesis, $ndsp DSP48E1 instances"
-[ "$nread" -eq 12 ] && [ "$ndsp" -eq 170 ] && pass=$((pass+1)) || { echo "FAIL: expected 12 weight files and 170 DSP48E1"; fail=$((fail+1)); }
+[ "$nread" -eq 12 ] && [ "$ndsp" -eq 190 ] && pass=$((pass+1)) || { echo "FAIL: expected 12 weight files and 190 DSP48E1 (pipe2p: NS = 8, packed; as in the system build)"; fail=$((fail+1)); }
 W=$B/xsim_pipe; rm -rf $W; mkdir -p $W
 ( cd $W && xvlog -sv -i ../../../.. -d POSTSYNTH ../sr_pipe_small/postsynth.v ../../../verification/tb/tb_sr_pipe_top.v "$XILINX_VIVADO/data/verilog/src/glbl.v" > xvlog.log 2>&1 \
   && xelab -L unisims_ver -generic_top MAXW=32 tb_sr_pipe_top glbl -s sim > xelab.log 2>&1 ) || { echo "FAIL: xvlog/xelab (see $W)"; exit 1; }

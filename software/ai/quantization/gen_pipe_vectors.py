@@ -123,6 +123,7 @@ def rand_stage(rng: np.random.Generator, layer, cin, cout, k, mode, iw, ih, anch
     lanes = export_pipe.slot_lanes(w.reshape(cout, ci_w, k * k), mode)
     n = f"randL{layer}"
     write(d / f"{n}_wpipe.mem", export_pipe.lines_for(lanes))
+    write(d / f"{n}_wpipe8.mem", export_pipe.lines_for(export_pipe.slot_lanes(w.reshape(cout, ci_w, k * k), mode, 8)))   # pipe2, NS = 8
     write(d / f"{n}_bias.mem", [f"{int(v) & 0xFFFFFFFF:08x}" for v in b])
     write(d / f"{n}_mult.mem", [f"{int(v):04x}" for v in m])
     write(d / f"{n}_in.hex", pix_lines(x))

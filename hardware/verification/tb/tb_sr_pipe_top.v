@@ -10,6 +10,8 @@
 `timescale 1ns/1ps
 module tb_sr_pipe_top;
     parameter MAXW = 1024;
+    parameter PACK = 1;                        // pipe2p: DSP packing of the RTL under test
+    parameter NS   = 8;                        // pipe2: slots per LR pixel of the RTL under test (the throughput bound uses it)
     `include "hardware/rtl/weights/network_params.vh"
     localparam MAXB = 1600000;
 
@@ -34,7 +36,7 @@ module tb_sr_pipe_top;
 `ifdef POSTSYNTH
     sr_accel_top dut (                         // synthesized netlist (synth_sr_pipe.tcl small: MAXW = 32): no parameters, no internal names
 `else
-    sr_accel_top #(.MAXW(MAXW), .WDIR("hardware/rtl/weights/")) dut (
+    sr_accel_top #(.MAXW(MAXW), .NS(NS), .PACK(PACK), .WDIR("hardware/rtl/weights/")) dut (
 `endif
         .aclk(aclk), .aresetn(aresetn),
         .s_axi_awaddr(awaddr), .s_axi_awprot(3'd0), .s_axi_awvalid(awvalid), .s_axi_awready(awready),
@@ -165,6 +167,15 @@ module tb_sr_pipe_top;
         if (dut.start_ok) tcyc <= 1;
         else if (dut.core.busy && !dut.core.done) tcyc <= tcyc + 1;
     end
+    // latency (2026-11-10): CYCLES count (tcyc) at the first accepted input beat and at the first accepted output beat of the frame
+    integer lat_in = -1, lat_out = -1;
+    always @(posedge aclk) begin
+        if (dut.start_ok) begin lat_in = -1; lat_out = -1; end
+        else begin
+            if (lat_in < 0 && s_tvalid && s_tready) lat_in = tcyc;
+            if (lat_out < 0 && m_tvalid && m_tready) lat_out = tcyc;
+        end
+    end
 `endif
 
     // ---- internal stage monitors (+LAYERS=1)
@@ -244,13 +255,14 @@ module tb_sr_pipe_top;
                 axil_read(6'h0C); cyc_reg = rd;
 `ifndef POSTSYNTH
                 $display("INFO %s: highest anchor FIFO occupancy %0d of 4096 (full from 4092)", fname, amax);
+                $display("INFO %s: latency first input beat at cycle %0d, first output beat at cycle %0d (input -> output %0d cycles), CYCLES %0d", fname, lat_in, lat_out, lat_out - lat_in, tcyc);
 `endif
 `ifndef POSTSYNTH
                 if (cyc_reg != tcyc) begin $display("FAIL CYCLES register %0d, independent count %0d", cyc_reg, tcyc); errors = errors + 1; end
 `endif
-                // throughput: without stalls a frame takes 16 cycles per layer-1 output pixel plus at most 12 per padded row plus 200 (fill, I/O, control)
-                if (!stall && inj_kind == 0 && cyc_reg > 16 * (fw + 4) * (fh + 4) + 12 * (fw + 6) + 200) begin
-                    $display("FAIL %s: CYCLES %0d above the throughput bound %0d", fname, cyc_reg, 16 * (fw + 4) * (fh + 4) + 12 * (fw + 6) + 200); errors = errors + 1;
+                // throughput: without stalls a frame takes NS cycles per layer-1 output pixel plus at most 12 per padded row plus 200 (fill, I/O, control)
+                if (!stall && inj_kind == 0 && cyc_reg > NS * (fw + 4) * (fh + 4) + 12 * (fw + 6) + 200) begin
+                    $display("FAIL %s: CYCLES %0d above the throughput bound %0d", fname, cyc_reg, NS * (fw + 4) * (fh + 4) + 12 * (fw + 6) + 200); errors = errors + 1;
                 end
                 repeat (40) @(negedge aclk);
                 dma_on = 0; rx_on = 0;
@@ -277,13 +289,13 @@ module tb_sr_pipe_top;
         repeat (4) @(negedge aclk); aresetn = 1; repeat (2) @(negedge aclk);
         // quiet after reset
         repeat (50) begin @(negedge aclk); if (s_tready || m_tvalid) begin $display("FAIL stream activity after reset"); errors = errors + 1; end end
-        expect_reg(6'h14, 32'h5352_5301, "VERSION");
+        expect_reg(6'h14, 32'h5352_7301, "VERSION");
         expect_reg(6'h1C, MAXW - 6, "MAX_W");
         expect_reg(6'h04, 32'd0, "STATUS");
         expect_reg(6'h10, 32'd0, "ERROR_CODE");
         expect_reg(6'h08, 32'd0, "FRAME_W (reset)");
         expect_reg(6'h30, 32'd0, "unmapped 0x30");
-        axil_write(6'h14, 32'hFFFF_FFFF, 4'hF, 0); expect_reg(6'h14, 32'h5352_5301, "VERSION (write)");
+        axil_write(6'h14, 32'hFFFF_FFFF, 4'hF, 0); expect_reg(6'h14, 32'h5352_7301, "VERSION (write)");
         axil_write(6'h08, 32'h1234_0567, 4'h1, 1); expect_reg(6'h08, 32'h0000_0067, "FRAME_W (wstrb 0001)");
         axil_write(6'h18, 32'hABCD_0102, 4'h3, 2); expect_reg(6'h18, 32'h0000_0102, "FRAME_H");
         axil_write(6'h00, 32'd1, 4'h0, 0); repeat (5) @(negedge aclk); expect_reg(6'h04, 32'd0, "STATUS (start with wstrb 0)");
