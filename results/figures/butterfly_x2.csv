@@ -1,0 +1,4 @@
+image,psnr_y_db,ssim_y
+Bicubic,27.4370,0.91582
+R0 (board),29.2243,0.93111
+Ours, v4 (board),31.5380,0.95757

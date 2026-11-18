@@ -11,12 +11,14 @@ the routed pipeline reports and `software/analysis/cycle_model.py` Part 6 (v2 = 
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Kim, Choi, Kim, TCAS-II 65(9) 2018 [K18b] | XCKU040 | edge-orientation linear mapping (not a CNN) | -> 3840x2160 (x2) | 60 | 150 MHz | 108 | 3K | 34.78 / 31.63 / 30.48 | n/s | secondary (TODAES T6) |
 | 2 | Kim, Choi, Kim, TCSVT 29(8) 2019 [K19] | XCKU040 | CNN, 14-bit fixed | -> 3840x2160 (x2) | 60 | 150 MHz | 1920 | 151K | 36.64 / 32.47 / 31.31 | n/s | secondary (TODAES T6) |
-| 3 | Chang, Kang, Kang, TCSVT 30(1) [C18] | XC7K410T | deconvolution CNN, 13-bit fixed | -> 2880x1280 | 62.7 | 130 MHz | 1512 | 167K | 36.40 / 32.21 / 31.15 | n/s | secondary (TODAES T6) |
+| 3 | Chang, Kang, Kang, TCSVT 30(1) [C18] | XC7K410T | 13-bit FSRCNN variant (Light FSRCNN), Double MAC on DSP48E1 | -> 2880x1280 (QHD) | 141 (62.7 at UHD with ~2x BRAM) | 130 MHz | 1512 | 167K | 36.40 / 32.21 / 31.15 | 5.38 W (Xilinx power estimation, not measured) | **full** (accepted version, arXiv 1801.05997v4; read 2026-11-18; the earlier row copied from [L24] had 2880x1280 at 62.7 fps, which mixes the QHD and UHD modes) |
 | 4 | Sun et al., TCSVT 32(4) 2021 [S21] | XCKU15P | residual recurrent NN (video), 16-bit | -> 3840x2160 | 76 | 160 MHz | 1820 | 98K | 36.76 / 32.51 / 31.31 | n/s | secondary (TODAES T6) |
 | 5 | He et al., FCCM 2018, pp. 181-188 [H18] | XC7Z045 (ZC706) | FSRCNN-s, **fully layer-pipelined**, per-layer DSP allocation, 16-bit fixed; only 25.3 % of 30x30 blocks go through the CNN, the rest bilinear | 1920x1080 -> 3940x2160 | 31.7 (3 interpolators) | 100 MHz | 858 (95 %) | 103.7K (47 %) | not on Set5; 37.36 dB (Y) on SJTU 4K video (CNN only: 38.55) | n/s | **full** |
 | 6 | Liu et al., ACM TODAES 29(3) art. 53, 2024 [L24], KV260 | XCK26 (Kria KV260) | LAPAR-derived CNN, 103K params, 8-bit, Y channel only (ARM does colour) | 960x540 -> 1920x1080 | 35.79 (27.94 ms) | 200 MHz (DSP 400 MHz) | 1210 (97 %) | 65K (56 %) | 37.14 / 32.15 / 31.52 | **16.85 W board, power meter** | **full** |
 | 7 | same [L24], ZCU104 | XCZU7EV | same | 1280x720 -> 2560x1440 | 25.16 | 250 MHz (DSP 500) | 1211 | 69K | same | 23.81 W board | **full** |
 | 8 | Manabe, Shibata, Oguri, IEICE Trans. Fund. E101-A(12) 2018, pp. 2280-2289 [M18] | n/s | CNN with flips + residue number system, LUT arithmetic | 960x540 -> 1920x1080 | 60 (< 1 ms latency) | n/s | n/s | n/s | n/s | n/s | abstract |
+| 8b | George Joseph, Jayakumar E.P., VDAT 2024 [J24] | XCZU7EV (ZCU104) | FSRCNN variant (16,12,4), W8A8 QAT, FINN dataflow, interpolation + conv instead of deconv | 1920x1080 -> 3840x2160 | 24.12 | 214.53 MHz | 1114 | 55K | 35.40 / 31.57 / 32.37 (8-bit; BSD100 above Set14: different protocol) | n/s | **full** (docs/resources/papers, read 2026-11-18) |
+| 8c | Ahmed, Ali, Javed, Iqbal, URSI 2024 pp. 257-258 [A24] | Zynq-7000 (available 220 DSP / 53,200 LUT = XC7Z020 resources; 'Cora series boards') | FSRCNN, HLS, INT8 | n/s (x4 example image) | n/s ('processing time 4.35 ns', simulation) | n/s | 81 | 45K (84 %) | n/s | n/s | **full** (docs/resources/papers, read 2026-11-18) |
 | **9** | **Ours, R0 (tiled, deployed)** | **XC7Z020 (ZedBoard)** | 2,620-param CNN, INT8, RGB | **960x540 -> 1920x1080** | **0.762** | 100 MHz | 68 | 5,146 (sys) | 35.02 / 31.40 / 30.53 | 1.91 W chip (Vivado estimate, not measured) | board-measured |
 | **10** | **Ours, pipeline** | **XC7Z020 (ZedBoard)** | same network + anchor (R3q), whole-frame layer pipeline, INT8, RGB | **960x540 -> 1920x1080** | **10.49** (95.36 ms); 14.18 (70.52 ms, non-cacheable buffers) | 125 MHz | 170 (77 %) | 9,888 (19 %, sys) | 36.20 / 32.12 / 31.01 | 2.22 W chip (Vivado SAIF estimate, not measured) | board-measured |
 | 11 | Ours, pipeline v2 | XC7Z020 | same, 8 cycles/px, 118 LUT multipliers | same | **27.1** (36.95 ms, NC buffers); 16.2 cached | 125 MHz | 220 (100 %) | 20,651 (39 %) | same | 2.90 W chip (Vivado vectorless) | **board-measured 2026-11-10** |
@@ -39,12 +41,13 @@ Output megapixels per second per DSP = out_w x out_h x fps / 1e6 / DSP. It favou
 |---|---|---|---|
 | 1 Kim TCAS-II (not CNN) | 497.7 | 4.61 | no CNN: not comparable |
 | 2 Kim TCSVT | 497.7 | 0.259 | |
-| 3 Chang | 231.1 | 0.153 | |
+| 3 Chang | 519.8 | 0.344 | QHD 141 fps (corrected 2026-11-18) |
 | 4 Sun | 630.4 | 0.346 | |
 | 5 He (PKU) | 269.8 | 0.314 | 75 % of blocks bilinear |
 | 6 Liu KV260 | 74.2 | 0.061 | larger network (103K params) |
 | 10 Ours pipeline | 21.8 (29.4 NC) | 0.128 (0.173 NC) | 2,620 params |
 | 11 Ours v2 (measured) | 56.1 | 0.255 | 220 DSP |
+| 8b Joseph VDAT 2024 | 200.1 | 0.180 | 1114 DSP |
 | 12 Ours v2 packed (measured) | 56.1 | 0.295 | 190 DSP |
 | 13 Ours pipe3 (measured) | 70.4 | 0.371 | 190 DSP |
 | 14 Ours pipe4 (measured) | 93.8 | 0.441 | 213 DSP + 136 LUT multipliers |

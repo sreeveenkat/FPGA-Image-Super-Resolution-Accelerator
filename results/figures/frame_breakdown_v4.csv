@@ -1,0 +1,9 @@
+design,frame_ms,accelerator_ms,arm_padding_ms,cache_maintenance_ms
+Pipeline, 125 MHz, cached,95.36,67.19,5.79,22.38
+Pipeline, 125 MHz, NC,70.52,67.19,3.32,0.01
+v2, 125 MHz, cached,61.64,33.63,5.71,22.30
+v2, 125 MHz, NC,36.95,33.63,3.32,0.00
+v3, 142.9 MHz, cached,51.45,29.44,0.00,22.01
+v3, 142.9 MHz, NC,29.44,29.44,0.00,0.00
+v4, 142.9 MHz, cached,44.11,22.09,0.00,22.02
+v4, 142.9 MHz, NC,22.10,22.09,0.00,0.01
