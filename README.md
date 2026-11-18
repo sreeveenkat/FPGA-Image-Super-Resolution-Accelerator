@@ -77,7 +77,7 @@ Details and sources: [`docs/paper/RELATED_WORK_TABLE.md`](docs/paper/RELATED_WOR
 * Manabe et al. (FPT 2017) are faster on the same task (60 fps) on a much larger Virtex UltraScale FPGA (339k LUTs, 325 DSPs, luma only).
 * Designs on larger devices produce more pixels per second (He et al. FCCM 2018, Chang et al. TCSVT, Kim, Sun: 4-9× our DSPs).
 * Per DSP, v4 gives 0.44 output megapixels per second, the highest of the CNN designs compared.
-* Kim et al. (TCSVT 2019) use a network about as small as ours (2.56k parameters, luma only) and reach 0.44 dB more on Set5 at 4K 60 fps with all 1,920 DSPs of a Kintex UltraScale: our network design leaves quality on the table.
+* Kim et al. (TCSVT 2019, 2.56k parameters) and Sun et al. (TCSVT 2021, 2.54k parameters) use networks as small as ours, luma only, and score 0.44 and 0.56 dB more on Set5 at 4K with 1,920 and 1,820 DSPs: our network design leaves quality on the table. Sun et al. report place-and-route results, no board run.
 * The layer pipeline (He et al. 2018) and DSP packing (Double MAC, 2017) are known techniques; this project applies them to a 220-DSP device.
 
 ## Repository
@@ -112,7 +112,7 @@ Building the bitstream, the ARM programs and running on the board (Vivado/Vitis 
 * Power is a Vivado estimate only (3.06 W chip for v4, vectorless); nothing was measured with an instrument.
 * v4 meets timing with only 0.038 ns of setup slack. All measurements come from one board, one temperature range (≤ 51 °C) and one timing image.
 * Frames are loaded over JTAG, not from a camera or video input.
-* The network is small: about 1 dB PSNR below the best published designs, and fine random texture is not recovered.
+* Image quality is 0.4-0.9 dB (Set5) below the best published designs, including two networks of the same size (Kim et al. 2019, Sun et al. 2021); fine random texture is not recovered.
 * Two single first-tile failures of R0 on 2026-10-11 remain unexplained ([`results/speed/m6_board.md`](results/speed/m6_board.md)).
 
 ## References
@@ -124,6 +124,7 @@ Building the bitstream, the ARM programs and running on the board (Vivado/Vitis 
 * T. Manabe, Y. Shibata, K. Oguri, "FPGA Implementation of a Real-Time Super-Resolution System with a CNN Based on a Residue Number System", FPT 2017.
 * Y. Kim, J.-S. Choi, M. Kim, "A Real-Time Convolutional Neural Network for Super-Resolution on FPGA with Applications to 4K UHD 60 fps Video Services", IEEE TCSVT 29(8), 2019.
 * S. Lee, D. Kim, D. Nguyen, J. Lee, "Double MAC on a DSP: Boosting the Performance of Convolutional Neural Networks on FPGAs", IEEE TCAD 38(5), 2019.
+* K. Sun, M. Koch, Z. Wang, S. Jovanovic, H. Rabah, S. Simon, "An FPGA-Based Residual Recurrent Neural Network for Real-Time Video Super-Resolution", IEEE TCSVT 32(4), 2021.
 * D. Nguyen, D. Kim, J. Lee, "Double MAC: Doubling the Performance of Convolutional Neural Networks on Modern FPGAs", DATE 2017.
 * O. Ahmed et al., "Super-Resolution CNN Accelerator on Low-Cost Zynq-7000 Series SoC-based FPGA", URSI 2024.
 * G. Joseph, E. P. Jayakumar, "Quantized Neural Network Architecture for Hardware Efficient Real-Time 4K Image Super-Resolution", VDAT 2024.
