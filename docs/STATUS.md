@@ -254,3 +254,18 @@ Bug found by the random-weight test before any board run: the 6-bit borrow count
 Timing: 6 builds; build f (Performance_ExtraTimingOpt) WNS +0.038 / WHS +0.004 ns at 142.857 MHz. 960x540 bit-exact in xsim, 3,156,214 cycles; netlist 7/7; full regression 177/177 (mutation 79: 74 caught, 5 equivalent, 0 survived).
 **Board: 22.10 ms = 45.2 fps non-cacheable** (prediction 22.1), 44.1 ms cached, 119/119 byte-exact, VERSION refusals OK, die up to 50.4 C. 59.4x R0. Power not measured.
 
+
+## Paper and comparison state (2026-11-18, end of day)
+* Paper rewritten from scratch (local, git-ignored): `docs/paper/paper_v2/` (anonymous) and `docs/paper/paper_v2_professor/`, 6 pages each, headline v4 45.2 fps.
+  Every comparison row now comes from a paper read in full (Kim TCAS-II 2018, Kim TCSVT 2019, Sun TCSVT 2021, Chang TCSVT, He FCCM 2018, Liu TODAES 2024,
+  Manabe FPT 2017, Joseph VDAT 2024, Ahmed URSI 2024); packing credited to Double MAC (Nguyen DATE 2017, Lee TCAD 2019). Corrections found: Chang row
+  (QHD 141 fps, 5.38 W estimated) and Kim TCSVT row (Type-1 110k LUT). Honest finding: networks of the same size (Kim 2.56k, Sun 2.54k parameters) score
+  0.44 / 0.56 dB more on Set5. Remaining [CHECK]: DIV2K index record, Ahmed URSI venue name.
+* Step 2 (better same-size network) skipped by the owner; no retraining.
+
+## Next session: board power measurement (owner, bench multimeter, method in `docs/paper/power_procedure/power_procedure.pdf`)
+* Meter in DC V, 100 mV range, across header J21 (10 mOhm sense resistor in the 12 V input): I = V_J21 / 0.010 Ohm, P = V_in x I. Never current mode on J21.
+* States: 0 board off (zero offset), 1 on / not programmed, 2 v4 loaded idle, 3 v4 running, 4 v3 running, 5 v2 packed running, 6 R0 running; V_in once (~12 V).
+* Programs (built 2026-11-18, not yet run): `sandbox_pipe4/software/board/build/sr_app_t3_power3000_nc.elf` (~66 s), `sandbox_pipe3/.../sr_app_t3_power2200_nc.elf`
+  (~65 s), `sandbox_pipe2p/.../sr_app_t3_power2500_nc.elf` (~92 s), main `software/board/build/sr_app_t3_200f.elf` (R0, ~4.4 min).
+* After the session: fps/W and mJ/frame per design into the paper (comparison with Liu 2024: 2.12 fps/W at 16.85 W board power), README, RELATED_WORK_TABLE.

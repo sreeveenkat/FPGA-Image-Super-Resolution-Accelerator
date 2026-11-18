@@ -107,6 +107,11 @@ R0 and R2q fabrics are logically identical apart from constants, so their P2 sho
 PC side for the same table: `sudo .venv/bin/python software/analysis/cpu_baseline.py --md docs/paper/cpu_baseline.md` adds CPU package energy (RAPL); the GPU row
 (nvidia-smi) is already measured: 0.55 J per frame, GPU power only.
 
+### 4a. Plan for the 2026-11-19 power session (owner has a bench multimeter; v3 and v4 added)
+J21 DC mV method as above; states 0 (off), 1 (on, not programmed), 2 (v4 idle), 3 v4 running `sandbox_pipe4/.../sr_app_t3_power3000_nc.elf` (md5 da2bf7bf...),
+4 v3 running `sandbox_pipe3/.../sr_app_t3_power2200_nc.elf` (md5 712b58a6...), 5 v2 packed running `sandbox_pipe2p/.../sr_app_t3_power2500_nc.elf`, 6 R0 running
+`software/board/build/sr_app_t3_200f.elf`. Each run with the design's own XSA ps7_init (clock read back). Record the 30 s average per state and V_in.
+
 ## 5. Later: R3q (anchor), from `~/Desktop/venkat/sandbox_R3q` (bitstream `~/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.bit`, VERSION 0x53523201; the tree's default)
 Only after R2q passed section 3. Same steps as section 3 with the R3q tree's ELFs and files; expected values:
 
