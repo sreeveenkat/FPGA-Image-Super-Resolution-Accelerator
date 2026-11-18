@@ -2,7 +2,7 @@
 
 Source of truth: `hardware/rtl/top/sr_accel_top.v` (header comment + code). C view: `software/board/sr_regs.h`.
 `software/board/test_regs.py` (part of `hardware/verification/run_tests.sh quick`) fails when the header, the Verilog and this table disagree.
-**This is the whole-frame PIPELINE v2 PACKED version (branch `pipe2p`, VERSION 0x53527301, 8 cycles per LR pixel, two multiplies per DSP48, `docs/ARCHITECTURE_PIPELINE_V2P.md`; same registers as `pipe` 0x53525301 and `pipe2` 0x53526301). It ran on the board on 2026-11-10 (byte-exact, 27.1 fps; results in main `results/board/2026-11-10/`).**
+**This is the whole-frame PIPELINE v2 PACKED + PL PADDING version (branch `pipe3`, VERSION 0x53528301: as `pipe2p` plus CONFIG at 0x28; NOT run on a board). `pipe2p` (VERSION 0x53527301, 8 cycles per LR pixel, two multiplies per DSP48, `docs/ARCHITECTURE_PIPELINE_V2P.md`; same registers as `pipe` 0x53525301 and `pipe2` 0x53526301). It ran on the board on 2026-11-10 (byte-exact, 27.1 fps; results in main `results/board/2026-11-10/`).**
 The tiled designs (R0 0x53520602, R2q 0x53522201, R3q 0x53523201, r0_125 0x53524201, r3q_125 0x53524301) keep the old map (TILE_SIZE at 0x08, debug
 registers 0x18-0x30). Each tree's driver accepts only its own VERSION family (`VERSION & 0xFFFFFF00`).
 
@@ -16,11 +16,12 @@ registers 0x18-0x30). Each tree's driver accepts only its own VERSION family (`V
 | 0x08 | FRAME_W | RW | LR frame width W, 1..MAX_W; bits 15:0 (byte lanes 0 and 1); sampled at START; 0 after reset |
 | 0x0C | CYCLES | R | clock cycles from the accepted START to the last output beat of the frame (counts while busy, holds its value afterwards) |
 | 0x10 | ERROR_CODE | R | 0 none, 1 early `tlast` (on an input beat that is not the last), 2 last input beat without `tlast`, 3 `tkeep` != 0xF on an accepted input beat, 4 frame size out of range (W 1..MAX_W, H 1..4096; START refused, nothing runs, DONE unchanged), 5 internal FIFO error (never expected). The FIRST error is kept. |
-| 0x14 | VERSION | R | `0x53527301` (pipeline v2 packed, 8 cycles per LR pixel, R3q weights + anchor) |
+| 0x14 | VERSION | R | `0x53528301` (pipeline v2 packed + PL padding, 8 cycles per LR pixel, R3q weights + anchor; pipe2p `0x53527301`) |
 | 0x18 | FRAME_H | RW | LR frame height H, 1..4096; bits 15:0; sampled at START; 0 after reset (H + 6 must fit the core's 16-bit row counters) |
 | 0x1C | MAX_W | R | largest W: MAXW - 6 = 1018 (line-buffer depth 1024) |
 | 0x20 | DBG_IN_BEATS | R | input beats accepted in the current / last frame |
 | 0x24 | DBG_OUT_BEATS | R | output beats sent in the current / last frame |
+| 0x28 | CONFIG | RW | bit0 PAD_EN (pipe3): 1 = the input stream is the RAW W x H x 3 frame, ceil(3WH/4) beats, padded in the PL; 0 (reset) = the replicate-padded (W+6) x (H+6) frame as before. Sampled at start |
 
 ## Behaviour as implemented (read this before writing driver code)
 * **One frame per START.** Input: the replicate-padded LR frame, (W+6) x (H+6) pixels, RGB raster `[y][x][c]`, little-endian 32-bit beats

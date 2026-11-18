@@ -27,11 +27,12 @@ extern uint32_t sr_split_calls;
 
 /* Optional non-cacheable DMA buffers (compile-time flags, both OFF by default: the code is then the same as without this block).
  *   -DSR_NC_OUT : the output-image region [SR_OUT_ADDR, +SR_OUT_SIZE) = 0x12000000 + 16 MB = sections 0x120..0x12F (the DMA writes it)
+ *   -DSR_NC_IN  : (pipe3) the raw input-image region [SR_IN_ADDR, +SR_IN_SIZE) = 0x10000000 + 32 MB (the DMA reads it with PL padding)
  *   -DSR_NC_PAD : the padded-input region [SR_PAD_ADDR, +SR_PAD_SIZE) = 0x14000000 + 32 MB = sections 0x140..0x15F (the DMA reads it)
  * sr_nc_init() (main.c calls it once after sr_init) cleans + invalidates each region, then marks its 1 MB sections Normal Non-cacheable with Xil_SetTlbAttributes.
  * sr_run_frame_len() then skips the flush / invalidate of a buffer INSIDE such a region; for the padded input it drains the write buffers instead (DSB + PL310 cache
  * sync), so the DMA sees every byte the ARM wrote.  Buffers outside the regions (T1 / T5 tile buffers, test arrays) keep the cached path. */
-#if defined(SR_NC_OUT) || defined(SR_NC_PAD)
+#if defined(SR_NC_OUT) || defined(SR_NC_PAD) || defined(SR_NC_IN)
 void sr_nc_init(void);
 void sr_write_drain(void);
 #endif
@@ -73,6 +74,7 @@ int      sr_init(sr_dev_t *d);                                   /* DMA init, VE
 int      sr_soft_reset(sr_dev_t *d);                             /* CONTROL.SRESET and wait until STATUS is idle */
 int      sr_run_frame(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint32_t h);  /* in: padded (w+6)x(h+6)x3, out: 2w x 2h x 3; resets DMA + core after any error */
 int      sr_run_frame_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint32_t h, uint32_t in_len, uint32_t out_len);   /* test only: wrong lengths on purpose */
+int      sr_run_frame_raw(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint32_t h);  /* pipe3: in = raw w x h x 3, padded in the PL (CONFIG.PAD_EN) */
 int      sr_run_tile(sr_dev_t *d, const uint8_t *in, uint8_t *out); /* the golden tile as a 64 x 64 frame: in 14,700 B, out 49,152 B */
 int      sr_run_tile_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t in_len, uint32_t out_len);   /* test only: wrong lengths on purpose */
 int      sr_reset_all(sr_dev_t *d);                              /* core soft reset, DMA reset (wait), core soft reset, STATUS idle + ERROR_CODE 0 */

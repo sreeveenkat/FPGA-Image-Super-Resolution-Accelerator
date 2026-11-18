@@ -3,7 +3,7 @@
 #include "xil_io.h"
 #include "xil_printf.h"
 #include "xstatus.h"
-#if defined(SR_NC_OUT) || defined(SR_NC_PAD)
+#if defined(SR_NC_OUT) || defined(SR_NC_PAD) || defined(SR_NC_IN)
 #include "xil_mmu.h"
 #include "xpseudo_asm.h"
 #include "xparameters_ps.h"
@@ -36,6 +36,9 @@ void sr_nc_init(void)
 #endif
 #ifdef SR_NC_PAD
     nc_region(SR_PAD_ADDR, SR_PAD_SIZE);
+#endif
+#ifdef SR_NC_IN
+    nc_region(SR_IN_ADDR, SR_IN_SIZE);                             /* pipe3: the raw input image (PL padding reads it directly) */
 #endif
     dsb();
 }
@@ -211,21 +214,38 @@ int sr_run_frame(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint3
     return sr_run_frame_len(d, in, out, w, h, 4u * SR_FRAME_IN_BEATS(w, h), SR_FRAME_OUT_BYTES(w, h));
 }
 
+static int run_frame(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint32_t h, uint32_t in_len, uint32_t out_len, int pad);
+
 /* in_len / out_len other than the frame sizes only for the recovery test (main.c SR_TEST=5): they make the stream or the DMA fail on purpose */
 int sr_run_frame_len(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint32_t h, uint32_t in_len, uint32_t out_len)
 {
+    return run_frame(d, in, out, w, h, in_len, out_len, 0);
+}
+
+/* pipe3: `in` = the RAW w x h x 3 frame (CONFIG.PAD_EN = 1: the PL does the replicate padding; up to 3 bytes past its end are read) */
+int sr_run_frame_raw(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint32_t h)
+{
+    return run_frame(d, in, out, w, h, 4u * SR_FRAME_RAW_BEATS(w, h), SR_FRAME_OUT_BYTES(w, h), 1);
+}
+
+static int run_frame(sr_dev_t *d, const uint8_t *in, uint8_t *out, uint32_t w, uint32_t h, uint32_t in_len, uint32_t out_len, int pad)
+{
     int rc;
-    const uint32_t in_bytes = 4u * SR_FRAME_IN_BEATS(w, h), out_bytes = SR_FRAME_OUT_BYTES(w, h);
+    const uint32_t in_bytes = pad ? 4u * SR_FRAME_RAW_BEATS(w, h) : 4u * SR_FRAME_IN_BEATS(w, h), out_bytes = SR_FRAME_OUT_BYTES(w, h);
     if (reg_rd(d, SR_REG_STATUS) & SR_STATUS_BUSY) { sr_dump(d, "core busy before start"); recover(d); return SR_RC_BUSY; }
     SR_TS_BEGIN();
     reg_wr(d, SR_REG_FRAME_W, w);
     reg_wr(d, SR_REG_FRAME_H, h);
+    reg_wr(d, SR_REG_CONFIG, pad ? SR_CFG_PAD_EN : 0u);
     SR_TS(0);
 
     /* Caches: the DMA reads/writes DDR directly.  FLUSH (clean + invalidate) the input so the DMA sees the ARM's bytes, and flush the OUTPUT buffer too, so no
      * dirty line of it can be evicted later on top of the DMA's data; invalidate it again after the DMA is done so the ARM reads DDR, not stale cache lines. */
 #ifdef SR_NC_PAD
     if (sr_inside(in, SR_PAD_ADDR, SR_PAD_SIZE)) sr_write_drain(); else
+#endif
+#ifdef SR_NC_IN
+    if (sr_inside(in, SR_IN_ADDR, SR_IN_SIZE)) sr_write_drain(); else
 #endif
     Xil_DCacheFlushRange((UINTPTR)in, in_bytes > in_len ? in_bytes : in_len);
     SR_TS(1);

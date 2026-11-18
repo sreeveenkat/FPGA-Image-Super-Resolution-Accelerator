@@ -42,13 +42,13 @@ def c_values(names, exprs=()):
     return {k: int(v) for k, v in (l.split("=") for l in out.split())}
 
 
-REGS = ["CONTROL", "STATUS", "FRAME_W", "CYCLES", "ERROR_CODE", "VERSION", "FRAME_H", "MAX_W", "DBG_IN_BEATS", "DBG_OUT_BEATS"]
+REGS = ["CONTROL", "STATUS", "FRAME_W", "CYCLES", "ERROR_CODE", "VERSION", "FRAME_H", "MAX_W", "DBG_IN_BEATS", "DBG_OUT_BEATS", "CONFIG"]
 NAMES = [f"SR_REG_{n}" for n in REGS] + [
     "SR_CTRL_START", "SR_CTRL_SRESET", "SR_STATUS_BUSY", "SR_STATUS_DONE", "SR_STATUS_ERROR",
     "SR_ERR_NONE", "SR_ERR_EARLY_TLAST", "SR_ERR_MISSING_TLAST", "SR_ERR_BAD_TKEEP", "SR_ERR_BAD_SIZE", "SR_ERR_INTERNAL",
-    "SR_VERSION", "SR_MAX_W", "SR_MAX_H", "SR_HALO", "SR_HC", "SR_TILE_IN_BYTES", "SR_TILE_OUT_BYTES"]
+    "SR_CFG_PAD_EN", "SR_VERSION", "SR_MAX_W", "SR_MAX_H", "SR_HALO", "SR_HC", "SR_TILE_IN_BYTES", "SR_TILE_OUT_BYTES"]
 C = c_values(NAMES, [("IN_BEATS_960", "SR_FRAME_IN_BEATS(960u, 540u)"), ("OUT_BYTES_960", "SR_FRAME_OUT_BYTES(960u, 540u)"),
-                     ("IN_BYTES_64", "SR_FRAME_IN_BYTES(64u, 64u)"), ("OUT_BYTES_64", "SR_FRAME_OUT_BYTES(64u, 64u)")])
+                     ("IN_BYTES_64", "SR_FRAME_IN_BYTES(64u, 64u)"), ("RAW_BEATS_960", "SR_FRAME_RAW_BEATS(960u, 540u)"), ("RAW_BEATS_5", "SR_FRAME_RAW_BEATS(5u, 1u)"), ("OUT_BYTES_64", "SR_FRAME_OUT_BYTES(64u, 64u)")])
 
 top = open(V_TOP).read()
 core = open(V_CORE).read()
@@ -65,7 +65,8 @@ MAXW = int(m.group(1)) if m else 0
 check(MAXW - 6 == C["SR_MAX_W"], f"MAX_W: Verilog MAXW - 6 = {MAXW - 6} vs SR_MAX_W {C['SR_MAX_W']}")
 check(C["SR_TILE_IN_BYTES"] == C["IN_BYTES_64"] == 14700 and C["SR_TILE_OUT_BYTES"] == C["OUT_BYTES_64"] == 49152, "golden tile = 64 x 64 frame sizes")
 check(C["IN_BEATS_960"] == (3 * 966 * 546 + 3) // 4 and C["OUT_BYTES_960"] == 1920 * 1080 * 3, "frame size macros at 960 x 540")
-must(r"nbi\s*<=\s*\(3 \* npix_p \+ 3\) >> 2;", ccode, "input beat count in sr_pipe_core")
+must(r"nbi\s*<=\s*pe \? \(3 \* nlr_p \+ 3\) >> 2 : \(3 \* npix_p \+ 3\) >> 2;", ccode, "input beat count in sr_pipe_core (raw with PAD_EN, padded without)")
+check(C["RAW_BEATS_960"] == (3 * 960 * 540 + 3) // 4 and C["RAW_BEATS_5"] == 4, "raw frame beat macro (PAD_EN = 1)")
 must(r"pw_a <= fw \+ 16'd6; ph_a <= fh \+ 16'd6;", ccode, "padded size (W+6, H+6) in sr_pipe_core")
 must(r"nbo  <= 3 \* nlr_p;", ccode, "output beat count 3WH in sr_pipe_core")
 
@@ -73,7 +74,8 @@ must(r"nbo  <= 3 \* nlr_p;", ccode, "output beat count 3WH in sr_pipe_core")
 cases = {int(n) * 4: e.strip() for n, e in re.findall(r"4'd(\d+):\s+rdata <= (.*?);", code)}
 check(len(cases) == len(REGS), f"expected {len(REGS)} read-case entries, found {len(cases)}")
 exp_reads = {"CONTROL": "32'd0", "FRAME_W": "{16'd0, frame_w}", "CYCLES": "core_cycles", "ERROR_CODE": "{29'd0, err_code}", "VERSION": "VERSION",
-             "FRAME_H": "{16'd0, frame_h}", "MAX_W": "MAXW - 6", "DBG_IN_BEATS": "in_beats", "DBG_OUT_BEATS": "out_beats"}
+             "FRAME_H": "{16'd0, frame_h}", "MAX_W": "MAXW - 6", "DBG_IN_BEATS": "in_beats", "DBG_OUT_BEATS": "out_beats",
+             "CONFIG": "{31'd0, pad_en}"}
 for n, expr in exp_reads.items():
     off = C[f"SR_REG_{n}"]
     check(cases.get(off) == expr, f"{n} (offset 0x{off:02x}): Verilog read value {cases.get(off)!r}, expected {expr!r}")
@@ -89,6 +91,9 @@ else:
     check(bits.get("(err_code != 3'd0)") == 2 and C["SR_STATUS_ERROR"] == 4, "STATUS.error bit")
 
 # ---- write side
+m = must(r"aw_addr\[5:2\]\s*==\s*4'd(\d+)\s*&&\s*w_strb\[0\]\)\s*pad_en\s*<=\s*w_data\[(\d+)\]", code, "CONFIG write decode (pipe3)")
+if m:
+    check(int(m.group(1)) * 4 == C["SR_REG_CONFIG"] and 1 << int(m.group(2)) == C["SR_CFG_PAD_EN"], "CONFIG write address / PAD_EN bit")
 m = must(r"aw_addr\[5:2\]\s*==\s*4'd(\d+)\s*&&\s*w_strb\[0\]", code, "CONTROL write decode")
 if m:
     check(int(m.group(1)) * 4 == C["SR_REG_CONTROL"], "CONTROL write address")

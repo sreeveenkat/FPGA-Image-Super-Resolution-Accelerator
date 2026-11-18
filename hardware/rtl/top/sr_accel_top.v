@@ -11,13 +11,16 @@
 //   0x0C CYCLES     R: cycles from the accepted start to the last output beat of the frame (running count while busy)
 //   0x10 ERROR_CODE R: 0 none | 1 TLAST before the last input beat | 2 last input beat without TLAST | 3 TKEEP != 4'hF | 4 frame size out of range (W 1..MAX_W, H 1..4096)
 //                      (start refused) | 5 internal FIFO error (never expected).  The FIRST error is kept.  Errors are only reported (except 4).
-//   0x14 VERSION    R: 32'h5352_7301  (pipeline v2 PACKED: 8 cycles per LR pixel, two multiplies per DSP48, R3q weights + anchor, branch pipe2p; pipe2 is 32'h5352_6301, pipe 32'h5352_5301)
+//   0x14 VERSION    R: 32'h5352_8301  (branch pipe3 = pipeline v2 packed + PL padding (CONFIG bit0) + timing registers for 142.86 MHz; pipe2p is 32'h5352_7301,
+//                      pipe2 32'h5352_6301, pipe 32'h5352_5301)
 //   0x18 FRAME_H    RW: LR frame height H, 1..4096 (sampled at start)
 //   0x1C MAX_W      R: largest W (MAXW - 6)
 //   0x20 DBG_IN_BEATS  R: input beats accepted in the current/last frame
 //   0x24 DBG_OUT_BEATS R: output beats sent in the current/last frame
+//   0x28 CONFIG     RW: bit0 PAD_EN (pipe3): 1 = the input stream is the RAW W x H frame, ceil(3 W H / 4) beats, and the core does the replicate padding;
+//                      0 (reset) = the padded stream below.  Sampled at start.  Other bits read 0.
 //   other addresses read 0, writes to them are accepted and ignored (OKAY response).
-// Streams: input = the replicate-padded LR frame, ceil(3 (W+6)(H+6) / 4) beats (the last one may carry unused bytes), TLAST on the last beat;
+// Streams: input (PAD_EN = 0) = the replicate-padded LR frame, ceil(3 (W+6)(H+6) / 4) beats (the last one may carry unused bytes), TLAST on the last beat;
 // output = 3 W H beats (2W x 2H x 3 bytes, raster), TLAST on the last beat.  s_axis_tready stays low until a frame has started.
 //
 // WDIR default is an ABSOLUTE path (the .mem files must be found by $readmemh during synthesis); build_m6_system.tcl points it at the checkout.
@@ -28,7 +31,7 @@ module sr_accel_top #(
     parameter WDIR = "/home/sreevenkat/Desktop/venkat/sem_project_all/hardware/rtl/weights/"
 ) (
     (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 aclk CLK" *)
-    (* X_INTERFACE_PARAMETER = "ASSOCIATED_BUSIF s_axi:s_axis:m_axis, ASSOCIATED_RESET aresetn, FREQ_HZ 125000000" *)
+    (* X_INTERFACE_PARAMETER = "ASSOCIATED_BUSIF s_axi:s_axis:m_axis, ASSOCIATED_RESET aresetn" *)
     input  wire        aclk,
     (* X_INTERFACE_INFO = "xilinx.com:signal:reset:1.0 aresetn RST" *)
     (* X_INTERFACE_PARAMETER = "POLARITY ACTIVE_LOW" *)
@@ -69,7 +72,7 @@ module sr_accel_top #(
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TREADY" *) input  wire        m_axis_tready,
     (* X_INTERFACE_INFO = "xilinx.com:interface:axis:1.0 m_axis TLAST" *)  output wire        m_axis_tlast
 );
-    localparam [31:0] VERSION = 32'h5352_7301;
+    localparam [31:0] VERSION = 32'h5352_8301;
 
     // ------------------------------------------------------------------ AXI4-Lite slave: AW and W may arrive in any order, one write at a time
     reg         aw_got, w_got, bvalid, rvalid;
@@ -93,6 +96,7 @@ module sr_accel_top #(
     // ------------------------------------------------------------------ the accelerator
     reg         start_r, srst_r;                              // one-cycle pulses
     reg  [15:0] frame_w, frame_h;
+    reg         pad_en;                                       // CONFIG bit0 (pipe3)
     wire        core_busy, core_done;
     wire [31:0] core_cycles, in_beats, out_beats;
     wire [3:0]  core_flags;
@@ -101,7 +105,7 @@ module sr_accel_top #(
     wire        start_ok = start_r && !core_busy && size_ok;
 
     sr_pipe_core #(.MAXW(MAXW), .WDIR(WDIR), .NS(NS), .PACK(PACK)) core (
-        .clk(aclk), .rst(!aresetn || srst_r), .start(start_ok), .lr_w(frame_w), .lr_h(frame_h),
+        .clk(aclk), .rst(!aresetn || srst_r), .start(start_ok), .lr_w(frame_w), .lr_h(frame_h), .pad_en(pad_en),
         .busy(core_busy), .done(core_done), .cycles(core_cycles), .error_flags(core_flags), .in_beats(in_beats), .out_beats(out_beats),
         .s_axis_tdata(s_axis_tdata), .s_axis_tkeep(s_axis_tkeep), .s_axis_tvalid(s_axis_tvalid), .s_axis_tready(s_axis_tready), .s_axis_tlast(s_axis_tlast),
         .m_axis_tdata(m_axis_tdata), .m_axis_tvalid(m_axis_tvalid), .m_axis_tready(m_axis_tready), .m_axis_tlast(m_axis_tlast));
@@ -132,7 +136,7 @@ module sr_accel_top #(
         start_r <= 1'b0;
         srst_r  <= 1'b0;
         if (!aresetn) begin
-            aw_got <= 1'b0; w_got <= 1'b0; bvalid <= 1'b0; frame_w <= 16'd0; frame_h <= 16'd0;
+            aw_got <= 1'b0; w_got <= 1'b0; bvalid <= 1'b0; frame_w <= 16'd0; frame_h <= 16'd0; pad_en <= 1'b0;
         end else begin
             if (s_axi_awvalid && s_axi_awready) begin aw_got <= 1'b1; aw_addr <= s_axi_awaddr; end
             if (s_axi_wvalid  && s_axi_wready)  begin w_got  <= 1'b1; w_data <= s_axi_wdata; w_strb <= s_axi_wstrb; end
@@ -146,6 +150,7 @@ module sr_accel_top #(
                     if (w_strb[0]) frame_w[7:0]  <= w_data[7:0];
                     if (w_strb[1]) frame_w[15:8] <= w_data[15:8];
                 end
+                if (aw_addr[5:2] == 4'd10 && w_strb[0]) pad_en <= w_data[0];
                 if (aw_addr[5:2] == 4'd6) begin
                     if (w_strb[0]) frame_h[7:0]  <= w_data[7:0];
                     if (w_strb[1]) frame_h[15:8] <= w_data[15:8];
@@ -173,6 +178,7 @@ module sr_accel_top #(
                     4'd7:    rdata <= MAXW - 6;
                     4'd8:    rdata <= in_beats;
                     4'd9:    rdata <= out_beats;
+                    4'd10:   rdata <= {31'd0, pad_en};
                     default: rdata <= 32'd0;
                 endcase
             end

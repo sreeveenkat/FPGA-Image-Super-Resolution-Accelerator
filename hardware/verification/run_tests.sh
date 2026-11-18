@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# RTL regression of the whole-frame PIPELINE v2 PACKED (branch `pipe2p`, docs/ARCHITECTURE_PIPELINE_V2P.md; Icarus Verilog).  PACK = 1 (two lanes per
+# RTL regression of the whole-frame PIPELINE v2 PACKED + PL padding (branch `pipe3`, from pipe2p; docs/ARCHITECTURE_PIPELINE_V2P.md; Icarus Verilog).
+#   pipe3: every top frame test also runs with CONFIG.PAD_EN = 1 (raw input, padded in the PL) and mixed; PAD_EN = 0 must keep the pipe2p cycle counts.  PACK = 1 (two lanes per
 #   DSP48, the default) and PACK = 0 (the pipe2 / pipe hardware) are both tested.  Run from anywhere:
 #   Every stage and the top are tested with NS = 8 (v2, the default) AND NS = 16 (the original `pipe` design, which must stay exact).
 #   hardware/verification/run_tests.sh [quick|full]
@@ -78,10 +79,19 @@ build top $PIPE hardware/rtl/top/sr_accel_top.v $TB/tb_sr_pipe_top.v && {
     run top +F0=p13x7 +ERR=1 +SWEEP=6
     run top +F0=gtile
     run top +F0=pramp +F1=p13x7 +STALL=2                    # slow DMA sink: output banks and FIFOs fill, back-pressure through every stage
+    # pipe3: PAD_EN = 0 keeps the pipe2p cycle counts exactly (p13x7 1717, pramp 2325, preal2 11237)
+    out="$(vvp -n "$TMP/top.vvp" +F0=p13x7 +F1=pramp +F2=preal2 +PAD=0 2>&1 | grep -v 'finish called\|Not enough words')"; echo "$out"
+    if echo "$out" | grep -q '^PASS' && ! echo "$out" | grep -q '^FAIL' && echo "$out" | grep -q 'CYCLES 1717).*CYCLES 2325).*CYCLES 11237)'; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL PAD_EN = 0 differs from pipe2p"; fi
+    run top $SMALL +PAD=1 +LAYERS=1                         # pipe3: raw frames, padded in the PL
+    run top $SMALL +PAD=1 +STALL=1
+    run top $SMALL +PAD=2 +STALL=2                          # PAD_EN alternating frame by frame, slow sink
+    run top +F0=p13x7 +PAD=1 +ERR=1 +SWEEP=6
     if [ "$MODE" = full ]; then
         run top +F0=preal +F1=gtile +LAYERS=1
         run top +F0=preal +F1=preal2 +STALL=1
         run top +F0=preal2 +SWEEP=12 +STALL=1
+        run top +F0=preal +F1=preal2 +PAD=1 +STALL=1 +LAYERS=1
+        run top +F0=preal2 +PAD=1 +SWEEP=12 +STALL=1
     fi
 }
 echo "== accelerator top with NS = 16 (the original pipeline; cycle counts must equal branch pipe: p13x7 3241, pramp 4433, preal2 22089)"
@@ -109,8 +119,10 @@ if [ "$MODE" = full ]; then
     if echo "$out" | grep -q '^SKIP'; then :; elif echo "$out" | grep -q '^PASS'; then pass=$((pass+1)); else fail=$((fail+1)); fi
     echo "== frames at the counter limits in xsim: 192x192 and 960x24 (> 8,192 anchor pixels: FIFO pointer wrap), 1018x4 (MAX_W: last line-buffer/bank address), 1x4096 (MAX_H)"
     for fr in p192 pw960x24 pmaxw ptall; do
-        out="$(hardware/verification/run_fullframe.sh $fr 2>&1)"; echo "$out" | grep -E '^(PASS|FAIL)'
+      for pd in 0 1; do                                     # pipe3: also with PL padding (row buffer at MAX_W, 4096 rows)
+        out="$(hardware/verification/run_fullframe.sh $fr -testplusarg PAD=$pd 2>&1)"; echo "$out" | grep -E '^(PASS|FAIL)'
         if echo "$out" | grep -q '^PASS' && ! echo "$out" | grep -q '^FAIL'; then pass=$((pass+1)); else fail=$((fail+1)); fi
+      done
     done
     echo "== pipeline mutation test: deliberate RTL defects, each must be caught (mutate_pipe.py exits 0 only then)"
     out="$($PY hardware/verification/mutate_pipe.py 2>&1)"; echo "$out"            # the whole mutant table (runpy would keep only the last lines)

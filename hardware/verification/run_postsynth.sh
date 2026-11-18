@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Simulate the SYNTHESIZED pipeline accelerator (branch `pipe2`, NS = 8: sr_accel_top + sr_pipe_core, post-synthesis functional netlist) with Vivado's xsim, using the
+# Simulate the SYNTHESIZED pipeline accelerator (branch `pipe3` = pipe2p + PL padding; NS = 8: sr_accel_top + sr_pipe_core, post-synthesis functional netlist) with Vivado's xsim, using the
 # same self-checking top testbench (tb_sr_pipe_top.v, -d POSTSYNTH) on small frames: back to back, with random stalls, error codes 1-4 + frame-size refusal.
 # The netlist is synthesized with MAXW = 32 (line buffers of 32 pixels, MAX_W = 26) so that it stays small; everything else is the real design
 # (DSP inference, ROM contents from $readmemh, BRAM/LUTRAM mapping).  This catches synthesis surprises that RTL simulation cannot.
@@ -12,7 +12,7 @@ N=$B/sr_pipe_small/postsynth.v
 pass=0; fail=0
 [ -f data/golden/pipe/gtile_meta.txt ] || .venv/bin/python software/ai/quantization/gen_pipe_vectors.py > /dev/null || exit 1
 if [ ! -f $N ] || [ -n "$(find hardware/rtl -name '*.v' -newer $N -o -name '*.mem' -newer $N | head -1)" ]; then
-    vivado -mode batch -nojournal -log $B/pipe_small.log -source hardware/vivado/scripts/synth_sr_pipe.tcl -tclargs 8.0 small > /dev/null 2>&1
+    vivado -mode batch -nojournal -log $B/pipe_small.log -source hardware/vivado/scripts/synth_sr_pipe.tcl -tclargs 7.0 small > /dev/null 2>&1
 fi
 [ -f $N ] || { echo "FAIL: netlist not written (see $B/pipe_small.log)"; exit 1; }
 nread=$(grep 'Synth 8-3876' $B/pipe_small.log | grep -o 'weights/[A-Za-z_0-9]*\.mem' | sort -u | wc -l)
@@ -31,6 +31,9 @@ F="-testplusarg F0=p13x7 -testplusarg F1=p1x1 -testplusarg F2=p2x3 -testplusarg 
 runx frames $F
 runx stalls $F -testplusarg STALL=1
 runx errors -testplusarg F0=p5x4 -testplusarg ERR=1
+runx pad $F -testplusarg PAD=1                                  # pipe3: raw frames, padded in the PL
+runx padmix $F -testplusarg PAD=2 -testplusarg STALL=1
+runx paderr -testplusarg F0=p5x4 -testplusarg PAD=1 -testplusarg ERR=1
 rm -f clockInfo.txt xsim.jou xsim_*.backup.jou webtalk*.jou webtalk*.log   # xsim writes these into the working directory (the project root)
 echo "== post-synthesis summary: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
