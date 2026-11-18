@@ -16,7 +16,7 @@ the routed pipeline reports and `software/analysis/cycle_model.py` Part 6 (v2 = 
 | 5 | He et al., FCCM 2018, pp. 181-188 [H18] | XC7Z045 (ZC706) | FSRCNN-s, **fully layer-pipelined**, per-layer DSP allocation, 16-bit fixed; only 25.3 % of 30x30 blocks go through the CNN, the rest bilinear | 1920x1080 -> 3940x2160 | 31.7 (3 interpolators) | 100 MHz | 858 (95 %) | 103.7K (47 %) | not on Set5; 37.36 dB (Y) on SJTU 4K video (CNN only: 38.55) | n/s | **full** |
 | 6 | Liu et al., ACM TODAES 29(3) art. 53, 2024 [L24], KV260 | XCK26 (Kria KV260) | LAPAR-derived CNN, 103K params, 8-bit, Y channel only (ARM does colour) | 960x540 -> 1920x1080 | 35.79 (27.94 ms) | 200 MHz (DSP 400 MHz) | 1210 (97 %) | 65K (56 %) | 37.14 / 32.15 / 31.52 | **16.85 W board, power meter** | **full** |
 | 7 | same [L24], ZCU104 | XCZU7EV | same | 1280x720 -> 2560x1440 | 25.16 | 250 MHz (DSP 500) | 1211 | 69K | same | 23.81 W board | **full** |
-| 8 | Manabe, Shibata, Oguri, IEICE Trans. Fund. E101-A(12) 2018, pp. 2280-2289 [M18] | n/s | CNN with flips + residue number system, LUT arithmetic | 960x540 -> 1920x1080 | 60 (< 1 ms latency) | n/s | n/s | n/s | n/s | n/s | abstract |
+| 8 | Manabe, Shibata, Oguri, FPT 2017 pp. 299-300 [M17] (conference version of IEICE E101-A(12) 2018 [M18]) | XCVU095 (Virtex UltraScale) | 4-layer fully pipelined CNN, 7,409 param., Y only, residue number system in LUTs, flip method, LReLU, 10-bit fractions | 960x540 -> 1920x1080 | ~60 (latency < 1 ms) | 133.3 MHz (LR part 33.3 MHz) | 325 (42 %) | 339K (63 %) | 31.28 dB on 20 own Full-HD images (not Set5/14/BSD100) | n/s | **full** for [M17] (text provided by the owner, 2026-11-18); [M18] abstract only |
 | 8b | George Joseph, Jayakumar E.P., VDAT 2024 [J24] | XCZU7EV (ZCU104) | FSRCNN variant (16,12,4), W8A8 QAT, FINN dataflow, interpolation + conv instead of deconv | 1920x1080 -> 3840x2160 | 24.12 | 214.53 MHz | 1114 | 55K | 35.40 / 31.57 / 32.37 (8-bit; BSD100 above Set14: different protocol) | n/s | **full** (docs/resources/papers, read 2026-11-18) |
 | 8c | Ahmed, Ali, Javed, Iqbal, URSI 2024 pp. 257-258 [A24] | Zynq-7000 (available 220 DSP / 53,200 LUT = XC7Z020 resources; 'Cora series boards') | FSRCNN, HLS, INT8 | n/s (x4 example image) | n/s ('processing time 4.35 ns', simulation) | n/s | 81 | 45K (84 %) | n/s | n/s | **full** (docs/resources/papers, read 2026-11-18) |
 | **9** | **Ours, R0 (tiled, deployed)** | **XC7Z020 (ZedBoard)** | 2,620-param CNN, INT8, RGB | **960x540 -> 1920x1080** | **0.762** | 100 MHz | 68 | 5,146 (sys) | 35.02 / 31.40 / 30.53 | 1.91 W chip (Vivado estimate, not measured) | board-measured |
@@ -47,6 +47,7 @@ Output megapixels per second per DSP = out_w x out_h x fps / 1e6 / DSP. It favou
 | 6 Liu KV260 | 74.2 | 0.061 | larger network (103K params) |
 | 10 Ours pipeline | 21.8 (29.4 NC) | 0.128 (0.173 NC) | 2,620 params |
 | 11 Ours v2 (measured) | 56.1 | 0.255 | 220 DSP |
+| 8 Manabe FPT 2017 | 124.4 | 0.383 | mostly LUT arithmetic (RNS): per-DSP figure overstates DSP efficiency |
 | 8b Joseph VDAT 2024 | 200.1 | 0.180 | 1114 DSP |
 | 12 Ours v2 packed (measured) | 56.1 | 0.295 | 190 DSP |
 | 13 Ours pipe3 (measured) | 70.4 | 0.371 | 190 DSP |

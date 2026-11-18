@@ -74,6 +74,7 @@ Details and sources: [`docs/paper/RELATED_WORK_TABLE.md`](docs/paper/RELATED_WOR
 
 * On the same task (960×540 → 1080p), v4 runs at 45.2 fps with 213 DSP; Liu et al. (TODAES 2024, Kria KV260) report 35.8 fps with 1,210 DSP,
   but with a 40× larger network and 0.94 dB more PSNR on Set5. This is a cheaper design point, not a better design.
+* Manabe et al. (FPT 2017) are faster on the same task (60 fps) on a much larger Virtex UltraScale FPGA (339k LUTs, 325 DSPs, luma only).
 * Designs on larger devices produce more pixels per second (He et al. FCCM 2018, Chang et al. TCSVT, Kim, Sun: 4-9× our DSPs).
 * Per DSP, v4 gives 0.44 output megapixels per second, the highest of the CNN designs compared.
 * The layer pipeline (He et al. 2018) and DSP packing (Double MAC, 2017) are known techniques; this project applies them to a 220-DSP device.
@@ -119,6 +120,7 @@ Building the bitstream, the ARM programs and running on the board (Vivado/Vitis 
 * Z. He et al., "FPGA-Based Real-Time Super-Resolution System for Ultra High Definition Videos", FCCM 2018.
 * H. Liu et al., "A High-Performance Accelerator for Real-Time Super-Resolution on Edge FPGAs", ACM TODAES 29(3), 2024.
 * J.-W. Chang, K.-W. Kang, S.-J. Kang, "An Energy-Efficient FPGA-Based Deconvolutional Neural Networks Accelerator for Single Image Super-Resolution", IEEE TCSVT.
+* T. Manabe, Y. Shibata, K. Oguri, "FPGA Implementation of a Real-Time Super-Resolution System with a CNN Based on a Residue Number System", FPT 2017.
 * D. Nguyen, D. Kim, J. Lee, "Double MAC: Doubling the Performance of Convolutional Neural Networks on Modern FPGAs", DATE 2017.
 * O. Ahmed et al., "Super-Resolution CNN Accelerator on Low-Cost Zynq-7000 Series SoC-based FPGA", URSI 2024.
 * G. Joseph, E. P. Jayakumar, "Quantized Neural Network Architecture for Hardware Efficient Real-Time 4K Image Super-Resolution", VDAT 2024.
