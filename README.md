@@ -77,6 +77,7 @@ Details and sources: [`docs/paper/RELATED_WORK_TABLE.md`](docs/paper/RELATED_WOR
 * Manabe et al. (FPT 2017) are faster on the same task (60 fps) on a much larger Virtex UltraScale FPGA (339k LUTs, 325 DSPs, luma only).
 * Designs on larger devices produce more pixels per second (He et al. FCCM 2018, Chang et al. TCSVT, Kim, Sun: 4-9× our DSPs).
 * Per DSP, v4 gives 0.44 output megapixels per second, the highest of the CNN designs compared.
+* Kim et al. (TCSVT 2019) use a network about as small as ours (2.56k parameters, luma only) and reach 0.44 dB more on Set5 at 4K 60 fps with all 1,920 DSPs of a Kintex UltraScale: our network design leaves quality on the table.
 * The layer pipeline (He et al. 2018) and DSP packing (Double MAC, 2017) are known techniques; this project applies them to a 220-DSP device.
 
 ## Repository
@@ -121,6 +122,8 @@ Building the bitstream, the ARM programs and running on the board (Vivado/Vitis 
 * H. Liu et al., "A High-Performance Accelerator for Real-Time Super-Resolution on Edge FPGAs", ACM TODAES 29(3), 2024.
 * J.-W. Chang, K.-W. Kang, S.-J. Kang, "An Energy-Efficient FPGA-Based Deconvolutional Neural Networks Accelerator for Single Image Super-Resolution", IEEE TCSVT.
 * T. Manabe, Y. Shibata, K. Oguri, "FPGA Implementation of a Real-Time Super-Resolution System with a CNN Based on a Residue Number System", FPT 2017.
+* Y. Kim, J.-S. Choi, M. Kim, "A Real-Time Convolutional Neural Network for Super-Resolution on FPGA with Applications to 4K UHD 60 fps Video Services", IEEE TCSVT 29(8), 2019.
+* S. Lee, D. Kim, D. Nguyen, J. Lee, "Double MAC on a DSP: Boosting the Performance of Convolutional Neural Networks on FPGAs", IEEE TCAD 38(5), 2019.
 * D. Nguyen, D. Kim, J. Lee, "Double MAC: Doubling the Performance of Convolutional Neural Networks on Modern FPGAs", DATE 2017.
 * O. Ahmed et al., "Super-Resolution CNN Accelerator on Low-Cost Zynq-7000 Series SoC-based FPGA", URSI 2024.
 * G. Joseph, E. P. Jayakumar, "Quantized Neural Network Architecture for Hardware Efficient Real-Time 4K Image Super-Resolution", VDAT 2024.

@@ -9,8 +9,8 @@ the routed pipeline reports and `software/analysis/cycle_model.py` Part 6 (v2 = 
 
 | # | Work | Device (board) | Method | In -> out | fps | Clock | DSP used | LUT | Set5 / Set14 / BSD100 PSNR-Y (dB) | Power | Read |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Kim, Choi, Kim, TCAS-II 65(9) 2018 [K18b] | XCKU040 | edge-orientation linear mapping (not a CNN) | -> 3840x2160 (x2) | 60 | 150 MHz | 108 | 3K | 34.78 / 31.63 / 30.48 | n/s | secondary (TODAES T6) |
-| 2 | Kim, Choi, Kim, TCSVT 29(8) 2019 [K19] | XCKU040 | CNN, 14-bit fixed | -> 3840x2160 (x2) | 60 | 150 MHz | 1920 | 151K | 36.64 / 32.47 / 31.31 | n/s | secondary (TODAES T6) |
+| 1 | Kim, Choi, Kim, TCAS-II 65(9) 2018 [K18b] | XCKU040 (KCU105) | edge-orientation linear mapping, 625 classes (not a CNN), RGB | 1920x1080 -> 3840x2160 | 60 (600 Mpixel/s at 150 MHz, 4 px/clk) | 150 MHz | 108 | 3,395 | 34.78 / 31.63 / 30.48 | n/s | **full** (accepted version, read 2026-11-18) |
+| 2 | Kim, Choi, Kim, TCSVT 29(8) 2019 [K19] | XCKU040 (KCU105) | line-based CNN, 2.56K param., Y only (CbCr nearest), DW-separable + 1x5 convs + residual, W10/A14 fixed point | 1920x1080 -> 3840x2160 | 60 | 150 MHz | 1920 (100 %) | 110K (Type-1; Type-2 with feature-map compression 151K) | 36.64 / 32.47 / 31.31 (Type-1; Type-2 36.51 / 32.46 / 31.27) | 4.791 W Type-1 / 5.686 W Type-2, Vivado estimate | **full** (accepted version, read 2026-11-18; the row in [L24] combined Type-2 LUTs with Type-1 PSNR) |
 | 3 | Chang, Kang, Kang, TCSVT 30(1) [C18] | XC7K410T | 13-bit FSRCNN variant (Light FSRCNN), Double MAC on DSP48E1 | -> 2880x1280 (QHD) | 141 (62.7 at UHD with ~2x BRAM) | 130 MHz | 1512 | 167K | 36.40 / 32.21 / 31.15 | 5.38 W (Xilinx power estimation, not measured) | **full** (accepted version, arXiv 1801.05997v4; read 2026-11-18; the earlier row copied from [L24] had 2880x1280 at 62.7 fps, which mixes the QHD and UHD modes) |
 | 4 | Sun et al., TCSVT 32(4) 2021 [S21] | XCKU15P | residual recurrent NN (video), 16-bit | -> 3840x2160 | 76 | 160 MHz | 1820 | 98K | 36.76 / 32.51 / 31.31 | n/s | secondary (TODAES T6) |
 | 5 | He et al., FCCM 2018, pp. 181-188 [H18] | XC7Z045 (ZC706) | FSRCNN-s, **fully layer-pipelined**, per-layer DSP allocation, 16-bit fixed; only 25.3 % of 30x30 blocks go through the CNN, the rest bilinear | 1920x1080 -> 3940x2160 | 31.7 (3 interpolators) | 100 MHz | 858 (95 %) | 103.7K (47 %) | not on Set5; 37.36 dB (Y) on SJTU 4K video (CNN only: 38.55) | n/s | **full** |
@@ -95,6 +95,8 @@ Where we can make a defensible claim (each needs the exact wording):
 * [L24] H. Liu, Y. Qian, Y. Liang, B. Zhang, Z. Liu, T. He, W. Zhao, J. Lu, B. Yu, "A high-performance accelerator for real-time super-resolution on edge FPGAs," ACM TODAES, 29(3), Article 53, May 2024, doi 10.1145/3652855. (read)
 * [M18] T. Manabe, Y. Shibata, K. Oguri, "FPGA implementation of a real-time super-resolution system using flips and an RNS-based CNN," IEICE Trans. Fundamentals, E101-A(12):2280-2289, 2018, doi 10.1587/transfun.E101.A.2280. (abstract; full text behind J-STAGE subscription)
 * [Y24] T.-H. Yang, T.-S. Chang, "ACNPU: A 4.75TOPS/W 1080P@30FPS super resolution accelerator with decoupled asymmetric convolution," IEEE TCAS-I, 71(2):670-679, 2024. (read: arXiv v1)
+
+Manabe et al. FPT 2016 (earlier version of [M17], read 2026-11-18): XCVU095, 4-layer CNN with 2x2 filters on 5x5 patches, Flip-32-16-16, 11-bit fixed point, 266,071 LUT (49.5 %) / 768 DSP (100 %) / 131 BRAM, 133.3 MHz, about 60 fps, latency < 1 ms, luma only, quality reported as SSIM on one image.
 
 Not reachable here (need college library access): full text of [K19] (IEEE Xplore), [M18] (J-STAGE). Ask the professor or the
 library for these two; [M18] is the closest prior work (same task).
