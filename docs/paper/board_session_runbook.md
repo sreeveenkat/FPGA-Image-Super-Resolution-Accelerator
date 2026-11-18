@@ -141,3 +141,27 @@ SR_BIT=~/Desktop/venkat/pipe2p_artifacts/design_1_wrapper_pipe2p.bit SR_TREE=~/D
 ```
 Pass: checklist 5f. Then power (section 5): compare with pipe2 on the same board, same day.
 
+## 12. pipe3, pipeline v2 packed + PL padding at 142.857 MHz (tree `~/Desktop/venkat/sandbox_pipe3`, branch `pipe3`; VERSION 0x53528301) - added 2026-11-18, never run on a board
+After section 11 (checklist section 5g). Same route as pipe2p, but the clock is **142.857 MHz** (the XSA's own ps7_init; `run_125.py` and `run_nc.py` read the clock
+from the design entry and refuse the run if the read-back differs by more than 0.5 MHz):
+```bash
+cd ~/Desktop/venkat/sem_project_all; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh
+.venv/bin/python software/board/run_125.py pipe3 --out data/board/$(date +%F) < /dev/null        # T1, T2, T3 (cached) and the 119 test images, at 142.857 MHz
+.venv/bin/python software/board/run_nc.py --design pipe3 < /dev/null                              # fnv / both / armpad / both / armpad / fnv
+SR_BIT=~/Desktop/venkat/pipe3_artifacts/design_1_wrapper_pipe3.bit SR_TREE=~/Desktop/venkat/sandbox_pipe2p $BR pipe3_neg ~/Desktop/venkat/sandbox_pipe2p/software/board/build/sr_app_t1.elf - - < /dev/null   # must FAIL (VERSION)
+SR_BIT=~/Desktop/venkat/pipe2p_artifacts/design_1_wrapper_pipe2p.bit SR_TREE=~/Desktop/venkat/sandbox_pipe3 $BR pipe3_neg2 ~/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t1.elf - - < /dev/null  # must FAIL (VERSION)
+```
+Pass: checklist 5g. `both` vs `armpad` (same bitstream) = the gain of the PL padding alone; pipe2p `both` at 125 MHz (36.95 ms) vs pipe3 `armpad` = the gain of the clock alone.
+Then power (section 5) with `sr_app_t3_200f.elf`, same day as pipe2p.
+
+## 13. pipe4, 6 cycles per LR pixel (tree `~/Desktop/venkat/sandbox_pipe4`, branch `pipe4`; VERSION 0x53529301) - added and board-tested 2026-11-18
+Same route as section 12 (142.857 MHz, same XSA init):
+```bash
+cd ~/Desktop/venkat/sem_project_all; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh
+.venv/bin/python software/board/run_125.py pipe4 --out data/board/$(date +%F) < /dev/null
+.venv/bin/python software/board/run_nc.py --design pipe4 < /dev/null
+SR_BIT=~/Desktop/venkat/pipe4_artifacts/design_1_wrapper_pipe4.bit SR_TREE=~/Desktop/venkat/sandbox_pipe3 $BR pipe4_neg ~/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t1.elf - - < /dev/null   # must FAIL (VERSION)
+SR_BIT=~/Desktop/venkat/pipe3_artifacts/design_1_wrapper_pipe3.bit SR_TREE=~/Desktop/venkat/sandbox_pipe4 $BR pipe4_neg2 ~/Desktop/venkat/sandbox_pipe4/software/board/build/sr_app_t1.elf - - < /dev/null  # must FAIL (VERSION)
+```
+Pass: checklist 5h. Power: `sr_app_t3_200f.elf`.
+

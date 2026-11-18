@@ -224,3 +224,33 @@ frame CYCLES 4,203,137 / 4,203,138. pipe2p = same speed with 35 % fewer LUTs and
 * 2026-11-10 later: full regressions pipe2 94/94, pipe2p 124/124 (incl. limit frames and mutation). Knowledge distillation (teacher 304k params) gives no gain over R3q (two seeds, all differences <= 0.024 dB, `results/quality/kd_distillation.md`): weights unchanged.
   Paper v2 written (7 pages, measured v2 numbers, comparison with prior work); paper drafts are kept locally and not published before submission.
 
+## Pipeline v3 (`pipe3`, 2026-11-18; built and simulated, NOT run on a board)
+Branch/worktree `pipe3` (`~/Desktop/venkat/sandbox_pipe3`, from pipe2p, VERSION 0x53528301). Same datapath, weights and output as pipe2p (fnv 0x45dd4e2d). Two changes
+from `docs/paper/cycle_model.md` Part 7: **(A) replicate padding in the PL** (CONFIG.PAD_EN: the DMA sends the raw frame; a 2-row buffer feeds L1 the same padded
+stream; the ARM's 3.3 ms padding disappears) and **(B) FCLK0 142.857 MHz** (IO PLL / 7). Design note `docs/ARCHITECTURE_PIPELINE_V3.md`, record
+`results/utilization/m6_system_pipe3.md` (both in the branch).
+* Timing: 4 builds at 142.857 MHz. First RTL -0.770 ns (new padding logic: 16-bit row compares) -> 2-bit `ahead` counter + registered counters -0.244 ns (now only AXI DMA
+  and HP0 upsizer IP fail) -> **AXI DMA memory side 64 bit: WNS +0.132 / WHS +0.015 ns, 0 failing** (the stronger implementation strategy alone reached 0.000 ns; not used).
+  13,334 LUT / 19,938 FF / 29.5 BRAM / 190 DSP (pipe2p 13,323 / 19,688 / 27 / 190); vectorless 2.685 W (estimate).
+* Simulation: PAD_EN = 0 keeps the pipe2p cycle counts exactly; PAD_EN = 1 bit-exact on every frame and every stage output; **960x540 with PL padding bit-exact in
+  xsim, 4,205,054 cycles** (+1,929 vs ARM padding); full regression 135/135; netlist 7/7 (190 DSP48E1, 12/12 weight files); mutation 66 mutants: 63 caught, 3 equivalent, 0 survived (three
+  survivors of the first run were redundant guards masking each other; testbench invariants added, now caught).
+* Predicted on the board (model + measured overheads): **29.4 ms = 34.0 fps** non-cacheable in + out; 32.7 ms with ARM padding on the same bitstream; 51.7 ms cached.
+  PREDICTION ONLY. Board steps ready: checklist 5g, runbook 12 (`run_125.py pipe3`, `run_nc.py --design pipe3`), platform + 19 ELFs, board_expected.md regenerated.
+* Model for the next steps (`cycle_model.py` Part 7, calibrated on the measured pipe2/pipe2p): 6 cycles/px about 41 % LUT, 220 DSP, 45 fps at 142.86 MHz; 4 cycles/px
+  about 73 % LUT and over 300 LUT multipliers, 59-68 fps ON PAPER, timing closure unlikely. Not built.
+
+## Board session 2026-11-18 (pipe3 first run + re-check of every design; no power meter; `results/board/2026-11-18/SUMMARY.md`)
+**pipe3 at a read-back 142.857 MHz:** T1 20/20 (37,631-37,634), T2 byte-exact (0x45dd4e2d, 4,205,065 cycles), **119/119 test images byte-exact**, VERSION refusals both
+ways. **Measured 29.44 ms = 34.0 fps** with non-cacheable buffers (prediction 29.4), 32.75 ms with ARM padding on the same bitstream (PL padding -3.31 ms), 51.4 ms cached
+(prediction 51.7). vs pipe2p 36.95 ms: 1.26x; vs R0: 44.6x. Die 38.8-47.4 C.
+**Every earlier design re-checked** (R0, R2q, R3q, r0_125, r3q_125, pipe, pipe2, pipe2p): own VERSION, T2 byte-exact with its checksum, T3 within 2 ms of the earlier mean,
+T5 PASS on R0 and pipe. Two first runs (R0, R2q) had one slow frame each (max-min 3.28 / 3.11 ms > the 3 ms rule); their repeats passed (1.80 / 1.78 ms).
+
+## Pipeline v4 (`pipe4`, 6 cycles per LR pixel; built, verified and board-tested 2026-11-18)
+Branch/worktree `pipe4` (`~/Desktop/venkat/sandbox_pipe4`, VERSION 0x53529301; `docs/ARCHITECTURE_PIPELINE_V4.md` there). P = 3 channels per slot for L1-L3 (last slot
+partly empty), L4 output-serial with P = 2 and the anchor in its requantizer, packing for odd tree counts, 136 LUT multipliers in L4 (3-cycle), 213 DSP, 24,783 LUT.
+Bug found by the random-weight test before any board run: the 6-bit borrow count of packed products overflowed at 144 terms per tree (now $clog2(NT + 1) bits).
+Timing: 6 builds; build f (Performance_ExtraTimingOpt) WNS +0.038 / WHS +0.004 ns at 142.857 MHz. 960x540 bit-exact in xsim, 3,156,214 cycles; netlist 7/7; full regression 177/177 (mutation 79: 74 caught, 5 equivalent, 0 survived).
+**Board: 22.10 ms = 45.2 fps non-cacheable** (prediction 22.1), 44.1 ms cached, 119/119 byte-exact, VERSION refusals OK, die up to 50.4 C. 59.4x R0. Power not measured.
+

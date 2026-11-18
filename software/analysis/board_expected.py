@@ -68,6 +68,21 @@ TREES = {
                                         cycles="37,621-37,680 for the golden tile as a 64 x 64 frame (simulation 37,621; PROPOSED)",
                                         t2="one frame; frame CYCLES 4,203,125-4,224,141 (simulation 4,203,125 + 0.5 %, PROPOSED)",
                                         t3="PREDICTED as pipe2: 61.8 ms cached, 37.0 ms non-cacheable"),
+    # 2026-11-18, branch pipe3: pipe2p + PL padding (CONFIG.PAD_EN) + timing registers, FCLK0 142.857 MHz (IO PLL / 7), AXI DMA memory side 64 bit.
+    # T1 sends the padded golden tile (PAD_EN = 0): same cycles as pipe2p.  T2/T3 send the RAW frame (PAD_EN = 1).  Windows PROPOSED from the simulation.
+    "Pipeline v2 packed + PL padding, 142.86 MHz (pipe3)": dict(tree=V / "sandbox_pipe3", version_expected="0x53528301",
+                                        bits=[("sandbox build (tree default)", V / "pipe3_artifacts/design_1_wrapper_pipe3.bit")],
+                                        xsa=V / "pipe3_artifacts/design_1_wrapper_pipe3.xsa",
+                                        cycles="37,621-37,680 for the golden tile as a padded 64 x 64 frame (simulation 37,621, PAD_EN = 0; PROPOSED)",
+                                        t2="one RAW frame (PAD_EN = 1); frame CYCLES 4,205,054-4,226,080 (xsim 4,205,054 + 0.5 %, PROPOSED)",
+                                        t3="PREDICTED at 142.857 MHz: 51.7 ms cached (49.7-53.7), 29.4 ms non-cacheable in + out (27.4-31.5), 32.7 ms ARM-padding A/B variant (30.7-34.7)"),
+    # 2026-11-18, branch pipe4: 6 cycles per LR pixel (L4 output-serial, P = 3 / 2 channels per slot), PL padding, 142.857 MHz.  Windows PROPOSED from the simulation.
+    "Pipeline, 6 cycles per pixel (pipe4)": dict(tree=V / "sandbox_pipe4", version_expected="0x53529301",
+                                        bits=[("sandbox build (tree default)", V / "pipe4_artifacts/design_1_wrapper_pipe4.bit")],
+                                        xsa=V / "pipe4_artifacts/design_1_wrapper_pipe4.xsa",
+                                        cycles="28,365-28,424 for the golden tile as a padded 64 x 64 frame (simulation 28,365, PAD_EN = 0; PROPOSED)",
+                                        t2="one RAW frame (PAD_EN = 1); frame CYCLES 3,156,214-3,171,995 (xsim 3,156,214 + 0.5 %, PROPOSED)",
+                                        t3="PREDICTED at 142.857 MHz: 22.1 ms non-cacheable in + out (45.3 fps), 25.4 ms ARM-padding A/B variant, 44.4 ms cached"),
 }
 ELFS = [("T1 golden tile", "sr_app_t1.elf"), ("T2 full frame", "sr_app_t2.elf"), ("T3 timing, 20 frames", "sr_app_t3_20f.elf"),
         ("T3 timing, 200 frames (power)", "sr_app_t3_200f.elf"), ("T7 ARM only, 1 frame", "sr_app_t11.elf"), ("T7 ARM only, 20 frames (power)", "sr_app_t11_20f.elf")]

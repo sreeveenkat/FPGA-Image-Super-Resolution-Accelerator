@@ -244,6 +244,7 @@ def report() -> str:
       "DSP packing of two INT8 multiplies is not modelled.")
     p(part5(cur, overhead_ms))
     p(part6())
+    p(part7())
     return "\n".join(out) + "\n"
 
 
@@ -399,6 +400,99 @@ def part6() -> str:
     p("\nNot modelled: AXI/DDR stalls (the built design shows none: DMA wait = core cycles), placement/routing congestion, "
       "DSP packing of two INT8 multiplies (on the DSP48E1 the 25x18 multiplier leaves no guard bits for two accumulated int8 x uint8 "
       "products, so it is not counted), power. A 100 MHz build is the safe fallback if 125 MHz does not close.")
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------- Part 7: packed pipeline (two INT8 products per DSP48E1)
+# Calibration data of the two BUILT and board-measured v2 designs (8 cycles/px, results/board/2026-11-10/SUMMARY.md):
+#   pipe2p (packed, 0 LUT multipliers): xsim 4,203,125 cycles/frame; routed hier utilization
+#     ~/Desktop/venkat/sandbox_pipe2p/results/utilization/m6_system_pipe2p_utilization_hier.txt:
+#     system 13,323 LUT / 19,688 FF / 190 DSP; sr_accel_top 10,156 LUT / 15,562 FF; core 10,136 / 15,466;
+#     stages s1..s4 1,655+1,017+1,057+5,539 = 9,268 LUT, 1,849+3,201+1,374+8,348 = 14,772 FF for 320 lanes; WNS +0.450 ns @125 MHz
+#   pipe2 (unpacked, 118 LUT multipliers in s4): s4 11,852 LUT / 10,379 FF vs pipe2p s4 5,539 / 8,348 (same 216 lanes)
+#     -> one LUT multiplier costs (11,852 - 5,539) / 118 = 53.5 LUT and (10,379 - 8,348) / 118 = 17.2 FF (measured, in place)
+#   board: non-cacheable frame 36.95 ms = pad 3.32 ms + DMA/compute 33.63 ms (= cycles / 125 MHz)
+P7_SIM_CYCLES = 4_203_125
+P7_SYS_LUT, P7_SYS_FF, P7_DSP = 13_323, 19_688, 190
+P7_STAGE_LUT, P7_STAGE_FF, P7_LANES = 9_268, 14_772, 320
+P7_FIXED_LUT = P7_SYS_LUT - P7_STAGE_LUT          # PS interconnect, DMA, core control, FIFOs, packer (constant)
+P7_FIXED_FF = P7_SYS_FF - P7_STAGE_FF
+P7_LUT_PER_LANE = P7_STAGE_LUT / P7_LANES         # adder trees, windows, ROM, requant control, packing glue
+P7_FF_PER_LANE = P7_STAGE_FF / P7_LANES
+P7_LUTMUL_LUT = (11_852 - 5_539) / 118
+P7_LUTMUL_FF = (10_379 - 8_348) / 118
+P7_PACKED = (True, False, True, True)             # L2 is depthwise: lanes do not share an activation, so no packing
+P7_PAD_MS = 3.32                                  # ARM replicate padding (measured, non-cacheable build)
+P7_CLOCKS = (125e6, 142.857e6)                    # FCLK = IO PLL 1000 MHz / 8 and / 7
+
+
+def p7_point(target: int) -> dict:
+    """Packed design at `target` cycles/px: lanes as in Part 6, DSPs = packed pairs + requantizers, overflow to LUT multipliers."""
+    lanes, costs = [], []
+    for layer in LAYERS:
+        p = min(q for q in lane_options(*layer[1:]) if layer_cost(layer, q)[0] <= target)
+        lanes.append(p)
+        costs.append(layer_cost(layer, p))
+    req = sum(math.ceil(l[2] / c[0]) for l, c in zip(LAYERS, costs))
+    mul_dsp = sum(math.ceil(n / 2) if pk else n for n, pk in zip(lanes, P7_PACKED))
+    return dict(lanes=lanes, cpp=[c[0] for c in costs], req=req, mul_dsp=mul_dsp,
+                stage=[c[0] * w * h for c, (w, h) in zip(costs, frame_out_sizes())], costs=costs)
+
+
+def part7() -> str:
+    out = []
+    p = out.append
+    base = p7_point(8)
+    other_dsp = P7_DSP - base["mul_dsp"] - REQ_DSP * base["req"]   # measured extra (control, 3 unexplained in s1..s3)
+    base_cyc, _ = pipeline_frame_cycles(base["costs"], base["stage"], 4)
+    calib = P7_SIM_CYCLES / base_cyc
+    p("\n## Part 7 - prediction: packed pipeline at 8 / 6 / 4 cycles per pixel, 125 and 142.86 MHz\n")
+    p("Why: Part 6 was written before DSP packing existed and charged 96 LUT per LUT multiplier. Both v2 designs are now built "
+      "and board-measured (27.1 fps), so this part recalibrates on them. Model, NOT measured; only the 8 cycles/px row is built.\n")
+    p(f"Calibration (all measured on the routed / simulated pipe2p and pipe2): {P7_LUT_PER_LANE:.1f} LUT and {P7_FF_PER_LANE:.1f} FF "
+      f"per MAC lane (stages s1..s4 of pipe2p / 320 lanes); one LUT multiplier +{P7_LUTMUL_LUT:.1f} LUT, +{P7_LUTMUL_FF:.1f} FF "
+      f"(pipe2 s4 minus pipe2p s4, 118 multipliers); fixed part {P7_FIXED_LUT:,} LUT / {P7_FIXED_FF:,} FF; {other_dsp} DSPs "
+      f"outside lanes and requantizers; cycles x {calib:.4f} (model {base_cyc:,} vs simulated {P7_SIM_CYCLES:,}). "
+      "L1, L3, L4 packed (two products per DSP), L2 not (depthwise). DSPs above 220 become LUT multipliers (2 per missing DSP "
+      "in a packed layer). Frame time = cycles / clock + ARM padding 3.32 ms (non-cacheable buffers, measured), or + 0 if the "
+      "replicate padding moves into the PL (option A).\n")
+    p("| cyc/px | Lanes L1/L2/L3/L4 (total) | Requant | DSP wanted | DSP used | LUT mult | LUT (% of 53,200) | FF (%) | "
+      "Frame cycles | 125 MHz: ARM pad / PL pad | 142.86 MHz: ARM pad / PL pad |")
+    p("|---|---|---|---|---|---|---|---|---|---|---|")
+    rows = []
+    for t in (8, 6, 4):
+        r = p7_point(t)
+        want = r["mul_dsp"] + REQ_DSP * r["req"] + other_dsp
+        short = max(0, want - DSP_TOTAL)
+        lut_mul = 2 * short
+        lanes = sum(r["lanes"])
+        lut = P7_FIXED_LUT + P7_LUT_PER_LANE * lanes + P7_LUTMUL_LUT * lut_mul
+        ff = P7_FIXED_FF + P7_FF_PER_LANE * lanes + P7_LUTMUL_FF * lut_mul
+        cyc_raw, limit = pipeline_frame_cycles(r["costs"], r["stage"], 4)
+        cyc = cyc_raw * calib
+        cells = []
+        for f in P7_CLOCKS:
+            core = cyc / f * 1e3
+            cells.append(f"{core + P7_PAD_MS:.1f} ms ({1e3 / (core + P7_PAD_MS):.1f} fps) / {core:.1f} ms ({1e3 / core:.1f} fps)")
+        rows.append(dict(t=t, lut=lut))
+        p(f"| {t} ({'/'.join(map(str, r['cpp']))}) | {'/'.join(map(str, r['lanes']))} ({lanes}) | {r['req']} | {want} | "
+          f"{min(want, DSP_TOTAL)} | {lut_mul} | {lut:,.0f} ({lut / LUT_TOTAL:.0%}) | {ff:,.0f} ({ff / FF_TOTAL:.0%}) | "
+          f"{cyc / 1e6:.2f} M ({limit}) | " + " | ".join(cells) + " |")
+    p("\nRow 8 is the built pipe2p; at 125 MHz with ARM padding it reproduces the board's 36.95 ms BY CONSTRUCTION. "
+      "Rows 6 and 4 are extrapolations. The 6 cycles/px row has L3 at 4 cycles/px because 16x16 1x1 has no clean lane count "
+      "between 32 and 64.\n")
+    p("Reading:\n")
+    p("* **8 cycles/px + PL padding + 142.86 MHz (no new datapath)**: about 29.4 ms = 34 fps. Needs the critical path "
+      "(pipe2p: core `pcnt` -> anchor FIFO RAM enable, 6 levels, 7.55 ns) to fit 7.0 ns, and the AXI DMA IP to close at 142.86 MHz "
+      "(it failed by up to 0.885 ns at 150 MHz in the R0 trial, `docs/paper/timing_150mhz.md`); fallback = DMA on 125 MHz with "
+      "clock-crossing FIFOs.")
+    p("* **6 cycles/px**: fits on paper (about 40 % LUT, 220 DSP); 45 fps at 142.86 MHz with PL padding, 40 fps at 125 MHz. "
+      "Main risk: timing with all 220 DSPs used and the wider L4 adder tree (288 lanes).")
+    p("* **4 cycles/px**: about 3/4 of the LUTs, every DSP, over 300 LUT multipliers. 59 fps at 125 MHz and 67 fps at 142.86 MHz "
+      "ON PAPER; at this fill level routing congestion normally costs clock frequency, so the realistic outcome is lower or a "
+      "failed build. The 32-bit output stream is at 75 % (3 of 4 bytes per cycle). Not recommended as the next build.")
+    p("* Per-lane LUT cost is assumed constant; adder trees grow slightly faster than linearly (log2 depth), so rows 6 and 4 "
+      "are optimistic in LUT, and timing is not modelled at all.")
     return "\n".join(out)
 
 

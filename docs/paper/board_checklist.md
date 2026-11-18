@@ -206,6 +206,36 @@ Note the small hold margin (WHS +0.007 ns, met).
 | frame time | cached 59.8-63.8 ms, non-cacheable 35.0-39.0 ms (PREDICTED, same as `pipe2`) |
 | temperature / power | as 5e; power should be BELOW `pipe2` (Vivado estimate 2.51 vs 2.90 W): a measured difference is a paper result |
 
+## 5g. Pipeline v3 (`pipe3`: v2 packed + PL padding, 142.857 MHz), from `~/Desktop/venkat/sandbox_pipe3` (bitstream `~/Desktop/venkat/pipe3_artifacts/design_1_wrapper_pipe3.bit`, VERSION 0x53528301; board programs built against `~/Desktop/venkat/vitis_ws_pipe3_platform`)
+**DONE 2026-11-18: every step passed (power not measured); 29.44 ms = 34.0 fps non-cacheable, 51.4 ms cached, 119/119 byte-exact at a read-back 142.857 MHz; results `results/board/2026-11-18/SUMMARY.md`.**
+Added 2026-11-18. Same datapath and output as `pipe2p`; new: CONFIG register 0x28 (PAD_EN: the DMA sends the RAW frame, the PL pads it),
+FCLK0 **142.857 MHz** (IO PLL / 7; its own XSA ps7_init, md5 dd869514..., FPGA0_CLK_CTRL 0x00100700), AXI DMA memory side 64 bit (needed for timing).
+Built: routed WNS +0.132 / WHS +0.015 ns at 142.857 MHz, 13,334 LUT / 19,938 FF / 29.5 BRAM / 190 DSP. Design note and verification: `docs/ARCHITECTURE_PIPELINE_V3.md` and
+`results/utilization/m6_system_pipe3.md` in the branch. Commands: runbook section 12. **Clock check:** every run must read back 142.857 MHz (`fclk0_mhz=142.857` in the stats);
+`run_125.py pipe3` enforces it (SR_EXPECT_MHZ 142.857). Watch the die temperature (higher clock; abort above 70 C as before).
+
+| Step | Pass when |
+|---|---|
+| T1 (golden tile as a PADDED 64 x 64 frame, PAD_EN = 0) | `result=0`, **`version=0x53528301`**, stat6 = 20, CYCLES each within **37,621-37,680** (simulation 37,621, same as pipe2p; PROPOSED) |
+| T2 (960x540, RAW frame, PAD_EN = 1) | `BYTE-EXACT: yes`, fnv1a32 **0x45dd4e2d** (same as pipe2p); frame CYCLES within **4,205,054-4,226,080** (xsim + 0.5 %, PROPOSED); pad time printed as 0 |
+| T5 error recovery | `T5 PASS` (uses the padded golden tile) |
+| 119 test images | 119/119 byte-exact (`run_125.py pipe3`; raw frames, PL padding, odd sizes included) |
+| negative controls | the `pipe2p`-tree ELF must refuse this bitstream (0x535273xx vs 0x535283xx) and this tree's ELF must refuse the `pipe2p` bitstream |
+| frame time (PREDICTED, `run_nc.py --design pipe3`) | non-cacheable in + out (`both`) 27.4-31.5 ms (29.4 = 34 fps); ARM-padding variant on the same bitstream (`armpad`) 30.7-34.7 ms; cached (`fnv`) 49.7-53.7 ms |
+| power | measure with the 200-frame T3 ELF (`sr_app_t3_200f.elf`) as for the other designs; compare with pipe2p on the same day |
+
+## 5h. Pipeline v4 (`pipe4`: 6 cycles per LR pixel + PL padding, 142.857 MHz), from `~/Desktop/venkat/sandbox_pipe4` (bitstream `~/Desktop/venkat/pipe4_artifacts/design_1_wrapper_pipe4.bit`, VERSION 0x53529301; board programs against `~/Desktop/venkat/vitis_ws_pipe4_platform`)
+**DONE 2026-11-18 (built and board-tested the same day): 22.10 ms = 45.2 fps non-cacheable, 44.1 ms cached, 119/119 byte-exact at a read-back 142.857 MHz; `results/board/2026-11-18/SUMMARY.md` section 1b.**
+Same register map and ps7_init as pipe3. Built: WNS +0.038 / WHS +0.004 ns at 142.857 MHz (strategy Performance_ExtraTimingOpt), 24,783 LUT / 213 DSP. Commands: runbook section 13.
+
+| Step | Pass when |
+|---|---|
+| T1 (padded golden tile) | `version=0x53529301`, stat6 = 20, CYCLES 28,365-28,424 |
+| T2 (RAW 960x540) | byte-exact 0x45dd4e2d, frame CYCLES 3,156,214-3,171,995 |
+| 119 test images | 119/119 byte-exact |
+| negative controls | the pipe3 ELF refuses this bitstream and vice versa |
+| frame time | `both` 20.1-24.1 ms, `armpad` 23.4-27.4 ms, `fnv` 42.4-46.4 ms |
+
 ## 5b. Merge criteria (PROPOSED, the owner confirms; same text as `docs/STATUS.md`)
 A branch goes into `main` only if, with its own bitstream: (1) T1 passes with its own VERSION and T2 is byte-exact with its fnv1a32 (R2q 0x2afbc9ae, R3q 0x45dd4e2d);
 (2) all 119 test images are byte-exact against its integer model; (3) the 20-frame mean is within ±2 ms of 1,311.9 ms, max − min ≤ 3 ms and CYCLES per tile are within 926,210-926,241 (R0: 926,217-926,241 in `results/speed/m7_timing_20frames.md` / `m7_t3_20frames_stats.txt`, 926,210-926,216 on T1 of 13 Oct, `docs/paper/rehearsal_2026-10-13_notes.md` section 1; basis: same-design runs differ by up to 1.0 ms in the mean and single frames reach +2.1 ms, `results/speed/m6_board.md:71`); (4) the negative controls behave as expected;

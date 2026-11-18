@@ -1,0 +1,8 @@
+name pipe4_neg
+date 2026-11-18T16:16:28+05:30
+cwd /home/sreevenkat/Desktop/venkat/sandbox_pipe3
+git 0b25e58 pipe3
+elf /home/sreevenkat/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t1.elf 48f426c600e7f823fa14460af17e4660
+bitstream /home/sreevenkat/Desktop/venkat/pipe4_artifacts/design_1_wrapper_pipe4.bit 608dbad60a22c4c9bd9d3e567a19b9cc
+command xsdb software/board/run_board.tcl /home/sreevenkat/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t1.elf - - data/board/2026-11-18/pipe4_neg_stats.txt
+xsdb_exit 1

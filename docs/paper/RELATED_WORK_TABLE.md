@@ -1,6 +1,6 @@
 # Related work: comparison table of FPGA super-resolution accelerators
 
-Written 2026-11-10; rows 11-12 updated with the board measurements of the same day (`results/board/2026-11-10/SUMMARY.md`). Every number has a source. "Read" says how: **full** = the full paper was read here; **secondary** = taken
+Written 2026-11-10; rows 11-12 updated with the board measurements of the same day (`results/board/2026-11-10/SUMMARY.md`); rows 13-14 (pipe3, pipe4) added 2026-11-18 from `results/board/2026-11-18/SUMMARY.md`. Every number has a source. "Read" says how: **full** = the full paper was read here; **secondary** = taken
 from another paper's comparison table (the original was NOT read: check before publishing); **abstract** = abstract only.
 Nothing is filled in from memory. Our own rows come from `results/board/2026-10-28/SUMMARY.md`, `results/power_estimate/SUMMARY.md`,
 the routed pipeline reports and `software/analysis/cycle_model.py` Part 6 (v2 = prediction).
@@ -21,6 +21,8 @@ the routed pipeline reports and `software/analysis/cycle_model.py` Part 6 (v2 = 
 | **10** | **Ours, pipeline** | **XC7Z020 (ZedBoard)** | same network + anchor (R3q), whole-frame layer pipeline, INT8, RGB | **960x540 -> 1920x1080** | **10.49** (95.36 ms); 14.18 (70.52 ms, non-cacheable buffers) | 125 MHz | 170 (77 %) | 9,888 (19 %, sys) | 36.20 / 32.12 / 31.01 | 2.22 W chip (Vivado SAIF estimate, not measured) | board-measured |
 | 11 | Ours, pipeline v2 | XC7Z020 | same, 8 cycles/px, 118 LUT multipliers | same | **27.1** (36.95 ms, NC buffers); 16.2 cached | 125 MHz | 220 (100 %) | 20,651 (39 %) | same | 2.90 W chip (Vivado vectorless) | **board-measured 2026-11-10** |
 | 12 | Ours, pipeline v2 packed | XC7Z020 | same, two INT8 products per DSP48E1 | same | **27.1** (36.96 ms, NC buffers); 16.2 cached | 125 MHz | 190 (86 %) | 13,323 (25 %) | same | 2.51 W chip (Vivado vectorless) | **board-measured 2026-11-10** |
+| 13 | Ours, pipe3 | XC7Z020 | v2 packed + replicate padding in the PL | same | **34.0** (29.44 ms, NC buffers); 19.4 cached | 142.857 MHz | 190 (86 %) | 13,334 (25 %) | same | 2.69 W chip (Vivado vectorless) | **board-measured 2026-11-18** |
+| 14 | Ours, pipe4 | XC7Z020 | 6 cycles/px, packed, 136 LUT multipliers on L4 | same | **45.2** (22.10 ms, NC buffers); 22.7 cached | 142.857 MHz | 213 (97 %) | 24,783 (47 %) | same | 3.06 W chip (Vivado vectorless) | **board-measured 2026-11-18** |
 
 n/s = not stated in what was read. Rows 1-4 are copied from Table 6 of [L24] and should be checked in the originals before the
 paper is submitted. [L24] row 6 measures board power with a power meter (its Fig. 13a); ours is not measured yet.
@@ -44,6 +46,8 @@ Output megapixels per second per DSP = out_w x out_h x fps / 1e6 / DSP. It favou
 | 10 Ours pipeline | 21.8 (29.4 NC) | 0.128 (0.173 NC) | 2,620 params |
 | 11 Ours v2 (measured) | 56.1 | 0.255 | 220 DSP |
 | 12 Ours v2 packed (measured) | 56.1 | 0.295 | 190 DSP |
+| 13 Ours pipe3 (measured) | 70.4 | 0.371 | 190 DSP |
+| 14 Ours pipe4 (measured) | 93.8 | 0.441 | 213 DSP + 136 LUT multipliers |
 
 DSP efficiency, [L24] Table 7 definition (GOPS/DSP; 2 ops per MAC): Qiu 2016 XC7Z045 0.18, Xiao 2017 XC7Z045 0.28, Ma 2017
 Arria-10 0.30, HybridDNN PYNQ-Z1 0.38, [L24] KV26 0.82 (DSP at 400 MHz), ZU7EV 1.02 (500 MHz). Ours: compute part 2 x 1.327 G MAC
@@ -51,11 +55,17 @@ Arria-10 0.30, HybridDNN PYNQ-Z1 0.38, [L24] KV26 0.82 (DSP at 400 MHz), ZU7EV 1
 0.23 / 125 = 1.86e-3, [L24] 0.82 / 400 = 2.05e-3 and 1.02 / 500 = 2.04e-3: **the same per-cycle DSP use (both near 2 ops per DSP
 per cycle)**; [L24]'s higher GOPS/DSP comes from the DSP clock (double-pumped, 400-500 MHz on UltraScale+), not from busier DSPs.
 v2 (model): 2 x 1.327 G / 33.6 ms ~ 79 GOPS on 220 DSP + 118 LUT multipliers.
+pipe3 / pipe4 (board, end to end with NC buffers): 2 x 1.327 G / 29.44 ms = 90.1 GOPS / 190 DSP = 0.47 GOPS/DSP (3.32e-3 per MHz);
+2 x 1.327 G / 22.10 ms = 120.1 GOPS / 213 DSP = 0.56 GOPS/DSP (3.95e-3 per MHz). These are NOT the same hardware basis as [L24]:
+most of our DSPs compute two INT8 products (packing) and pipe4 adds 136 LUT multipliers, so per-DSP numbers above 2 ops/cycle
+come from packing and LUT multipliers, not from busier DSPs. Quote them with that sentence or not at all.
 
 ## Honest reading
 
 Where we are NOT better:
-* **Speed**: every CNN row runs 25-76 fps; ours 10.5 (14.2 NC), v2 predicted 27. Manabe [M18] does our exact task at 60 fps.
+* **Speed**: every CNN row runs 25-76 fps; ours (board) 10.5 -> 27.1 (v2) -> 34.0 (pipe3) -> **45.2 (pipe4)**, NC buffers. pipe4 is
+  above [L24] KV260 (35.79 fps, same 960x540 -> 1080p task), but [L24] runs a 40x larger network with +0.9 dB Set5, so this is
+  not a like-for-like speed win (the 4K-output rows produce 4x more pixels per frame). Manabe [M18] does our exact task at 60 fps.
 * **Image quality**: Set5 36.20 dB is below [L24] 37.14, [S21] 36.76, [K19] 36.64 and about level with [C18] 36.40. Only the
   non-CNN [K18b] (34.78) is lower. (Our BSD100 protocol re-aligns odd-sized images, so BSD100 differs slightly from literature;
   Set5 uses the standard LR and matches published bicubic.)
@@ -63,12 +73,12 @@ Where we are NOT better:
 
 Where we can make a defensible claim (each needs the exact wording):
 * **Smallest resources and cheapest device** in the table: 170 DSP / 9.9K LUT (whole system) vs 858-1920 DSP and 65-167K LUT for
-  the other CNN designs; the only one on a Zynq-7020.
+  the other CNN designs; the only one on a Zynq-7020. (pipe4: 213 DSP / 24.8K LUT, still the smallest.)
 * **Same per-cycle DSP efficiency as the 2024 state of the art** ([L24], same definition), on a 7-series part at 125 MHz.
 * **Evidence**: end-to-end board timing including the ARM and DMA, byte-exact against a golden integer model on all 119 test
   images, mutation-tested RTL. None of the papers read here report a bit-exact check of the hardware output.
 * **Possible energy claim, NOT YET MEASURED**: [L24] reports 2.12 fps/W at 16.85 W board power. If the ZedBoard draws about 5 W
-  while running, the pipeline would reach ~2 fps/W (10.5 fps) or ~2.8 (14.2 fps), and v2 ~5. This needs the board power
+  while running, the pipeline would reach ~2 fps/W (10.5 fps) or ~2.8 (14.2 fps), v2 ~5 and pipe4 ~9. This needs the board power
   measurement; do not claim it before.
 
 ## References (as printed in the papers read)

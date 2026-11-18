@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Step 2 of the 2026-10-28 board session: run one design at its REAL 125 MHz PL clock and check it against its integer model.
 
-    .venv/bin/python software/board/run_125.py <r0_125|r3q_125|pipe|pipe2|pipe2p> [--out data/board/2026-10-28] [--only t1,t2,t3,sets]
+    .venv/bin/python software/board/run_125.py <r0_125|r3q_125|pipe|pipe2|pipe2p|pipe3|pipe4> [--out data/board/2026-10-28] [--only t1,t2,t3,sets]
+    (pipe3, added 2026-11-18: its own clock 142.857 MHz = IO PLL / 7 and its own ps7_init md5: the fields `mhz` / `ps7_md5` of DESIGNS; all others 125 MHz)
 
 What it does, in order (stops at the first unexpected result, restores the 100 MHz platform init, proves the board is healthy, and exits non-zero):
   0. md5 of bitstream, XSA init script, every ELF against docs/paper/board_expected.md; die temperature (Vivado XADC read, only BETWEEN xsdb runs).
@@ -64,6 +65,21 @@ DESIGNS = {
                    sets=V / "sandbox_pipe2p/data/board/testsets", kind="pipe",
                    pred_cycles_ms=4203125 / 125e3, pred_overhead_ms=28.0),
 }
+# added 2026-11-18: pipeline v2 packed + PL padding + 142.857 MHz (branch pipe3, VERSION 0x53528301), NOT yet run on a board.  Same weights/output as pipe.
+# Frames are sent RAW (the PL pads), so there is no ARM padding; cached buffers keep the cache maintenance (~22 ms, measured on pipe at 100 and 125 MHz).
+# Only registered when its XSA exists (ps7_from_xsa runs at import).
+P4_CYCLES = 3156214   # pipe4 960x540 frame, xsim (RAW frame, PL padding)
+_P3 = V / "pipe3_artifacts/design_1_wrapper_pipe3.xsa"
+if _P3.exists():
+    DESIGNS["pipe3"] = dict(tree=V / "sandbox_pipe3", bit=V / "pipe3_artifacts/design_1_wrapper_pipe3.bit", ps7=ps7_from_xsa(_P3, "pipe3"), version=0x53528301, fnv=0x45DD4E2D,
+                            sets=V / "sandbox_pipe3/data/board/testsets", kind="pipe", mhz=142.857, ps7_md5="dd869514eeca440a00f9c8b28bf76ecd",
+                            pred_cycles_ms=4205054 / 142.857e3, pred_overhead_ms=22.4)
+# added 2026-11-18: pipeline at 6 cycles per LR pixel (branch pipe4, VERSION 0x53529301), 142.857 MHz, same XSA init as pipe3.  NOT yet run on a board.
+_P4 = V / "pipe4_artifacts/design_1_wrapper_pipe4.xsa"
+if _P4.exists():
+    DESIGNS["pipe4"] = dict(tree=V / "sandbox_pipe4", bit=V / "pipe4_artifacts/design_1_wrapper_pipe4.bit", ps7=ps7_from_xsa(_P4, "pipe4"), version=0x53529301, fnv=0x45DD4E2D,
+                            sets=V / "sandbox_pipe4/data/board/testsets", kind="pipe", mhz=142.857, ps7_md5="dd869514eeca440a00f9c8b28bf76ecd",
+                            pred_cycles_ms=P4_CYCLES / 142.857e3, pred_overhead_ms=22.4)
 PS7_125_MD5 = "d2a7789c85395e17649026335f23d938"
 PS7_PLATFORM_MD5 = "86bd78c7e9b40933e57e4e22f8bc7eb6"
 
@@ -183,7 +199,7 @@ def main():
     ap.add_argument("--test100", action="store_true", help="script test at the 100 MHz platform init (expects 100 MHz, output folder <design>_test100); never changes the clock")
     a = ap.parse_args()
     name, d = a.design, dict(DESIGNS[a.design])
-    MHZ = 100 if a.test100 else 125
+    MHZ = 100 if a.test100 else d.get("mhz", 125)
     if a.test100:
         d["ps7"] = PLATFORM_PS7
     out = Path(a.out) / (name + ("_test100" if a.test100 else ""))
@@ -202,7 +218,7 @@ def main():
         if rec.get(str(p)) != md5(p):
             print(f"STOP: md5 of {p} = {md5(p)} but board_expected.md has {rec.get(str(p))}")
             return 2
-    if md5(d["ps7"]) != (PS7_PLATFORM_MD5 if a.test100 else PS7_125_MD5):
+    if md5(d["ps7"]) != (PS7_PLATFORM_MD5 if a.test100 else d.get("ps7_md5", PS7_125_MD5)):
         print(f"STOP: {d['ps7']} md5 {md5(d['ps7'])} is not the recorded one")
         return 2
     print(f"md5 OK: bitstream {md5(d['bit'])[:8]}, ps7_init (XSA) {md5(d['ps7'])[:8]}, ELFs", [md5(B / e)[:8] for e in ("sr_app_t1.elf", "sr_app_t2.elf", "sr_app_t3_20f.elf")], flush=True)

@@ -207,6 +207,56 @@ Tree `/home/sreevenkat/Desktop/venkat/sandbox_pipe2p`. Cross-checks (model re-ru
 | ELF T7 ARM only, 1 frame (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe2p/software/board/build/sr_app_t11.elf` | `2c51a3ecf29c67a786de1d23dfcabb72` |
 | ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe2p/software/board/build/sr_app_t11_20f.elf` | `7ed0270ce9527603395afa93a132f8b5` |
 
+## Pipeline v2 packed + PL padding, 142.86 MHz (pipe3)
+
+Tree `/home/sreevenkat/Desktop/venkat/sandbox_pipe3`. Cross-checks (model re-run in this tree vs the files the board test uses): T1 OK, T2 OK, baboon OK, RTL VERSION constant in the tree `0x53528301` (= expected).
+
+| Quantity | Expected on the board |
+|---|---|
+| `version=` in every stats file / `init ok: VERSION` on the UART | **0x53528301** |
+| T1 golden tile: `result=0`, stat6 (identical repeats) | 0 and **20**; the ARM compares 49152 output bytes with the golden tile itself (FNV-1a 32 of that tile: `0xfe9163c9`) |
+| T1 CYCLES (stat0..2 = min/max/mean) | each within **37,621-37,680 for the golden tile as a padded 64 x 64 frame (simulation 37,621, PAD_EN = 0; PROPOSED)** |
+| T2 960x540 -> 1920x1080 (one RAW frame (PAD_EN = 1); frame CYCLES 4,205,054-4,226,080 (xsim 4,205,054 + 0.5 %, PROPOSED)): `fnv1a32=` in marker and stats, `compare_raw.py` | **0x45dd4e2d**, `BYTE-EXACT: yes`, `bytes=6220816` (16-byte header + 6,220,800) |
+| 128x128 -> 256x256 baboon (one frame) | **0xa1d2f75c** |
+| T3 20 frames | PREDICTED at 142.857 MHz: 51.7 ms cached (49.7-53.7), 29.4 ms non-cacheable in + out (27.4-31.5), 32.7 ms ARM-padding A/B variant (30.7-34.7) |
+| T7 (ARM only, 1 frame) | `BYTE-EXACT: yes`, fnv as in the T2 row; time per frame: measured once, with the R0 tree's T7 build on 2026-10-27: about 13.4 s per frame, host-timed (`results/board/2026-10-27/SUMMARY.md`); the other trees' T7 builds were not run |
+
+| Artifact | Path | md5 |
+|---|---|---|
+| bitstream, sandbox build (tree default) | `/home/sreevenkat/Desktop/venkat/pipe3_artifacts/design_1_wrapper_pipe3.bit` | `042aa316fbfb41982491f2e8ddec5512` |
+| xsa | `/home/sreevenkat/Desktop/venkat/pipe3_artifacts/design_1_wrapper_pipe3.xsa` | `a5dc998dfdcf234a3d354423aadcc2b8` |
+| ELF T1 golden tile (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t1.elf` | `48f426c600e7f823fa14460af17e4660` |
+| ELF T2 full frame (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t2.elf` | `2d0adb213e043f2571b06d38a5a1084c` |
+| ELF T3 timing, 20 frames (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t3_20f.elf` | `e9c4869debb1a349b17a0def9dcad377` |
+| ELF T3 timing, 200 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t3_200f.elf` | `36800bb3e86e7f9c9f4518dcc8e2cfae` |
+| ELF T7 ARM only, 1 frame (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t11.elf` | `d9f66b2d32a4211ecb7c79887bd7f764` |
+| ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t11_20f.elf` | `7be59ae1486963f6bd65c605ee4b2ebf` |
+
+## Pipeline, 6 cycles per pixel (pipe4)
+
+Tree `/home/sreevenkat/Desktop/venkat/sandbox_pipe4`. Cross-checks (model re-run in this tree vs the files the board test uses): T1 OK, T2 OK, baboon OK, RTL VERSION constant in the tree `0x53529301` (= expected).
+
+| Quantity | Expected on the board |
+|---|---|
+| `version=` in every stats file / `init ok: VERSION` on the UART | **0x53529301** |
+| T1 golden tile: `result=0`, stat6 (identical repeats) | 0 and **20**; the ARM compares 49152 output bytes with the golden tile itself (FNV-1a 32 of that tile: `0xfe9163c9`) |
+| T1 CYCLES (stat0..2 = min/max/mean) | each within **28,365-28,424 for the golden tile as a padded 64 x 64 frame (simulation 28,365, PAD_EN = 0; PROPOSED)** |
+| T2 960x540 -> 1920x1080 (one RAW frame (PAD_EN = 1); frame CYCLES 3,156,214-3,171,995 (xsim 3,156,214 + 0.5 %, PROPOSED)): `fnv1a32=` in marker and stats, `compare_raw.py` | **0x45dd4e2d**, `BYTE-EXACT: yes`, `bytes=6220816` (16-byte header + 6,220,800) |
+| 128x128 -> 256x256 baboon (one frame) | **0xa1d2f75c** |
+| T3 20 frames | PREDICTED at 142.857 MHz: 22.1 ms non-cacheable in + out (45.3 fps), 25.4 ms ARM-padding A/B variant, 44.4 ms cached |
+| T7 (ARM only, 1 frame) | `BYTE-EXACT: yes`, fnv as in the T2 row; time per frame: measured once, with the R0 tree's T7 build on 2026-10-27: about 13.4 s per frame, host-timed (`results/board/2026-10-27/SUMMARY.md`); the other trees' T7 builds were not run |
+
+| Artifact | Path | md5 |
+|---|---|---|
+| bitstream, sandbox build (tree default) | `/home/sreevenkat/Desktop/venkat/pipe4_artifacts/design_1_wrapper_pipe4.bit` | `608dbad60a22c4c9bd9d3e567a19b9cc` |
+| xsa | `/home/sreevenkat/Desktop/venkat/pipe4_artifacts/design_1_wrapper_pipe4.xsa` | `c222d9a2da360865c0ca52d6eefd08df` |
+| ELF T1 golden tile (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe4/software/board/build/sr_app_t1.elf` | `223e150354ab117d078dc0c8549f70d3` |
+| ELF T2 full frame (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe4/software/board/build/sr_app_t2.elf` | `d0cc75d3ea5480c9d07ba35eadf559f2` |
+| ELF T3 timing, 20 frames (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe4/software/board/build/sr_app_t3_20f.elf` | `f0fc99a43fbcefbe58f0b0b90b035f0b` |
+| ELF T3 timing, 200 frames (power) (current golden tile embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe4/software/board/build/sr_app_t3_200f.elf` | `e24f2ca106ae46f82637ad75cf29dd3d` |
+| ELF T7 ARM only, 1 frame (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe4/software/board/build/sr_app_t11.elf` | `b7045d5e2b04b2692227e358a0f65a72` |
+| ELF T7 ARM only, 20 frames (power) (current golden tile embedded: yes; current weights embedded: yes) | `/home/sreevenkat/Desktop/venkat/sandbox_pipe4/software/board/build/sr_app_t11_20f.elf` | `6ca892b590c8cf34ff582144473c25cc` |
+
 ## ps7_init.tcl files (platform and per-XSA)
 
 The platform script is the one `run_board.tcl` sources after loading a bitstream (generated for the 100 MHz platform; DIV0 = 5, DIV1 = 2). The XSA column is the `ps7_init.tcl` stored inside that design's own `.xsa`, hashed by this script. First recorded 2026-10-28.
@@ -222,4 +272,6 @@ The platform script is the one `run_board.tcl` sources after loading a bitstream
 | ps7_init.tcl inside the xsa of Pipeline (pipe) | `/home/sreevenkat/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.xsa` (member `ps7_init.tcl`) | `d2a7789c85395e17649026335f23d938` | no |
 | ps7_init.tcl inside the xsa of Pipeline v2 (pipe2) | `/home/sreevenkat/Desktop/venkat/pipe2_artifacts/design_1_wrapper_pipe2.xsa` (member `ps7_init.tcl`) | `d2a7789c85395e17649026335f23d938` | no |
 | ps7_init.tcl inside the xsa of Pipeline v2 packed (pipe2p) | `/home/sreevenkat/Desktop/venkat/pipe2p_artifacts/design_1_wrapper_pipe2p.xsa` (member `ps7_init.tcl`) | `d2a7789c85395e17649026335f23d938` | no |
+| ps7_init.tcl inside the xsa of Pipeline v2 packed + PL padding, 142.86 MHz (pipe3) | `/home/sreevenkat/Desktop/venkat/pipe3_artifacts/design_1_wrapper_pipe3.xsa` (member `ps7_init.tcl`) | `dd869514eeca440a00f9c8b28bf76ecd` | no |
+| ps7_init.tcl inside the xsa of Pipeline, 6 cycles per pixel (pipe4) | `/home/sreevenkat/Desktop/venkat/pipe4_artifacts/design_1_wrapper_pipe4.xsa` (member `ps7_init.tcl`) | `dd869514eeca440a00f9c8b28bf76ecd` | no |
 

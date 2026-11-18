@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Non-cacheable DMA buffers, pipeline tree, REAL 125 MHz (own XSA init, clock read back and enforced).  Created 2026-10-28.
 
-    .venv/bin/python software/board/run_nc.py [--design pipe|pipe2|pipe2p]
+    .venv/bin/python software/board/run_nc.py [--design pipe|pipe2|pipe2p|pipe3|pipe4]
+    (pipe3 added 2026-11-18: 142.857 MHz, raw frames padded in the PL; variants fnv (cached), both (-DSR_NC_IN -DSR_NC_OUT), armpad (the ARM pads into the
+     non-cacheable pad region, -DSR_ARM_PAD -DSR_NC_PAD -DSR_NC_OUT: the same bitstream, so armpad vs both = the gain of the PL padding alone))
     (pipe2 added 2026-11-10: pipeline v2, tree sandbox_pipe2, variants fnv and both only, output data/board/<today>/nc_pipe2; pipe = unchanged behaviour)
 
 Variants (ELFs built from the same sources; software/board/build/*_x_<v>.elf in sandbox_pipe):
@@ -28,11 +30,13 @@ DESIGN = sys.argv[sys.argv.index("--design") + 1] if "--design" in sys.argv else
 if DESIGN == "pipe":
     d = VD.DES["pipe"]
     out = R.MAIN / "data/board/2026-10-28/nc"
-elif DESIGN in ("pipe2", "pipe2p"):
-    d = dict(R.DESIGNS[DESIGN], name=DESIGN, mhz=125)
+elif DESIGN in ("pipe2", "pipe2p", "pipe3", "pipe4"):
+    d = dict(R.DESIGNS[DESIGN], name=DESIGN)
+    d.setdefault("mhz", 125)
     out = R.MAIN / f"data/board/{date.today().isoformat()}/nc_{DESIGN}"
 else:
-    sys.exit("usage: run_nc.py [--design pipe|pipe2|pipe2p]")
+    sys.exit("usage: run_nc.py [--design pipe|pipe2|pipe2p|pipe3|pipe4]")
+MHZ = d.get("mhz", 125)
 B = d["tree"] / "software/board/build"
 exp = d["tree"] / "data/board/div2k_img0193_expected_1920x1080.raw"
 out.mkdir(parents=True, exist_ok=True)
@@ -43,12 +47,22 @@ ORDER = ["fnv", "both", "fnv", "both", "out", "pad"]
 if DESIGN in ("pipe2", "pipe2p"):   # PREDICTED (docs/paper/board_checklist.md 5e): 4,203,124 cycles / 125 MHz = 33.6 ms + 28.2 (cached) or + 3.3 (pad only), +-2 ms
     RANGE = {"fnv": (59.8, 63.8), "both": (35.0, 39.0)}
     ORDER = ["fnv", "both", "fnv", "both"]
+if DESIGN == "pipe3":   # PREDICTED 2026-11-18 (cycle_model.py Part 7 + measured overheads), +-2 ms:
+    # both  : 4,205,054 cycles (xsim, PL padding) / 142.857 MHz = 29.44 ms, no pad, no cache maintenance
+    # armpad: 4,203,125 / 142.857 = 29.42 ms + ARM pad into the NC region 3.32 ms (measured on pipe2p) = 32.74 ms
+    # fnv   : 29.44 ms + cache maintenance of the buffers ~22.3 ms (measured on pipe: flush in 2.86 + flush out 9.57 + invalidate 9.87) = 51.7 ms
+    RANGE = {"fnv": (49.7, 53.7), "both": (27.4, 31.5), "armpad": (30.7, 34.7)}
+    ORDER = ["fnv", "both", "armpad", "both", "armpad", "fnv"]
+if DESIGN == "pipe4":   # PREDICTED 2026-11-18: frame cycles (xsim) / 142.857 MHz = 22.09 ms; + 3.32 ARM pad (armpad); + ~22.3 cache maintenance (fnv); +-2 ms
+    c = R.P4_CYCLES / 142.857e3
+    RANGE = {"fnv": (c + 20.3, c + 24.3), "both": (c - 2.0, c + 2.0), "armpad": (c + 1.3, c + 5.3)}
+    ORDER = ["fnv", "both", "armpad", "both", "armpad", "fnv"]
 rows = []
 
 
 def production_check(why, safe=False):
     raw = out / "production_check.raw"
-    rc, x = R.xsdb_run(d, B / "sr_app_t2.elf", VD.LR960, raw, out / "production_check_stats.txt", out / "production_check_xsdb.log", 60, None if safe else d["ps7"], 100 if safe else 125)
+    rc, x = R.xsdb_run(d, B / "sr_app_t2.elf", VD.LR960, raw, out / "production_check_stats.txt", out / "production_check_xsdb.log", 60, None if safe else d["ps7"], 100 if safe else MHZ)
     st = R.read_stats(out / "production_check_stats.txt")
     ok = rc == 0 and raw.exists() and raw.read_bytes() == exp.read_bytes() and R.num(st, "version") == d["version"]
     print(f"PRODUCTION ELF CHECK ({why}): rc={rc} byte-exact={ok} fnv={st.get('fnv1a32')} version={st.get('version')} fclk0={st.get('fclk0_mhz')} MHz", flush=True)
@@ -64,7 +78,7 @@ def one(v, k):
         return f"temperature {t}"
     # T1
     cap = R.UartCapture(o / "t1.log")
-    rc, x = R.xsdb_run(d, B / f"sr_app_t1_x_{v}.elf", "-", "-", o / "t1_stats.txt", o / "t1_xsdb.log", 60, d["ps7"], 125)
+    rc, x = R.xsdb_run(d, B / f"sr_app_t1_x_{v}.elf", "-", "-", o / "t1_stats.txt", o / "t1_xsdb.log", 60, d["ps7"], MHZ)
     cap.stop()
     st = R.read_stats(o / "t1_stats.txt")
     if rc != 0 or st.get("result") != "0" or "T1 PASS" not in (o / "t1.log").read_text(errors="replace"):
@@ -72,7 +86,7 @@ def one(v, k):
     # T2
     raw = o / "t2.raw"
     cap = R.UartCapture(o / "t2.log")
-    rc, x = R.xsdb_run(d, B / f"sr_app_t2_x_{v}.elf", VD.LR960, raw, o / "t2_stats.txt", o / "t2_xsdb.log", 60, d["ps7"], 125)
+    rc, x = R.xsdb_run(d, B / f"sr_app_t2_x_{v}.elf", VD.LR960, raw, o / "t2_stats.txt", o / "t2_xsdb.log", 60, d["ps7"], MHZ)
     cap.stop()
     st = R.read_stats(o / "t2_stats.txt")
     log2 = (o / "t2.log").read_text(errors="replace")
@@ -84,7 +98,7 @@ def one(v, k):
         return "T2 not byte-exact"
     # T5
     cap = R.UartCapture(o / "t5.log")
-    rc, x = R.xsdb_run(d, B / f"sr_app_t5_x_{v}.elf", "-", "-", o / "t5_stats.txt", o / "t5_xsdb.log", 120, d["ps7"], 125)
+    rc, x = R.xsdb_run(d, B / f"sr_app_t5_x_{v}.elf", "-", "-", o / "t5_stats.txt", o / "t5_xsdb.log", 120, d["ps7"], MHZ)
     cap.stop()
     ok5 = rc == 0 and "T5 PASS" in (o / "t5.log").read_text(errors="replace")
     print(f"[{tag}] T5: {'PASS' if ok5 else 'NOT PASS'}", flush=True)
@@ -93,7 +107,7 @@ def one(v, k):
     # T3
     raw = o / "t3.raw"
     cap = R.UartCapture(o / "t3.log")
-    rc, x = R.xsdb_run(d, B / f"sr_app_t3_20f_x_{v}.elf", VD.LR960, raw, o / "t3_stats.txt", o / "t3_xsdb.log", 150, d["ps7"], 125)
+    rc, x = R.xsdb_run(d, B / f"sr_app_t3_20f_x_{v}.elf", VD.LR960, raw, o / "t3_stats.txt", o / "t3_xsdb.log", 150, d["ps7"], MHZ)
     cap.stop()
     log = (o / "t3.log").read_text(errors="replace")
     frames = [int(q) for q in re.findall(r"frame \d+: total (\d+)", log)]
@@ -125,7 +139,7 @@ for v in ORDER:
     if fail:
         print(f"!! STOP at {v}{seen[v]}: {fail}", flush=True)
         break
-print("\nSUMMARY (125 MHz, pipeline, 20-frame means, ms):", flush=True)
+print(f"\nSUMMARY ({MHZ} MHz, pipeline, 20-frame means, ms):", flush=True)
 print("  run        frame    pad   DMA+comp  ARM-out-read  wall(frame+read)", flush=True)
 for r in rows:
     print(f"  {r['variant']}{r['run']:<7d} {r['frame_ms']:7.2f} {r['pad_ms']:6.2f} {r['dma_ms']:9.2f} {r['fnv_ms']:12.2f} {r['wall_ms']:14.2f}", flush=True)

@@ -117,3 +117,24 @@ Reading:
 * 3 cycles/px is the 32-bit output stream limit (12 bytes per LR pixel); going below it needs a 64-bit stream (not modelled).
 
 Not modelled: AXI/DDR stalls (the built design shows none: DMA wait = core cycles), placement/routing congestion, DSP packing of two INT8 multiplies (on the DSP48E1 the 25x18 multiplier leaves no guard bits for two accumulated int8 x uint8 products, so it is not counted), power. A 100 MHz build is the safe fallback if 125 MHz does not close.
+
+## Part 7 - prediction: packed pipeline at 8 / 6 / 4 cycles per pixel, 125 and 142.86 MHz
+
+Why: Part 6 was written before DSP packing existed and charged 96 LUT per LUT multiplier. Both v2 designs are now built and board-measured (27.1 fps), so this part recalibrates on them. Model, NOT measured; only the 8 cycles/px row is built.
+
+Calibration (all measured on the routed / simulated pipe2p and pipe2): 29.0 LUT and 46.2 FF per MAC lane (stages s1..s4 of pipe2p / 320 lanes); one LUT multiplier +53.5 LUT, +17.2 FF (pipe2 s4 minus pipe2p s4, 118 multipliers); fixed part 4,055 LUT / 4,916 FF; 5 DSPs outside lanes and requantizers; cycles x 0.9909 (model 4,241,696 vs simulated 4,203,125). L1, L3, L4 packed (two products per DSP), L2 not (depthwise). DSPs above 220 become LUT multipliers (2 per missing DSP in a packed layer). Frame time = cycles / clock + ARM padding 3.32 ms (non-cacheable buffers, measured), or + 0 if the replicate padding moves into the PL (option A).
+
+| cyc/px | Lanes L1/L2/L3/L4 (total) | Requant | DSP wanted | DSP used | LUT mult | LUT (% of 53,200) | FF (%) | Frame cycles | 125 MHz: ARM pad / PL pad | 142.86 MHz: ARM pad / PL pad |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 8 (8/8/8/8) | 54/18/32/216 (320) | 8 | 190 | 190 | 0 | 13,323 (25%) | 19,688 (19%) | 4.20 M (compute) | 36.9 ms (27.1 fps) / 33.6 ms (29.7 fps) | 32.7 ms (30.5 fps) / 29.4 ms (34.0 fps) |
+| 6 (6/6/4/6) | 72/24/64/288 (448) | 12 | 265 | 220 | 90 | 21,845 (41%) | 27,146 (26%) | 3.15 M (compute) | 28.5 ms (35.0 fps) / 25.2 ms (39.7 fps) | 25.4 ms (39.4 fps) / 22.1 ms (45.3 fps) |
+| 4 (4/4/4/4) | 108/36/64/432 (640) | 15 | 373 | 220 | 306 | 38,962 (73%) | 39,727 (37%) | 2.10 M (compute) | 20.1 ms (49.7 fps) / 16.8 ms (59.5 fps) | 18.0 ms (55.5 fps) / 14.7 ms (68.0 fps) |
+
+Row 8 is the built pipe2p; at 125 MHz with ARM padding it reproduces the board's 36.95 ms BY CONSTRUCTION. Rows 6 and 4 are extrapolations. The 6 cycles/px row has L3 at 4 cycles/px because 16x16 1x1 has no clean lane count between 32 and 64.
+
+Reading:
+
+* **8 cycles/px + PL padding + 142.86 MHz (no new datapath)**: about 29.4 ms = 34 fps. Needs the critical path (pipe2p: core `pcnt` -> anchor FIFO RAM enable, 6 levels, 7.55 ns) to fit 7.0 ns, and the AXI DMA IP to close at 142.86 MHz (it failed by up to 0.885 ns at 150 MHz in the R0 trial, `docs/paper/timing_150mhz.md`); fallback = DMA on 125 MHz with clock-crossing FIFOs.
+* **6 cycles/px**: fits on paper (about 40 % LUT, 220 DSP); 45 fps at 142.86 MHz with PL padding, 40 fps at 125 MHz. Main risk: timing with all 220 DSPs used and the wider L4 adder tree (288 lanes).
+* **4 cycles/px**: about 3/4 of the LUTs, every DSP, over 300 LUT multipliers. 59 fps at 125 MHz and 67 fps at 142.86 MHz ON PAPER; at this fill level routing congestion normally costs clock frequency, so the realistic outcome is lower or a failed build. The 32-bit output stream is at 75 % (3 of 4 bytes per cycle). Not recommended as the next build.
+* Per-lane LUT cost is assumed constant; adder trees grow slightly faster than linearly (log2 depth), so rows 6 and 4 are optimistic in LUT, and timing is not modelled at all.
