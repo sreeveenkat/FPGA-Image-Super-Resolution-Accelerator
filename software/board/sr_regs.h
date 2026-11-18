@@ -15,6 +15,8 @@
 #define SR_REG_MAX_W        0x1Cu   /* R : largest W the line buffers hold */
 #define SR_REG_DBG_IN_BEATS  0x20u  /* R : input beats accepted in the current / last frame */
 #define SR_REG_DBG_OUT_BEATS 0x24u  /* R : output beats sent in the current / last frame */
+#define SR_REG_CONFIG       0x28u   /* RW: bit0 PAD_EN (pipe3): 1 = raw W x H input, the PL pads it; sampled at start */
+#define SR_CFG_PAD_EN       (1u << 0)
 
 /* ---- CONTROL bits (write; only bits written with wstrb[0] set count; both are one-cycle pulses) */
 #define SR_CTRL_START       (1u << 0)  /* start one frame; ignored while busy; refused (ERROR_CODE 4) if FRAME_W/H are out of range; an accepted start clears DONE and ERROR */
@@ -34,7 +36,7 @@
 #define SR_ERR_INTERNAL        5u   /* an internal FIFO was misused (never expected; a design error) */
 
 /* ---- constants */
-#define SR_VERSION          0x53527301u   /* "SR" 73 01 = whole-frame pipeline v2 PACKED (8 cycles per LR pixel, two multiplies per DSP48, branch pipe2p), R3q weights + anchor; this tree's driver accepts only VERSION & 0xFFFFFF00 == 0x53527300 */
+#define SR_VERSION          0x53529301u   /* "SR" 93 01 = pipeline at 6 cycles per LR pixel + PL padding (branch pipe4), R3q weights + anchor; this tree's driver accepts only VERSION & 0xFFFFFF00 == 0x53529300 */
 #define SR_VERSION_MASK     0xFFFFFF00u   /* the driver checks VERSION & mask == SR_VERSION & mask */
 #define SR_MAX_W            1018u         /* MAX_W register of the default build (MAXW - 6, MAXW = 1024) */
 #define SR_MAX_H            4096u         /* MAXH of sr_accel_top.v (H + 6 must fit the core's 16-bit row counters) */
@@ -42,6 +44,8 @@
 /* frame sizes: input = replicate-padded (W+6) x (H+6) x 3 bytes, sent as whole 32-bit beats (the last one may carry 1..3 unused bytes) */
 #define SR_FRAME_IN_BYTES(w, h)   (3u * ((w) + 2u * SR_HALO) * ((h) + 2u * SR_HALO))
 #define SR_FRAME_IN_BEATS(w, h)   ((SR_FRAME_IN_BYTES(w, h) + 3u) / 4u)
+#define SR_FRAME_RAW_BYTES(w, h)  (3u * (w) * (h))                  /* pipe3, PAD_EN = 1: the raw frame */
+#define SR_FRAME_RAW_BEATS(w, h)  ((SR_FRAME_RAW_BYTES(w, h) + 3u) / 4u)
 #define SR_FRAME_OUT_BYTES(w, h)  (12u * (w) * (h))                 /* 2W x 2H x 3, always a multiple of 4 */
 /* the golden tile of T1 (golden_tile.h, real0) is a 64 x 64 frame: 70 x 70 padded input, 128 x 128 output; the tiling code (T7) uses SR_HC too */
 #define SR_HC               64u

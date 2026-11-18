@@ -11,7 +11,7 @@ NS lines (one per slot s), each = the lane weights of that slot, lane 0 = rightm
     tap = ky*K + kx.  With NS = 16 (P = 1) this is exactly the original layout.
 
 Run from the project root:  .venv/bin/python software/ai/quantization/export_pipe.py [weight_dir] [--check] [--slots 16|8|all]
-(default: all = both layouts).  --check only verifies that the existing wpipe files match (exit 1 otherwise).
+(default: all = the 16-, 8- and 6-slot layouts; pipe4 added 6: wpipe6_Ln.mem).  --check only verifies that the existing wpipe files match (exit 1 otherwise).
 """
 from __future__ import annotations
 
@@ -38,10 +38,15 @@ def read_weights(path: Path, cin: int, cout: int, k: int, mode: int) -> np.ndarr
 
 
 def slot_lanes(w: np.ndarray, mode: int, slots: int = SLOTS) -> list[list[int]]:
-    """lanes[s][l] for `slots` slots (16 or 8; P = 16 / slots channels per slot)."""
-    assert SLOTS % slots == 0, slots
-    p = SLOTS // slots
+    """lanes[s][l] for `slots` slots (16 or 8: P = 16 / slots channels per slot; pipe4, 6: P = ceil(NCH / 6), channels >= NCH have weight 0,
+    and L4 is MODE 0 (output-serial, P = 2): call with mode 0 for it)."""
     cout, ci_w, kk = w.shape
+    nch = cout if mode in (0, 1) else ci_w
+    assert slots == 6 or SLOTS % slots == 0, slots
+    p = -(-nch // slots)
+    if slots == 6:                                            # pad the walked channel axis with zero weights up to slots * p
+        pad = slots * p - nch
+        w = np.concatenate([w, np.zeros((pad,) + w.shape[1:], dtype=w.dtype)], axis=0) if mode in (0, 1) else w
     out = []
     for s in range(slots):
         if mode == 0:
@@ -64,13 +69,14 @@ def main() -> int:
     sel = sys.argv[sys.argv.index("--slots") + 1] if "--slots" in sys.argv else "all"
     if "--slots" in sys.argv:
         args.remove(sel)
-    slot_list = [16, 8] if sel == "all" else [int(sel)]
+    slot_list = [16, 8, 6] if sel == "all" else [int(sel)]
     wdir = Path(args[0]) if args else Path("hardware/rtl/weights")
     bad = 0
     for slots in slot_list:
         for name, cin, cout, k, mode in LAYERS:
             w = read_weights(wdir / f"weights_{name}.mem", cin, cout, k, mode)
-            text = "\n".join(lines_for(slot_lanes(w, mode, slots))) + "\n"
+            m = 0 if (slots == 6 and mode == 2) else mode          # pipe4: L4 output-serial at NS = 6
+            text = "\n".join(lines_for(slot_lanes(w, m, slots))) + "\n"
             dst = wdir / wpipe_name(name, slots)
             if check:
                 ok = dst.exists() and dst.read_text() == text

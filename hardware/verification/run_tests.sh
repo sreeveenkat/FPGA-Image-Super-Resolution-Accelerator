@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# RTL regression of the whole-frame PIPELINE v2 PACKED (branch `pipe2p`, docs/ARCHITECTURE_PIPELINE_V2P.md; Icarus Verilog).  PACK = 1 (two lanes per
+# RTL regression of the whole-frame PIPELINE at 6 cycles per LR pixel (branch `pipe4`, from pipe3; docs/ARCHITECTURE_PIPELINE_V4.md; Icarus Verilog).
+#   pipe4: NS = 6 is the default of the top; NS = 8 (pipe2p/pipe3) and 16 (pipe) are still tested and must keep their cycle counts.
+#   pipe3: every top frame test also runs with CONFIG.PAD_EN = 1 (raw input, padded in the PL) and mixed; PAD_EN = 0 must keep the pipe2p cycle counts.  PACK = 1 (two lanes per
 #   DSP48, the default) and PACK = 0 (the pipe2 / pipe hardware) are both tested.  Run from anywhere:
 #   Every stage and the top are tested with NS = 8 (v2, the default) AND NS = 16 (the original `pipe` design, which must stay exact).
 #   hardware/verification/run_tests.sh [quick|full]
@@ -45,14 +47,15 @@ for s in 21 22 25; do build rqa$s -P tb_requant_add.SHIFT=$s hardware/rtl/common
 for n in 2 3 5 9 16 17 18 19 27 28; do build at$n -P tb_adder_tree.N=$n hardware/rtl/pipe/adder_tree.v $TB/tb_adder_tree.v && run at$n; done
 build fifos hardware/rtl/pipe/anchor_fifo.v hardware/rtl/pipe/pipe_fifo.v $TB/tb_fifos.v && run fifos       # far past the pointer wrap (the 2026-10-26 deadlock)
 out="$($PY software/ai/quantization/export_pipe.py --check)"; echo "$out"
-if echo "$out" | grep -q FAIL; then fail=$((fail+1)); echo "FAIL wpipe_L*.mem / wpipe8_L*.mem are not up to date (run export_pipe.py)"; else pass=$((pass+1)); echo "PASS wpipe_L1..4.mem and wpipe8_L1..4.mem match weights_L1..4.mem"; fi
+if echo "$out" | grep -q FAIL; then fail=$((fail+1)); echo "FAIL wpipe_L*.mem / wpipe8_L*.mem / wpipe6_L*.mem are not up to date (run export_pipe.py)"; else pass=$((pass+1)); echo "PASS wpipe_L1..4.mem, wpipe8_L1..4.mem and wpipe6_L1..4.mem match weights_L1..4.mem"; fi
 
 echo "== pipeline stages, random weights (distinct M per channel, both clamp ends, non-square frames), with stalls, 8 reset aborts, a slow consumer"
-for NS in 8 16; do
+for NS in 6 8 16; do
   for PK in 1 0; do
     for L in 1 2 3 4; do
         # NS = 8, PACK = 0: L4 with NDSP = 50 so LUT and DSP multiplier lanes are both used (same function in simulation; checks the lane split)
-        if [ $NS = 8 ] && [ $L = 4 ] && [ $PK = 0 ]; then ND="-P tb_pipe_stage.NDSP=50"; else ND=""; fi
+        # NS = 6, PACK = 1: L4 with NDSP2 = 40 so packed DSP pairs and LUT pairs are both used (the built pipe4 has 76 of 144 pairs on DSPs)
+        if [ $NS = 8 ] && [ $L = 4 ] && [ $PK = 0 ]; then ND="-P tb_pipe_stage.NDSP=50"; elif [ $NS = 6 ] && [ $L = 4 ] && [ $PK = 1 ]; then ND="-P tb_pipe_stage.NDSP2=40"; else ND=""; fi
         n=sr$L$NS$PK
         build $n -P tb_pipe_stage.LAYER=$L -P tb_pipe_stage.REAL=0 -P tb_pipe_stage.NS=$NS -P tb_pipe_stage.PACK=$PK $ND $PIPE $TB/tb_pipe_stage.v && { run $n; run $n +STALL=1 +SWEEP=8; run $n +STALL=2; }
     done
@@ -61,9 +64,9 @@ done
 
 echo "== pipeline stages, network weights, against each layer's golden output of whole frames"
 if [ "$MODE" = full ]; then FR="p13x7 preal2 preal"; else FR="p13x7"; fi
-for NS in 8 16; do
+for NS in 6 8 16; do
     for L in 1 2 3 4; do
-        if [ $NS = 8 ]; then PK=1; else PK=0; fi          # the two built configurations: pipe2p (8, packed) and pipe (16, not packed)
+        if [ $NS = 16 ]; then PK=0; else PK=1; fi         # the built configurations: pipe4 (6, packed), pipe2p/pipe3 (8, packed), pipe (16, not packed)
         build sn$L$NS -P tb_pipe_stage.LAYER=$L -P tb_pipe_stage.REAL=1 -P tb_pipe_stage.NS=$NS -P tb_pipe_stage.PACK=$PK $PIPE $TB/tb_pipe_stage.v || continue
         for f in $FR; do run sn$L$NS +FRAME=$f; done
         run sn$L$NS +FRAME=pramp +STALL=1
@@ -78,10 +81,19 @@ build top $PIPE hardware/rtl/top/sr_accel_top.v $TB/tb_sr_pipe_top.v && {
     run top +F0=p13x7 +ERR=1 +SWEEP=6
     run top +F0=gtile
     run top +F0=pramp +F1=p13x7 +STALL=2                    # slow DMA sink: output banks and FIFOs fill, back-pressure through every stage
+    # pipe4: NS = 6 cycle counts recorded on 2026-11-18 (p13x7 1335, pramp 1797, preal2 8523 with PAD_EN = 0; +1 since the 3-cycle L4 multipliers); a change here is a schedule change
+    out="$(vvp -n "$TMP/top.vvp" +F0=p13x7 +F1=pramp +F2=preal2 +PAD=0 2>&1 | grep -v 'finish called\|Not enough words')"; echo "$out"
+    if echo "$out" | grep -q '^PASS' && ! echo "$out" | grep -q '^FAIL' && echo "$out" | grep -q 'CYCLES 1335).*CYCLES 1797).*CYCLES 8523)'; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL NS = 6 cycle counts changed"; fi
+    run top $SMALL +PAD=1 +LAYERS=1                         # pipe3: raw frames, padded in the PL
+    run top $SMALL +PAD=1 +STALL=1
+    run top $SMALL +PAD=2 +STALL=2                          # PAD_EN alternating frame by frame, slow sink
+    run top +F0=p13x7 +PAD=1 +ERR=1 +SWEEP=6
     if [ "$MODE" = full ]; then
         run top +F0=preal +F1=gtile +LAYERS=1
         run top +F0=preal +F1=preal2 +STALL=1
         run top +F0=preal2 +SWEEP=12 +STALL=1
+        run top +F0=preal +F1=preal2 +PAD=1 +STALL=1 +LAYERS=1
+        run top +F0=preal2 +PAD=1 +SWEEP=12 +STALL=1
     fi
 }
 echo "== accelerator top with NS = 16 (the original pipeline; cycle counts must equal branch pipe: p13x7 3241, pramp 4433, preal2 22089)"
@@ -94,6 +106,12 @@ echo "== accelerator top, other packing settings: NS = 8 unpacked (= branch pipe
 build top80 -P tb_sr_pipe_top.NS=8 -P tb_sr_pipe_top.PACK=0 $PIPE hardware/rtl/top/sr_accel_top.v $TB/tb_sr_pipe_top.v && {
     out="$(vvp -n "$TMP/top80.vvp" +F0=p13x7 +F1=pramp +F2=preal2 +LAYERS=1 2>&1 | grep -v 'finish called\|Not enough words')"; echo "$out"
     if echo "$out" | grep -q '^PASS' && ! echo "$out" | grep -q '^FAIL' && echo "$out" | grep -q 'CYCLES 1716).*CYCLES 2324).*CYCLES 11236)'; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL NS=8 PACK=0 top differs from branch pipe2"; fi
+}
+echo "== accelerator top with NS = 8, packed (= pipe3 / pipe2p: PAD_EN = 0 must keep 1717 / 2325 / 11237 cycles)"
+build top81 -P tb_sr_pipe_top.NS=8 -P tb_sr_pipe_top.PACK=1 $PIPE hardware/rtl/top/sr_accel_top.v $TB/tb_sr_pipe_top.v && {
+    out="$(vvp -n "$TMP/top81.vvp" +F0=p13x7 +F1=pramp +F2=preal2 +PAD=0 2>&1 | grep -v 'finish called\|Not enough words')"; echo "$out"
+    if echo "$out" | grep -q '^PASS' && ! echo "$out" | grep -q '^FAIL' && echo "$out" | grep -q 'CYCLES 1717).*CYCLES 2325).*CYCLES 11237)'; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL NS = 8 differs from pipe3 / pipe2p"; fi
+    run top81 $SMALL +PAD=1 +STALL=1
 }
 build top161 -P tb_sr_pipe_top.NS=16 -P tb_sr_pipe_top.PACK=1 $PIPE hardware/rtl/top/sr_accel_top.v $TB/tb_sr_pipe_top.v && run top161 +F0=p13x7 +F1=pramp +F2=preal2 +LAYERS=1 +STALL=1
 
@@ -109,8 +127,10 @@ if [ "$MODE" = full ]; then
     if echo "$out" | grep -q '^SKIP'; then :; elif echo "$out" | grep -q '^PASS'; then pass=$((pass+1)); else fail=$((fail+1)); fi
     echo "== frames at the counter limits in xsim: 192x192 and 960x24 (> 8,192 anchor pixels: FIFO pointer wrap), 1018x4 (MAX_W: last line-buffer/bank address), 1x4096 (MAX_H)"
     for fr in p192 pw960x24 pmaxw ptall; do
-        out="$(hardware/verification/run_fullframe.sh $fr 2>&1)"; echo "$out" | grep -E '^(PASS|FAIL)'
+      for pd in 0 1; do                                     # pipe3: also with PL padding (row buffer at MAX_W, 4096 rows)
+        out="$(hardware/verification/run_fullframe.sh $fr -testplusarg PAD=$pd 2>&1)"; echo "$out" | grep -E '^(PASS|FAIL)'
         if echo "$out" | grep -q '^PASS' && ! echo "$out" | grep -q '^FAIL'; then pass=$((pass+1)); else fail=$((fail+1)); fi
+      done
     done
     echo "== pipeline mutation test: deliberate RTL defects, each must be caught (mutate_pipe.py exits 0 only then)"
     out="$($PY hardware/verification/mutate_pipe.py 2>&1)"; echo "$out"            # the whole mutant table (runpy would keep only the last lines)

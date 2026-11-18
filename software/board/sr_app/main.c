@@ -1,4 +1,4 @@
-/* Super-resolution accelerator test program (bare metal, ZedBoard), whole-frame PIPELINE v2 PACKED version (branch `pipe2p`, VERSION 0x53527301, 8 cycles per LR pixel, two multiplies per DSP48; NOT run on a board. The `pipe` design, VERSION 0x53525301, ran on the board 2026-10-27/28).
+/* Super-resolution accelerator test program (bare metal, ZedBoard), whole-frame PIPELINE at 6 cycles per LR pixel + PL padding version (branch `pipe4`, VERSION 0x53529301 (pipe3 0x53528301: 8 cycles), two multiplies per DSP48, frames sent RAW and padded in the PL; NOT run on a board. pipe2p (0x53527301) ran on the board 2026-11-10. The `pipe` design, VERSION 0x53525301, ran on the board 2026-10-27/28).
  * Differences to the tiled program: T2/T3 pad the frame to (W+6) x (H+6) and send it with ONE DMA transfer each way (no tile loop, no ARM tile copy; the
  * output lands directly in the output image); CYCLES is per frame.  T1/T5/T6 use the golden tile as a 64 x 64 frame.  T7 (ARM only) keeps the tile loop.
  *
@@ -197,7 +197,7 @@ static void write_marker(uint32_t result, uint32_t bytes, uint32_t fnv, uint32_t
 }
 
 /* one frame; fills the timing split.  Returns 0 or an error code.
- * fn == NULL: the pipeline (pad to (W+6) x (H+6), one sr_run_frame: DMA in, compute, DMA out directly into the output image; tm->t_run = that wait, cut/place 0).
+ * fn == NULL: the pipeline (pipe3 default: the RAW frame, padded in the PL (CONFIG.PAD_EN), pad time 0; -DSR_ARM_PAD: the ARM pads to (W+6) x (H+6)), one DMA run: DMA in, compute, DMA out directly into the output image; tm->t_run = that wait, cut/place 0).
  * fn != NULL: the tile loop with fn as the tile runner (T7, ARM only). */
 static int process_frame(const sr_geom_t *g, sr_tile_fn fn, void *ctx, uint64_t *t_pad, sr_timing_t *tm, uint64_t *t_total)
 {
@@ -208,11 +208,17 @@ static int process_frame(const sr_geom_t *g, sr_tile_fn fn, void *ctx, uint64_t 
     const uint64_t t0 = now_ticks();
     uint64_t t1, t2;
     if (fn == NULL) {
-        sr_geom_t gf;
+#ifdef SR_ARM_PAD
+        sr_geom_t gf;                                             /* the pipe2p way: the ARM pads, the DMA streams the padded frame */
         sr_geom_frame(g->w, g->h, &gf);
         sr_pad_image(lr, &gf, padded);
         t1 = now_ticks();
         rc = sr_run_frame(&dev, padded, out, g->w, g->h);
+#else
+        t1 = now_ticks();                                         /* pipe3 default: raw frame, the PL pads it (pad time 0) */
+        rc = sr_run_frame_raw(&dev, lr, out, g->w, g->h);
+        (void)padded;
+#endif
         t2 = now_ticks();
         tm->t_cut = 0; tm->t_place = 0; tm->t_run = t2 - t1; tm->tiles = rc ? 0u : 1u;
         (void)ctx;
@@ -474,8 +480,11 @@ int main(void)
     int rc = sr_init(&dev);
     if (rc != SR_RC_OK) { xil_printf("sr_init failed: %d\r\n", rc); write_marker((uint32_t)rc, 0, 0, 0, 0); return rc; }
     xil_printf("init ok: VERSION 0x%08x, MAX_W %u\r\n", sr_reg_read(&dev, SR_REG_VERSION), sr_reg_read(&dev, SR_REG_MAX_W));
-#if defined(SR_NC_OUT) || defined(SR_NC_PAD)
+#if defined(SR_NC_OUT) || defined(SR_NC_PAD) || defined(SR_NC_IN)
     { const uint64_t tn0 = now_ticks(); sr_nc_init();
+#ifdef SR_NC_IN
+      xil_printf("NC: raw input region 0x10000000+32MB non-cacheable\r\n");
+#endif
       xil_printf("NC: output region %s, padded-input region %s non-cacheable (set-up %u us)\r\n",
 #ifdef SR_NC_OUT
                  "0x12000000+16MB",

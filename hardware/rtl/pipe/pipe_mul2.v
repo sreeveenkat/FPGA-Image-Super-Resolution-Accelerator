@@ -6,7 +6,9 @@
 // summed OUTSIDE the DSP (adder trees), so the low field never overflows into the high one.
 // Latency 2 like pipe_mul: input registers (A/B registers) then the product register (M or P register).  No reset (valid flags travel separately).
 (* use_dsp = "yes" *)
-module pipe_mul2 (
+module pipe_mul2 #(
+    parameter LAT = 2                      // pipe4: 3 = one more output register (the DSP48's P register)
+) (
     input  wire               clk,
     input  wire        [7:0]  a,
     input  wire signed [7:0]  w1,
@@ -25,7 +27,17 @@ module pipe_mul2 (
         A_r <= A_n;
         p   <= A_r * a_s;
     end
-    assign lo     = p[16:0];
-    assign hi_raw = p[33:17];
-    assign b      = p[16];
+    wire signed [33:0] po;
+    generate
+        if (LAT == 2) begin : g2
+            assign po = p;
+        end else begin : g3
+            reg signed [33:0] p2;
+            always @(posedge clk) p2 <= p;
+            assign po = p2;
+        end
+    endgenerate
+    assign lo     = po[16:0];
+    assign hi_raw = po[33:17];
+    assign b      = po[16];
 endmodule

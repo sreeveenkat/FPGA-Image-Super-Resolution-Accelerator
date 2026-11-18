@@ -7,6 +7,7 @@ Writes data/golden/pipe/ (git-ignored):
   frames (network weights from qparams.npz, golden = integer_reference.upscale / forward_layers):
     <f>_meta.txt  "W H n_in_beats n_out_beats"
     <f>_in.hex    32-bit input beats: replicate-padded (W+6)x(H+6)x3 frame, little-endian; unused bytes of the last beat = 0xA5
+    <f>_raw.hex, <f>_rawmeta.txt "n_raw_beats"   (pipe3, replicate-padded frames only, not gtile): the RAW WxHx3 frame for CONFIG.PAD_EN = 1
     <f>_out.hex   32-bit output beats: the 2W x 2H x 3 frame of upscale()
     <f>_L1..L4.hex  each stage's output pixels in raster order (L4 = after the anchor add), one pixel word per line, channel 0 = rightmost byte
     <f>_anc.hex   anchor network only: the centre input pixel of every output pixel (24 bit, R = rightmost byte), raster
@@ -49,6 +50,9 @@ def frame(net: QNet, name: str, lr_hwc: np.ndarray) -> None:
     padded = pad_replicate(lr_hwc)
     hr = upscale(net, lr_hwc)
     emit(net, name, padded, hr)
+    rb = beats(np.ascontiguousarray(lr_hwc).tobytes())                       # pipe3: the same frame without padding (the PL pads it)
+    write(OUT / f"{name}_raw.hex", rb)
+    (OUT / f"{name}_rawmeta.txt").write_text(f"{len(rb)}\n")
 
 
 def emit(net: QNet, name: str, padded: np.ndarray, hr: np.ndarray) -> None:
@@ -124,6 +128,7 @@ def rand_stage(rng: np.random.Generator, layer, cin, cout, k, mode, iw, ih, anch
     n = f"randL{layer}"
     write(d / f"{n}_wpipe.mem", export_pipe.lines_for(lanes))
     write(d / f"{n}_wpipe8.mem", export_pipe.lines_for(export_pipe.slot_lanes(w.reshape(cout, ci_w, k * k), mode, 8)))   # pipe2, NS = 8
+    write(d / f"{n}_wpipe6.mem", export_pipe.lines_for(export_pipe.slot_lanes(w.reshape(cout, ci_w, k * k), 0 if mode == 2 else mode, 6)))   # pipe4
     write(d / f"{n}_bias.mem", [f"{int(v) & 0xFFFFFFFF:08x}" for v in b])
     write(d / f"{n}_mult.mem", [f"{int(v):04x}" for v in m])
     write(d / f"{n}_in.hex", pix_lines(x))

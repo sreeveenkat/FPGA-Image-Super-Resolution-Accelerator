@@ -10,20 +10,23 @@
 module tb_pipe_stage;
     parameter LAYER = 1;
     parameter REAL  = 0;
-    parameter NS    = 16;                       // pipe2: slots per pixel (16 = original, 8 = v2); weight files wpipe8_* for NS = 8
+    parameter NS    = 16;                       // slots per pixel (16 = original, 8 = v2, 6 = pipe4); weight files wpipe8_* / wpipe6_*
     parameter NDSP  = 1 << 20;                  // pipe2: lanes on DSPs (the rest LUT multipliers; same function in simulation)
     parameter PACK  = 0;                        // pipe2p: two lanes per DSP48 where trees share activations (pipe_mul2)
+    parameter NDSP2 = 1 << 20;
+    parameter MLAT  = (NS == 6 && LAYER == 4) ? 3 : 2;   // pipe4: as the core (L4 at NS = 6 has 3-cycle multipliers)                  // pipe4: packed pairs on DSP48s (the rest on 2 LUT multipliers; same function in simulation)
     `include "hardware/rtl/weights/network_params.vh"
     localparam C_IN   = (LAYER == 1) ? 3 : 16;
     localparam C_OUT  = (LAYER == 4) ? 12 : 16;
     localparam K      = (LAYER == 3) ? 1 : 3;
-    localparam MODE   = (LAYER == 2) ? 1 : (LAYER == 4) ? 2 : 0;
+    localparam MODE   = (LAYER == 2) ? 1 : (LAYER == 4) ? ((NS == 6) ? 0 : 2) : 0;   // pipe4: L4 output-serial at NS = 6
     localparam ANCH   = (LAYER == 4) ? (REAL ? NET_ANCHOR : 1) : 0;
     localparam RSHIFT = (LAYER == 1) ? L1_SHIFT : (LAYER == 2) ? L2_SHIFT : (LAYER == 3) ? L3_SHIFT : L4_SHIFT;
     localparam [7:0] LC = "0" + LAYER;
     localparam RD = "data/golden/pipe/rand/randL";
     localparam WF = (NS == 16) ? (REAL ? {"hardware/rtl/weights/wpipe_L", LC, ".mem"} : {RD, LC, "_wpipe.mem"})
-                               : (REAL ? {"hardware/rtl/weights/wpipe8_L", LC, ".mem"} : {RD, LC, "_wpipe8.mem"});
+                  : (NS == 8)  ? (REAL ? {"hardware/rtl/weights/wpipe8_L", LC, ".mem"} : {RD, LC, "_wpipe8.mem"})
+                               : (REAL ? {"hardware/rtl/weights/wpipe6_L", LC, ".mem"} : {RD, LC, "_wpipe6.mem"});   // pipe4
     localparam BF = REAL ? {"hardware/rtl/weights/bias_L", LC, ".mem"}  : {RD, LC, "_bias.mem"};
     localparam MF = REAL ? {"hardware/rtl/weights/mult_L", LC, ".mem"}  : {RD, LC, "_mult.mem"};
     localparam SH = REAL ? RSHIFT : 20;
@@ -39,7 +42,7 @@ module tb_pipe_stage;
     wire [8*C_OUT-1:0] out_data;
     reg  [23:0] anc_data;
 
-    pipe_stage #(.C_IN(C_IN), .C_OUT(C_OUT), .K(K), .MODE(MODE), .SHIFT(SH), .ANCHOR(ANCH), .NS(NS), .NDSP(NDSP), .PACK(PACK), .MAXW(1024),
+    pipe_stage #(.C_IN(C_IN), .C_OUT(C_OUT), .K(K), .MODE(MODE), .SHIFT(SH), .ANCHOR(ANCH), .NS(NS), .NDSP(NDSP), .NDSP2(NDSP2), .MLAT(MLAT), .PACK(PACK), .MAXW(1024),
                  .W_FILE(WF), .B_FILE(BF), .M_FILE(MF)) dut (
         .clk(clk), .rst(rst), .start(start), .in_w(in_w), .in_h(in_h), .in_valid(in_valid), .in_data(in_data), .in_ready(in_ready),
         .out_ok(out_ok), .px_start(px_start), .out_valid(out_valid), .out_data(out_data), .anc_pop(anc_pop), .anc_data(anc_data));

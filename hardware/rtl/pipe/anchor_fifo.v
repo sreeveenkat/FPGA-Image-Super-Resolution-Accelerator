@@ -18,18 +18,20 @@ module anchor_fifo #(
 );
     reg [23:0] mem [0:DEPTH-1];
     reg [AW:0] wp, rp;
-    wire [AW:0] cnt  = wp - rp;              // occupancy, AW+1 bits: the pointers wrap; computing wp - rp in a wider (32-bit) context breaks after the
-                                             // first wrap (bug found 2026-10-26: full went high at 579 entries after 8,192 pushes and the pipeline stopped)
+    reg  [AW:0] cnt;                         // occupancy (= wp - rp, AW+1 bits).  pipe4: kept as its own register (+push -pop) instead of the subtraction
+                                             // wp - rp, which was on the 142.86 MHz critical path (wp -> subtract -> compare -> wp enable, WNS -0.415 ns).
+                                             // (2026-10-26 bug: wp - rp evaluated in 32 bits broke after the first pointer wrap; a register cannot.)
     wire really_full = (cnt == DEPTH);
-    wire empty       = (wp == rp);
+    wire empty       = (cnt == 0);
     always @(posedge clk) begin
         if (push && !really_full) mem[wp[AW-1:0]] <= din;
         if (pop) dout <= mem[rp[AW-1:0]];
         if (rst) begin
-            wp <= 0; rp <= 0; err <= 1'b0; full <= 1'b0;
+            wp <= 0; rp <= 0; cnt <= 0; err <= 1'b0; full <= 1'b0;
         end else begin
             if (push && !really_full) wp <= wp + 1'b1;
             if (pop && !empty) rp <= rp + 1'b1;
+            cnt <= cnt + ((push && !really_full) ? 1'b1 : 1'b0) - ((pop && !empty) ? 1'b1 : 1'b0);
             if ((push && really_full) || (pop && empty)) err <= 1'b1;
             full <= (cnt >= DEPTH - 4);
         end

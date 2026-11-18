@@ -2,6 +2,11 @@
 // Branch pipe2 (docs/ARCHITECTURE_PIPELINE_V2.md): NS = 16 is the original design (P = 1, unchanged behaviour); NS = 8 handles P = 16 / NS = 2 channels
 // per slot with P times the lanes and P requantizers (MODE 2: ceil(C_OUT / NS) requantizers).  Lanes with index >= NDSP use LUT multipliers.
 // Branch pipe2p: PACK = 1 puts two lanes that share an activation into one DSP48 (pipe_mul2; docs/ARCHITECTURE_PIPELINE_V2P.md).
+// Branch pipe4 (docs/ARCHITECTURE_PIPELINE_V4.md): NS = 6.  P = ceil(NCH / NS) channels per slot, NCH = C_OUT (MODE 0/1) or C_IN (MODE 2); channels
+// s*P + r >= NCH do not exist (zero weights, no requantizer result).  L1..L3 get P = 3 (last slot: 1 real channel of 3), L4 runs in MODE 0 with
+// P = 2 (6 x 2 = its 12 output channels) and the anchor add moves into the MODE 0 requantizer.  Packing also pairs the trees of an odd tree count
+// (last tree alone); NDSP2 = packed pairs (even-tree lane index) kept on DSP48s, the pairs above it become two LUT multipliers (for the DSP budget).
+// NS = 16 / 8 behave exactly as before.
 //
 //   input pixels (raster, in_w x in_h, 8*C_IN bits, channel c at bits 8c+:8)
 //     -> line buffer (K = 3: rows y-1 and y-2 in one simple dual-port RAM) -> KxK window shift register -> snapshot S (taken when a pixel starts)
@@ -26,10 +31,12 @@ module pipe_stage #(
     parameter MODE   = 0,
     parameter SHIFT  = 24,
     parameter ANCHOR = 0,
-    parameter NS     = 16,                   // slots per output pixel: 16 (original) or 8 (pipe2)
+    parameter NS     = 16,                   // slots per output pixel: 16 (original), 8 (pipe2) or 6 (pipe4)
     parameter NDSP   = 1 << 20,              // lanes 0..NDSP-1 on DSP48 multipliers, the rest in LUTs (default: all DSP)
     parameter PACK   = 0,                    // pipe2p: two lanes per DSP48 (pipe_mul2) where two trees share the activations: MODE 2, and MODE 0 with 2 trees
                                              // (NS = 8); MODE 1 is never packed (its trees read different channels).  With PACK = 1, NDSP is ignored.
+    parameter NDSP2  = 1 << 20,              // pipe4, PK stages only: packed pairs with even-tree lane index < NDSP2 on pipe_mul2, the rest on 2 LUT multipliers
+    parameter MLAT   = 2,                    // pipe4: multiplier latency (3 for L4 at 142.86 MHz: LUT multipliers get two cycles, DSPs their P register)
     parameter MAXW   = 1024,                 // line-buffer depth = maximum in_w
     parameter W_FILE = "wpipe.mem",
     parameter B_FILE = "bias.mem",
@@ -51,8 +58,8 @@ module pipe_stage #(
     output wire                 anc_pop,
     input  wire [23:0]          anc_data
 );
-    localparam NCH = 16;                                        // channels walked per pixel (C_OUT of MODE 0/1, C_IN of MODE 2)
-    localparam P   = NCH / NS;                                  // channels per slot
+    localparam NCH = (MODE == 2) ? C_IN : C_OUT;                // channels walked per pixel (C_OUT of MODE 0/1, C_IN of MODE 2)
+    localparam P   = (NCH + NS - 1) / NS;                       // channels per slot (pipe4: rounded up; channels >= NCH are empty)
     localparam SW  = $clog2(NS);                                // slot counter width
     localparam KK  = K * K;
     localparam IWB = 8 * C_IN;
@@ -61,20 +68,20 @@ module pipe_stage #(
     localparam NG  = (MODE == 2) ? C_OUT : P;
     localparam NRQ = (MODE == 2) ? (C_OUT + NS - 1) / NS : P;   // requantizers
     localparam NT  = NL / NG;                                   // terms per adder tree
-    localparam PK  = (PACK != 0) && ((MODE == 2) || (MODE == 0 && NG % 2 == 0));   // packing used in this stage
+    localparam PK  = (PACK != 0) && ((MODE == 2) || (MODE == 0 && NG >= 2));       // packing used in this stage (pipe4: odd NG -> last tree alone)
     localparam NTT = PK ? NT + 1 : NT;                          // terms per tree: + the borrow count of the high products (pipe_mul2)
     localparam LV  = $clog2(NTT);
-    localparam D   = 2 + LV;                                    // slot issue -> tree sum
+    localparam D   = MLAT + LV;                                 // slot issue -> tree sum (multiplier MLAT cycles + LV tree levels)
 
     // synthesis translate_off
     initial begin
         if (K != 1 && K != 3)                    begin $display("pipe_stage: K must be 1 or 3"); $finish; end
-        if (NS != 16 && NS != 8)                 begin $display("pipe_stage: NS must be 16 or 8"); $finish; end
+        if (NS != 16 && NS != 8 && NS != 6)      begin $display("pipe_stage: NS must be 16, 8 or 6"); $finish; end
+        if (MODE == 2 && NCH % NS != 0)          begin $display("pipe_stage: MODE 2 needs NS dividing C_IN"); $finish; end
         if (MODE == 2 && C_OUT % NRQ != 0)       begin $display("pipe_stage: MODE 2 needs C_OUT divisible by the requantizer count"); $finish; end
-        if (MODE != 2 && C_OUT != NCH)           begin $display("pipe_stage: MODE 0/1 need C_OUT == 16"); $finish; end
         if (MODE == 1 && C_IN != C_OUT)          begin $display("pipe_stage: MODE 1 needs C_IN == C_OUT"); $finish; end
         if (MODE == 2 && C_IN != NCH)            begin $display("pipe_stage: MODE 2 needs C_IN == 16"); $finish; end
-        if (ANCHOR && (MODE != 2 || C_OUT != 12)) begin $display("pipe_stage: ANCHOR needs MODE 2 and C_OUT == 12"); $finish; end
+        if (ANCHOR && (MODE == 1 || C_OUT != 12)) begin $display("pipe_stage: ANCHOR needs MODE 0 or 2 and C_OUT == 12"); $finish; end
         if (NT < 2)                              begin $display("pipe_stage: fewer than 2 terms per tree"); $finish; end
     end
     // synthesis translate_on
@@ -84,6 +91,9 @@ module pipe_stage #(
     reg         in_done;                     // every pixel of the frame taken (also high after reset until the first start)
     reg         hold;                        // a pixel that completes a window was taken; its window has not started yet
     reg         win_rdy;                     // the window register holds a complete, not yet started window
+    reg  [15:0] wm1, hm1;                    // pipe4: in_w - 1, in_h - 1 registered (in_w/in_h are stable from before `start`; the subtraction was on the
+                                             // 142.86 MHz path in_w -> ix reset, WNS -0.101 ns)
+    always @(posedge clk) begin wm1 <= in_w - 16'd1; hm1 <= in_h - 16'd1; end
     wire        produce = (ix >= K - 1) && (iy >= K - 1);
     assign      in_ready = !hold && !in_done;
     wire        take = in_valid && in_ready;
@@ -107,9 +117,9 @@ module pipe_stage #(
         end else begin
             if (take) begin
                 if (produce) hold <= 1'b1;
-                if (ix == in_w - 1) begin
+                if (ix == wm1) begin
                     ix <= 16'd0; iy <= iy + 16'd1;
-                    if (iy == in_h - 1) in_done <= 1'b1;
+                    if (iy == hm1) in_done <= 1'b1;
                 end else ix <= ix + 16'd1;
             end
             if (px_start) hold <= 1'b0;
@@ -184,23 +194,30 @@ module pipe_stage #(
                 if (MODE == 0) begin : g_fix
                     assign a_l = snap[t * 8 +: 8];                                          // tap*C_IN + ci, the same for every tree
                 end else if (MODE == 1) begin : g_sel
-                    assign a_l = snap[((t % KK) * C_IN + s * P + g) * 8 +: 8];              // channel s*P+g of tap t
+                    wire [7:0] ch1 = s * P + g;                                             // pipe4: may be >= C_IN in the last slot (weight 0)
+                    assign a_l = (ch1 < C_IN) ? snap[((t % KK) * C_IN + ch1) * 8 +: 8] : 8'd0;   // channel s*P+g of tap t
                 end else begin : g_sel2
                     assign a_l = snap[((t % KK) * C_IN + s * P + t / KK) * 8 +: 8];         // channel s*P+q of tap t % KK, q = t / KK
                 end
                 wire signed [16:0] p_l;
                 wire               b_l;
-                if (!PK) begin : g_one
+                if (!PK || (NG % 2 == 1 && g == NG - 1)) begin : g_one
                     if (L < NDSP) begin : g_dsp
-                        pipe_mul u_mul (.clk(clk), .a(a_l), .w(wrow[8*L +: 8]), .prod(p_l));
+                        pipe_mul #(.LAT(MLAT)) u_mul (.clk(clk), .a(a_l), .w(wrow[8*L +: 8]), .prod(p_l));
                     end else begin : g_lut
-                        pipe_mul_lut u_mul (.clk(clk), .a(a_l), .w(wrow[8*L +: 8]), .prod(p_l));
+                        pipe_mul_lut #(.LAT(MLAT)) u_mul (.clk(clk), .a(a_l), .w(wrow[8*L +: 8]), .prod(p_l));
                     end
                     assign b_l = 1'b0;
                 end else if (g % 2 == 0) begin : g_pk
                     wire signed [16:0] hi;
                     wire               bb;
-                    pipe_mul2 u_mul (.clk(clk), .a(a_l), .w1(wrow[8*L +: 8]), .w2(wrow[8*(L + NT) +: 8]), .lo(p_l), .hi_raw(hi), .b(bb));
+                    if (L < NDSP2) begin : g_pd
+                        pipe_mul2 #(.LAT(MLAT)) u_mul (.clk(clk), .a(a_l), .w1(wrow[8*L +: 8]), .w2(wrow[8*(L + NT) +: 8]), .lo(p_l), .hi_raw(hi), .b(bb));
+                    end else begin : g_pl                                   // pipe4: the pair on two LUT multipliers (exact products, no borrow)
+                        pipe_mul_lut #(.LAT(MLAT)) u_m1 (.clk(clk), .a(a_l), .w(wrow[8*L +: 8]), .prod(p_l));
+                        pipe_mul_lut #(.LAT(MLAT)) u_m2 (.clk(clk), .a(a_l), .w(wrow[8*(L + NT) +: 8]), .prod(hi));
+                        assign bb = 1'b0;
+                    end
                     assign pk_hi[L + NT] = hi;
                     assign pk_b[L + NT]  = bb;
                     assign b_l = 1'b0;
@@ -212,13 +229,14 @@ module pipe_stage #(
                 assign bor[t] = b_l;
             end
             if (PK) begin : g_bc
-                reg [5:0] bc;                                    // borrow count of this tree's high products (0 for an even tree)
+                localparam BW = $clog2(NT + 1);                  // pipe4: the count reaches NT (144 at NS = 6, L4 MODE 0); 6 bits overflowed above 63
+                reg [BW-1:0] bc;                                 // borrow count of this tree's high products (0 for an even tree)
                 integer bi;
                 always @* begin
-                    bc = 6'd0;
-                    for (bi = 0; bi < NT; bi = bi + 1) bc = bc + {5'd0, bor[bi]};
+                    bc = {BW{1'b0}};
+                    for (bi = 0; bi < NT; bi = bi + 1) bc = bc + {{(BW-1){1'b0}}, bor[bi]};
                 end
-                assign prods[17*NT +: 17] = {11'd0, bc};
+                assign prods[17*NT +: 17] = {{(17-BW){1'b0}}, bc};
             end
             wire signed [23:0] s_g;
             adder_tree #(.N(NTT), .IW(17), .OW(24)) u_tree (.clk(clk), .in(prods), .sum(s_g));
@@ -254,22 +272,28 @@ module pipe_stage #(
                 reg               rq_v_r;
                 reg signed [31:0] rq_acc_r;
                 reg [15:0]        rq_m_r;
+                reg [7:0]         rq_add_r;
                 reg [4:0]         rq_tag_r;
+                wire [7:0]        bc_i = sd[D-1] * P + r;        // pipe4: channel indices may be >= C_OUT in the last slot (no result)
+                wire [7:0]        ac_i = sd[D] * P + r;
                 always @(posedge clk) begin
-                    bias_r <= bias_mem[sd[D-1] * P + r];
+                    bias_r <= (bc_i < C_OUT) ? bias_mem[bc_i] : 32'sd0;
                     acc    <= bias_r + {{8{sums[24*r+23]}}, sums[24*r +: 24]};
-                    acc_v  <= vd[D] && !rst;
-                    acc_c  <= sd[D] * P + r;
+                    acc_v  <= vd[D] && (ac_i < C_OUT) && !rst;
+                    acc_c  <= ac_i[4:0];
                     rq_acc_r <= acc;
-                    rq_m_r   <= mult_mem[acc_c];
+                    rq_m_r   <= (acc_c < C_OUT) ? mult_mem[acc_c] : 16'd0;
+                    rq_add_r <= ANCHOR ? anc_data[8 * (acc_c >> 2) +: 8] : 8'd0;   // pipe4: channel k = 4c + 2dy + dx gets colour c of the anchor pixel
                     rq_tag_r <= acc_c;
                     rq_v_r   <= acc_v && !rst;
                 end
-                requant #(.SHIFT(SHIFT), .TW(5), .ADD_EN(0)) u_rq (
-                    .clk(clk), .rst(rst), .v_in(rq_v_r), .acc(rq_acc_r), .m(rq_m_r), .add(8'd0), .tag_in(rq_tag_r),
+                requant #(.SHIFT(SHIFT), .TW(5), .ADD_EN(ANCHOR)) u_rq (
+                    .clk(clk), .rst(rst), .v_in(rq_v_r), .acc(rq_acc_r), .m(rq_m_r), .add(rq_add_r), .tag_in(rq_tag_r),
                     .v_out(rq_v[r]), .y(rq_y[8*r +: 8]), .tag_out(rq_tag[5*r +: 5]));
             end
-            assign anc_pop = 1'b0;
+            // pipe4 anchor (MODE 0): pop when slot 0 of a pixel reaches the adder; the FIFO output changes one cycle later and stays until the next pixel's
+            // slot 0 (>= NS cycles), so the requantizer inputs of slots 0..NS-1 (registered 1..NS cycles later) all see this pixel's anchor
+            assign anc_pop = (ANCHOR != 0) && vd[D] && (sd[D] == 0) && !rst;
         end else begin : g_iser
             localparam NJ = C_OUT / NRQ;                         // serial requantizer steps per pixel (<= NS)
             reg signed [31:0] acc  [0:NG-1];
@@ -322,17 +346,22 @@ module pipe_stage #(
     reg  [OWB-1:0] word;
     reg  [OWB-1:0] word_n;
     integer ri;
+    reg            last_n;                                      // pipe4: some requantizer delivers channel C_OUT - 1 this cycle (= the pixel is complete)
     always @* begin
         word_n = word;
+        last_n = 1'b0;
         for (ri = 0; ri < NRQ; ri = ri + 1)
-            word_n[8 * rq_tag[5*ri +: 5] +: 8] = rq_y[8*ri +: 8];
+            if (rq_v[ri]) begin                                     // pipe4: only requantizers with a real channel (all of them for NS = 16 / 8)
+                word_n[8 * rq_tag[5*ri +: 5] +: 8] = rq_y[8*ri +: 8];
+                if (rq_tag[5*ri +: 5] == C_OUT - 1) last_n = 1'b1;
+            end
     end
     always @(posedge clk) begin
         out_valid <= 1'b0;
         if (rst) word <= {OWB{1'b0}};
-        else if (rq_v[NRQ-1]) begin
+        else if (|rq_v) begin
             word <= word_n;
-            if (rq_tag[5*(NRQ-1) +: 5] == C_OUT - 1) begin out_valid <= 1'b1; out_data <= word_n; end
+            if (last_n) begin out_valid <= 1'b1; out_data <= word_n; end
         end
     end
 endmodule

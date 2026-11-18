@@ -5,13 +5,15 @@
 //   +LAYERS=1   also compare every stage's output stream (internal monitors) with <frame>_L1..L4
 //   +ERR=1      error codes 1-4 (early TLAST, missing TLAST, TKEEP, frame size), each followed by a soft reset and a clean frame
 //   +SWEEP=<n>  n soft-reset aborts at spread points of frame F0, each followed by a quiet check and a clean frame
+//   +PAD=1      pipe3: CONFIG.PAD_EN = 1, the DMA sends the RAW frame (<frame>_raw.hex), the core pads it; +PAD=2 alternates (F0 padded by the core, F1 by
+//               the host, ...; ERR/SWEEP frames use PAD_EN = 1).  Same expected output either way.
 // Checks: every output beat bit-exact, beat count, TLAST only on the last beat, AXI hold rule on m_axis, no input accepted before start or after the
 // last beat, STATUS/CYCLES/ERROR_CODE/DBG registers, VERSION/MAX_W/FRAME_W/FRAME_H, internal FIFO error flags never set (ERROR_CODE 5).
 `timescale 1ns/1ps
 module tb_sr_pipe_top;
     parameter MAXW = 1024;
     parameter PACK = 1;                        // pipe2p: DSP packing of the RTL under test
-    parameter NS   = 8;                        // pipe2: slots per LR pixel of the RTL under test (the throughput bound uses it)
+    parameter NS   = 6;                        // slots per LR pixel of the RTL under test (pipe4 default 6; the throughput bound uses it)
     `include "hardware/rtl/weights/network_params.vh"
     localparam MAXB = 1600000;
 
@@ -47,7 +49,7 @@ module tb_sr_pipe_top;
         .s_axis_tdata(s_tdata), .s_axis_tkeep(s_tkeep), .s_axis_tvalid(s_tvalid), .s_axis_tready(s_tready), .s_axis_tlast(s_tlast),
         .m_axis_tdata(m_tdata), .m_axis_tkeep(m_tkeep), .m_axis_tvalid(m_tvalid), .m_axis_tready(m_tready), .m_axis_tlast(m_tlast));
 
-    integer errors = 0, seed = 11, seed2 = 5, stall = 0, layers = 0, errt = 0, sweep = 0;
+    integer errors = 0, seed = 11, seed2 = 5, stall = 0, layers = 0, errt = 0, sweep = 0, padm = 0, pad_cur = 0;
     reg     srst_seen = 0;                     // high from a soft-reset write until the next frame starts (the hold rule does not apply across it)
 
     // ---- AXI-Lite master tasks.  order: 0 AW and W together, 1 AW first (W a few cycles later), 2 W first
@@ -102,7 +104,7 @@ module tb_sr_pipe_top;
     reg [31:0] in_mem [0:MAXB-1];
     reg [31:0] out_mem [0:MAXB-1];
     integer fw, fh, nbi, nbo;
-    string  fname;
+    string  fname, in_file;
     task load_frame(input string name);
         integer fd, r, i;
         begin
@@ -111,8 +113,14 @@ module tb_sr_pipe_top;
             if (fd == 0) begin $display("FAIL missing data/golden/pipe/%s_meta.txt (run gen_pipe_vectors.py)", name); $finish; end
             r = $fscanf(fd, "%d %d %d %d", fw, fh, nbi, nbo); $fclose(fd);
             for (i = 0; i < nbo; i = i + 1) out_mem[i] = 32'hxxxx_xxxx;
+            if (pad_cur) begin
+                fd = $fopen({"data/golden/pipe/", name, "_rawmeta.txt"}, "r");
+                if (fd == 0) begin $display("FAIL missing data/golden/pipe/%s_rawmeta.txt (run gen_pipe_vectors.py)", name); $finish; end
+                r = $fscanf(fd, "%d", nbi); $fclose(fd);
+            end
             in_mem[nbi - 1] = 32'hxxxx_xxxx;
-            $readmemh({"data/golden/pipe/", name, "_in.hex"}, in_mem, 0, nbi - 1);
+            if (pad_cur) in_file = {"data/golden/pipe/", name, "_raw.hex"}; else in_file = {"data/golden/pipe/", name, "_in.hex"};
+            $readmemh(in_file, in_mem, 0, nbi - 1);
             $readmemh({"data/golden/pipe/", name, "_out.hex"}, out_mem, 0, nbo - 1);
             if (^in_mem[nbi - 1] === 1'bx || ^out_mem[nbo - 1] === 1'bx) begin $display("FAIL vector files of %s missing or short", name); $finish; end
             if (layers) load_layers(name);
@@ -167,6 +175,19 @@ module tb_sr_pipe_top;
         if (dut.start_ok) tcyc <= 1;
         else if (dut.core.busy && !dut.core.done) tcyc <= tcyc + 1;
     end
+    // pipe3 invariants of the input side (redundant guards must still be right; mutate_pipe.py C7/C8/D13 are only visible here):
+    //   pix_left == run_f && pcnt != npix every cycle; at done: ucnt == nu == expected unpacker pixels, rcnt == npix (PL padding) or 0
+    always @(posedge aclk) if (aresetn && dut.core.pix_left !== (dut.core.run_f && dut.core.pcnt != dut.core.npix)) begin
+        if (errors < 10) $display("FAIL pix_left %b but run_f %b pcnt %0d npix %0d", dut.core.pix_left, dut.core.run_f, dut.core.pcnt, dut.core.npix); errors = errors + 1;
+    end
+    always @(posedge aclk) if (dut.core.done) begin
+        if (dut.core.ucnt != dut.core.nu || dut.core.nu != (pad_cur ? fw * fh : (fw + 6) * (fh + 6))) begin
+            $display("FAIL unpacker pixels %0d, target nu %0d, expected %0d", dut.core.ucnt, dut.core.nu, pad_cur ? fw * fh : (fw + 6) * (fh + 6)); errors = errors + 1;
+        end
+        if (dut.core.rcnt != (pad_cur ? dut.core.npix : 0)) begin
+            $display("FAIL row-buffer reads %0d, expected %0d", dut.core.rcnt, pad_cur ? dut.core.npix : 0); errors = errors + 1;
+        end
+    end
     // latency (2026-11-10): CYCLES count (tcyc) at the first accepted input beat and at the first accepted output beat of the frame
     integer lat_in = -1, lat_out = -1;
     always @(posedge aclk) begin
@@ -213,6 +234,7 @@ module tb_sr_pipe_top;
             if (ib != 0) begin $display("FAIL input accepted before start"); errors = errors + 1; end
             axil_write(6'h08, fw, 4'hF, $random(seed2) & 1);
             axil_write(6'h18, fh, 4'hF, 2);
+            axil_write(6'h28, pad_cur, 4'h1, $random(seed2) & 1);
             frame_live = 1;
             axil_write(6'h00, 32'd1, 4'h1, $random(seed2) & 1);
             t = 0;
@@ -278,6 +300,7 @@ module tb_sr_pipe_top;
         if (!$value$plusargs("LAYERS=%d", layers)) layers = 0;
         if (!$value$plusargs("ERR=%d", errt)) errt = 0;
         if (!$value$plusargs("SWEEP=%d", sweep)) sweep = 0;
+        if (!$value$plusargs("PAD=%d", padm)) padm = 0;
 `ifdef POSTSYNTH
         if (layers) begin $display("FAIL +LAYERS needs the RTL (the netlist has no internal names)"); $finish; end
         wait (glbl.GSR == 1'b0);                                   // the netlist's flip-flops are held by the global set/reset for the first 100 ns
@@ -289,27 +312,33 @@ module tb_sr_pipe_top;
         repeat (4) @(negedge aclk); aresetn = 1; repeat (2) @(negedge aclk);
         // quiet after reset
         repeat (50) begin @(negedge aclk); if (s_tready || m_tvalid) begin $display("FAIL stream activity after reset"); errors = errors + 1; end end
-        expect_reg(6'h14, 32'h5352_7301, "VERSION");
+        expect_reg(6'h14, 32'h5352_9301, "VERSION");
+        expect_reg(6'h28, 32'd0, "CONFIG (reset)");
+        axil_write(6'h28, 32'hFFFF_FFFF, 4'hF, 1); expect_reg(6'h28, 32'd1, "CONFIG (write 1s)");
+        axil_write(6'h28, 32'hFFFF_FFFE, 4'hF, 2); expect_reg(6'h28, 32'd0, "CONFIG (write 0)");
+        axil_write(6'h28, 32'h0000_0001, 4'h0, 0); expect_reg(6'h28, 32'd0, "CONFIG (wstrb 0)");
         expect_reg(6'h1C, MAXW - 6, "MAX_W");
         expect_reg(6'h04, 32'd0, "STATUS");
         expect_reg(6'h10, 32'd0, "ERROR_CODE");
         expect_reg(6'h08, 32'd0, "FRAME_W (reset)");
         expect_reg(6'h30, 32'd0, "unmapped 0x30");
-        axil_write(6'h14, 32'hFFFF_FFFF, 4'hF, 0); expect_reg(6'h14, 32'h5352_7301, "VERSION (write)");
+        axil_write(6'h14, 32'hFFFF_FFFF, 4'hF, 0); expect_reg(6'h14, 32'h5352_9301, "VERSION (write)");
         axil_write(6'h08, 32'h1234_0567, 4'h1, 1); expect_reg(6'h08, 32'h0000_0067, "FRAME_W (wstrb 0001)");
         axil_write(6'h18, 32'hABCD_0102, 4'h3, 2); expect_reg(6'h18, 32'h0000_0102, "FRAME_H");
         axil_write(6'h00, 32'd1, 4'h0, 0); repeat (5) @(negedge aclk); expect_reg(6'h04, 32'd0, "STATUS (start with wstrb 0)");
         nf = 0; lst = "";
         for (i2 = 0; i2 < 8; i2 = i2 + 1) begin
             if ($value$plusargs($sformatf("F%0d=%%s", i2), fnm)) begin
+                pad_cur = (padm == 2) ? ((nf % 2) == 0) : padm;
                 load_frame(fnm);
                 run_frame(0, 0, 0);
                 if (i2 == 0) cyc0 = cyc_reg;
-                lst = $sformatf("%s %s(%0dx%0d, CYCLES %0d)", lst, fnm, fw, fh, cyc_reg);
+                lst = $sformatf("%s %s(%0dx%0d%s, CYCLES %0d)", lst, fnm, fw, fh, pad_cur ? " PL pad" : "", cyc_reg);
                 nf = nf + 1;
             end
         end
         if (nf == 0) begin $display("FAIL no frames given (+F0=<name>)"); $finish; end
+        if (padm) pad_cur = 1;
         if (errt) begin
             pa = $value$plusargs("F0=%s", fnm); load_frame(fnm);
             run_frame(1, 1, 0); axil_write(6'h00, 32'd2, 4'h1, 0);
