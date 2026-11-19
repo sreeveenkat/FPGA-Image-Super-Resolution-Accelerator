@@ -111,7 +111,7 @@ Completed up to here:
 | 1 | Re-run T1/T2 on R0 (main.c changed on 2026-10-16) | board + owner |
 | 2 | T7: run the ARM-only baseline (never run on the board) | board |
 | 3 | R2q on the board: T1, T2, negative controls, 20-frame timing, optionally 119 images | board |
-| 4 | Power measurement with a meter (P0, P1, P2, P3 states; replaces the 1.91 W estimate) | board + power meter |
+| 4 | Power: not measured on the board (decision 2026-11-19); Vivado on-chip estimates only | - |
 | 5 | R3q on the board (only after R2q passes) | board |
 | 6 | Apply the merge criteria and decide which branch goes into `main` | owner decision |
 
