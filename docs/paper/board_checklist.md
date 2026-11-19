@@ -1,4 +1,4 @@
-# Board checklist: T1/T2 re-run, T7 ARM baseline, R2q, R3q, r0_125, power
+# Board checklist: T1/T2 re-run, T7 ARM baseline, R2q, R3q, r0_125, pipelines
 
 Prepared 2026-10-19, updated for the per-design VERSION values. **Nothing below has been run on the board.** Everything on the PC side (simulation, builds, byte-exact C model) is done and listed in
 `results/utilization/m6_system_R2q.md` (branch `r2q`) and `results/utilization/m6_system_R3q.md` (branch `r3q`).
@@ -39,8 +39,8 @@ cd <tree>; .venv/bin/python software/host_tools/golden_tile_h.py; .venv/bin/pyth
 for n in 1 2 11; do software/board/build_elf.sh $n; done          # T1, T2, T7 (1 frame)
 software/board/test_swmodel.sh                                      # T7 code on the PC: 4x PASS byte-exact vs the tree's expected output
 ```
-ELFs in each tree's `software/board/build/`: `sr_app_t1.elf`, `sr_app_t2.elf`, `sr_app_t11.elf` (T7, 1 frame), `sr_app_t11_20f.elf` (T7, 20 frames, power),
-`sr_app_t3_20f.elf` (T3, 20 frames, frame time), `sr_app_t3_200f.elf` (T3, 200 frames, ~4.4 min, power).
+ELFs in each tree's `software/board/build/`: `sr_app_t1.elf`, `sr_app_t2.elf`, `sr_app_t11.elf` (T7, 1 frame), `sr_app_t11_20f.elf` (T7, 20 frames),
+`sr_app_t3_20f.elf` (T3, 20 frames, frame time), `sr_app_t3_200f.elf` (T3, 200 frames, ~4.4 min).
 Input files `data/board/div2k_img0193_lr_960x540.raw` (R2q/R3q trees have it; expected output in the same folder).
 
 ## 2. Current design (R0 / 0602), from `~/Desktop/venkat/sem_project_all` (main.c changed on 2026-10-16: T1/T2 must be re-run)
@@ -66,51 +66,10 @@ Input files `data/board/div2k_img0193_lr_960x540.raw` (R2q/R3q trees have it; ex
 If T1 fails on R2q: check that the right bitstream was loaded (`SR_BIT`), then run `SR_BIT=~/Desktop/venkat/TESTED_0602.bit` with the R0 T1 to prove the board and
 the tooling are fine; then report the failing tile and the `t1_r2q.txt` stats.
 
-## 4. Power measurement (every bitstream: R0, R2q, R3q, r0_125, r3q_125, pipe, pipe2, pipe2p; plus ARM only)
+## 4. Power
 
-**What to measure:** the ZedBoard's 12 V input power (whole board: Zynq, DDR, regulators, USB-UART, LEDs). The board overhead is the same in every state, so the
-**differences** between states are the useful numbers. The synthesis power estimates are 1.913 W (0602) and 1.910 W (R2q, current VERSION 0x53522201 build; `m6_system_R2q.md:45` in branch `r2q`; the 1.912 W on its line 6 is the superseded first build), both "low confidence"; the measurement
-replaces them.
-
-**How (owner decision 2026-10-26).**
-* **Primary: an inline DC power meter between the 12 V adapter and the barrel jack.** Write down its model, range, stated accuracy, resolution and reading/averaging interval. Use the same meter and range for every state.
-* **Cross-check: J21.** J21 is across a **10 mOhm, 1 W** current-sense resistor in series with the 12 V input (forum quotes of the ZedBoard Hardware User's Guide; **page citation to be added by the owner**: until then this value is not cited from the guide itself). Multimeter in mV mode across the J21 pins: I = V_J21 / 0.010 Ohm, P = I x V_in. At about 0.5 A the drop is about 5 mV, so the meter needs at least 0.01 mV resolution. Probe only (voltage mode); never load the header.
-* **Measure the actual input voltage** in every state (the inline meter shows it; otherwise a multimeter at the jack); do not assume 12.00 V.
-* **Average several readings per state:** wait 30 s after entering the state, then take at least 5 readings (or the meter's log) spread over at least 30 s; report mean, min, max and the number of readings. Inline meter and J21 are read in the same window.
-* If the two methods disagree by more than their combined stated accuracy, report both and say so; do not pick one afterwards.
-
-**Board-level power, not comparable to Vivado's on-chip estimate.** This is the whole ZedBoard's 12 V input (Zynq, DDR, regulators, USB-UART, LEDs, conversion losses). The Vivado numbers (1.913 W, 1.910 W) are the on-chip estimate of the Zynq only. Never put the two in one row without saying so, and never compare a board-level absolute with the estimate; compare the **delta** only.
-
-**States: idle and processing for each bitstream** (steady room temperature; averaging as above; note the start and end time of each window):
-
-| # | State | How to get there | Tree |
-|---|---|---|---|
-| P0 | board on, PL not programmed | power on, do nothing | - |
-| P1-R0 / P2-R0 | 0602 programmed, ARM idle / accelerator running | T1 (ends in an idle loop), read after it finished / `sr_app_t3_200f.elf` (200 frames, ~4.4 min), read during the run | R0 |
-| P1-R2q / P2-R2q | same for R2q | same ELFs | R2q |
-| P1-R3q / P2-R3q | same for R3q | same ELFs | R3q |
-| P1-125 / P2-125 | same for r0_125 (125 MHz) | same ELFs (200 frames at ~1.06 s each, predicted, ~3.5 min) | r0_125 |
-| P3 | ARM only running (PL programmed with R0) | `sr_app_t11_20f.elf` (20 frames), read during the run | R0 |
-
-Order: P0, then idle/processing for R0, R2q, R3q, r0_125 (each design only after its functional steps passed), P3, then **repeat P1-R0 / P2-R0** at the end (drift check: if the repeat differs by more than the meter accuracy, say so rather than averaging).
-R0 and R2q fabrics are logically identical apart from constants, so their P2 should agree within the meter accuracy; R3q adds 33-45 LUT; r0_125 runs at a 25 % higher clock and is expected to draw more (not predicted; the Vivado estimates use different methods).
-
-**Reported per bitstream (owner decision):** idle power P1, processing power P2, accelerator delta P2 - P1, and P1 - P0 (cost of a configured but idle PL); each from the inline meter (primary) with the J21 value beside it.
-
-| Quantity | Formula | Value |
-|---|---|---|
-| Energy per frame, FPGA, whole board (per bitstream) | P2 x (that design's measured T3 frame time; 1.312 s for R0) | J |
-| Energy per frame, FPGA, above idle (per bitstream) | (P2 - P1) x (that design's measured frame time) | J |
-| Energy per frame, ARM-only, whole board | P3 x (T7 time per frame) | J |
-| Energy per frame, ARM-only, above idle | (P3 - P1) x (T7 time per frame) | J |
-
-PC side for the same table: `sudo .venv/bin/python software/analysis/cpu_baseline.py --md docs/paper/cpu_baseline.md` adds CPU package energy (RAPL); the GPU row
-(nvidia-smi) is already measured: 0.55 J per frame, GPU power only.
-
-### 4a. Plan for the 2026-11-19 power session (owner has a bench multimeter; v3 and v4 added)
-J21 DC mV method as above; states 0 (off), 1 (on, not programmed), 2 (v4 idle), 3 v4 running `sandbox_pipe4/.../sr_app_t3_power3000_nc.elf` (md5 da2bf7bf...),
-4 v3 running `sandbox_pipe3/.../sr_app_t3_power2200_nc.elf` (md5 712b58a6...), 5 v2 packed running `sandbox_pipe2p/.../sr_app_t3_power2500_nc.elf`, 6 R0 running
-`software/board/build/sr_app_t3_200f.elf`. Each run with the design's own XSA ps7_init (clock read back). Record the 30 s average per state and V_in.
+Board power was **not measured** and will not be: no board power session is planned. Every power number in this project is a Vivado
+on-chip estimate (vectorless, and for some designs with simulated switching activity): `results/power_estimate/SUMMARY.md`.
 
 ## 5. Later: R3q (anchor), from `~/Desktop/venkat/sandbox_R3q` (bitstream `~/Desktop/venkat/R3q_artifacts/design_1_wrapper_R3q.bit`, VERSION 0x53523201; the tree's default)
 Only after R2q passed section 3. Same steps as section 3 with the R3q tree's ELFs and files; expected values:
@@ -122,7 +81,7 @@ Only after R2q passed section 3. Same steps as section 3 with the R3q tree's ELF
 | negative controls | the R3q output compared with the R2q expected file and with the R0 expected file: `BYTE-EXACT: no` for both |
 | frame time | 20-frame mean within ±2 ms of 1,311.9 ms, max − min ≤ 3 ms, CYCLES per tile 926,210-926,241 (see section 2 T1 row and `results/speed/m7_timing_20frames.md`); per-frame times saved to a file |
 | T7 | `BYTE-EXACT: yes`, fnv 0x45dd4e2d (anchor compiled into `sr_swmodel.c`) |
-| power | idle and processing for R3q (P1-R3q, P2-R3q, section 4); expected within meter accuracy of R2q (+33 to +45 LUT, +66 FF, 0 DSP, 0 BRAM in the whole system: simulation/synthesis numbers, `m6_system_R3q.md` in branch `r3q`, not board-measured) |
+| power | not measured on the board (no board power session will be done); Vivado on-chip estimates only, `results/power_estimate/SUMMARY.md` |
 
 Seam and halo alignment are covered in simulation (20-tile and 4-tile seam tests, 26 anchor mutants); the board T2 on a real 960x540 frame (135 tiles) is the first
 real-hardware check of the anchor's halo-aligned read.
@@ -137,7 +96,7 @@ Only after R3q (section 5). Built 2026-10-25: routed WNS +0.632 ns at 125.000 MH
 | T2 | `BYTE-EXACT: yes`, fnv1a32 **0xcf947f22** (same as R0: the weights are unchanged) |
 | negative control | the R0-tree ELF must refuse this bitstream (VERSION family 0x535242xx vs 0x535206xx) |
 | frame time | 20-frame mean in **1,033-1,064 ms** (predicted 1,061.8 ms, a model value; lower end = core cycles at 125 MHz + ARM padding/copies), max - min <= 3 ms; per-frame times saved |
-| power | idle and processing for r0_125 (P1-125, P2-125, section 4) |
+| power | not measured on the board (no board power session will be done); Vivado on-chip estimates only, `results/power_estimate/SUMMARY.md` |
 
 If T1 or T2 fails: record it, stop, do not retry silently. The final target (R3q at 125 MHz) is built only after R3q and r0_125 both pass on the board (`docs/STATUS.md`).
 
@@ -152,7 +111,7 @@ Built 2026-10-26: routed WNS +0.393 ns at 125 MHz, quick 42/42, full 95/95, netl
 | 119 test images | `run_testsets.sh` from that tree: 119/119 byte-exact |
 | negative control | the R3q-tree ELF must refuse this bitstream (0x535243xx vs 0x535232xx) |
 | frame time | 20-frame mean in **1,033-1,064 ms** (prediction as for r0_125), max - min <= 3 ms |
-| power | idle and processing (section 4) |
+| power | not measured on the board (no board power session will be done); Vivado on-chip estimates only, `results/power_estimate/SUMMARY.md` |
 
 ## 5d. The pipeline (`pipe`), from `~/Desktop/venkat/sandbox_pipe` (bitstream `~/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.bit`, VERSION 0x53525301; the tree's default)
 Built 2026-10-27: routed WNS +0.267 / WHS +0.014 ns at 125 MHz, 170 DSP / 27 BRAM / 9,888 LUT; quick 48/48, full (see `results/utilization/m6_system_pipe.md` in branch
@@ -167,7 +126,7 @@ no tiles): run ONLY the ELFs of this tree. Commands: `board_session_runbook.md` 
 | 119 test images | `run_testsets.sh` from that tree: 119/119 byte-exact (first whole-frame run on many sizes: a failure here is the most informative result of the session) |
 | negative controls | (a) the R3q-tree ELF must refuse this bitstream (VERSION); (b) this tree's T2 output compared with the R0 expected file must say `BYTE-EXACT: no` |
 | frame time | 20-frame mean in **73.1-102.3 ms** (PREDICTED from the simulated cycles + R0's measured padding; cache maintenance and DMA set-up not modelled), max - min <= 3 ms; per-frame times saved. The headline number of the session if it passes (R0: 1,311.9 ms) |
-| power | idle and processing (section 4); the PL runs with 170 of 220 DSPs busy, so this is the design where the processing - idle difference should be largest |
+| power | not measured on the board (no board power session will be done); Vivado on-chip estimates only, `results/power_estimate/SUMMARY.md` |
 
 If T1 fails here but passed for the tiled designs: the driver/register map is new (FRAME_W/H, one transfer per frame), so first check `version=` and ERROR_CODE in the stats
 (4 = size refused, 5 = internal FIFO error), and the UART log. Do not retry silently.
@@ -189,7 +148,7 @@ ps7_init (md5 d2a7789c..., identical to the other 125 MHz designs): `run_125.py 
 | frame time, cached (`sr_app_t3_20f.elf`) | 20-frame mean in **59.8-63.8 ms** (PREDICTED: 33.6 ms compute + `pipe`'s measured 28.2 ms pad + cache maintenance, +-2 ms), max - min <= 3 ms |
 | frame time, non-cacheable (`sr_app_t3_20f_x_both.elf`) | 20-frame mean in **35.0-39.0 ms** = 27 fps (PREDICTED: 33.6 + 3.3 ms pad, +-2 ms), byte-exact; the headline number if it passes (`pipe` NC: 70.52 ms) |
 | temperature | die temperature logged (`xadc_temp.tcl`); stop above 70 C (all 220 DSPs busy: expect more heat than `pipe`'s 47.7-50.6 C) |
-| power | idle and processing (section 4): needed for the fps/W comparison with Liu et al. 2024 (2.12 fps/W at 16.85 W board power, `RELATED_WORK_TABLE.md`) |
+| power | not measured on the board (no board power session will be done); Vivado on-chip estimates only, `results/power_estimate/SUMMARY.md` |
 
 If T1 fails here but `pipe` passed in the same session: the only RTL differences are in `pipe_stage.v` (NS = 8 lanes/requantizers, LUT multipliers, `max_fanout` on `d1_v`) and
 `sr_pipe_core.v` (registered stage sizes, `wpipe8_*` ROMs). First check `version=`, ERROR_CODE (5 = internal FIFO error) and that FCLK0 read back 125 MHz.
@@ -209,7 +168,7 @@ Note the small hold margin (WHS +0.007 ns, met).
 | 119 test images | 119/119 byte-exact (`run_125.py pipe2p`) |
 | negative controls | the `pipe2`-tree ELF must refuse this bitstream (0x535263xx vs 0x535273xx) and this tree's ELF must refuse the `pipe2` bitstream |
 | frame time | cached 59.8-63.8 ms, non-cacheable 35.0-39.0 ms (PREDICTED, same as `pipe2`) |
-| temperature / power | as 5e; power should be BELOW `pipe2` (Vivado estimate 2.51 vs 2.90 W): a measured difference is a paper result |
+| temperature | as 5e |
 
 ## 5g. Pipeline v3 (`pipe3`: v2 packed + PL padding, 142.857 MHz), from `~/Desktop/venkat/sandbox_pipe3` (bitstream `~/Desktop/venkat/pipe3_artifacts/design_1_wrapper_pipe3.bit`, VERSION 0x53528301; board programs built against `~/Desktop/venkat/vitis_ws_pipe3_platform`)
 **DONE 2026-11-18: every step passed (power not measured); 29.44 ms = 34.0 fps non-cacheable, 51.4 ms cached, 119/119 byte-exact at a read-back 142.857 MHz; results `results/board/2026-11-18/SUMMARY.md`.**
@@ -227,7 +186,7 @@ Built: routed WNS +0.132 / WHS +0.015 ns at 142.857 MHz, 13,334 LUT / 19,938 FF 
 | 119 test images | 119/119 byte-exact (`run_125.py pipe3`; raw frames, PL padding, odd sizes included) |
 | negative controls | the `pipe2p`-tree ELF must refuse this bitstream (0x535273xx vs 0x535283xx) and this tree's ELF must refuse the `pipe2p` bitstream |
 | frame time (PREDICTED, `run_nc.py --design pipe3`) | non-cacheable in + out (`both`) 27.4-31.5 ms (29.4 = 34 fps); ARM-padding variant on the same bitstream (`armpad`) 30.7-34.7 ms; cached (`fnv`) 49.7-53.7 ms |
-| power | measure with the 200-frame T3 ELF (`sr_app_t3_200f.elf`) as for the other designs; compare with pipe2p on the same day |
+| power | not measured on the board (no board power session will be done); Vivado on-chip estimates only, `results/power_estimate/SUMMARY.md` |
 
 ## 5h. Pipeline v4 (`pipe4`: 6 cycles per LR pixel + PL padding, 142.857 MHz), from `~/Desktop/venkat/sandbox_pipe4` (bitstream `~/Desktop/venkat/pipe4_artifacts/design_1_wrapper_pipe4.bit`, VERSION 0x53529301; board programs against `~/Desktop/venkat/vitis_ws_pipe4_platform`)
 **DONE 2026-11-18 (built and board-tested the same day): 22.10 ms = 45.2 fps non-cacheable, 44.1 ms cached, 119/119 byte-exact at a read-back 142.857 MHz; `results/board/2026-11-18/SUMMARY.md` section 1b.**
@@ -248,8 +207,7 @@ A branch goes into `main` only if, with its own bitstream: (1) T1 passes with it
 gain (+0.26 / +0.20 / +0.13 dB PSNR-Y over R2q, 2-seed means); if R3q fails any item, R2q goes first.
 
 ## 6. What to send back
-`t1_*.txt`, `t2_*.txt`, `t3_*.txt`, `t7_*.txt` (and the stats of the two power runs), the `compare_raw.py` lines (including the negative controls), the meter readings with the
-meter model, and which bitstream file was used for each run (`SR_BIT`). **Save per-frame times to a file on every board run** (T3/T7 print one line per frame on the UART, `main.c`: `frame N: total ... us`; the stats file only keeps mean/min/max, so the std cannot be computed from it): `run_board.tcl` does **not** store the UART text (it reads the numbers from DDR), so use `software/board/board_run.sh <name> <elf> <in> <out>`: it starts `uart_capture.py` first and writes
+`t1_*.txt`, `t2_*.txt`, `t3_*.txt`, `t7_*.txt`, the `compare_raw.py` lines (including the negative controls), and which bitstream file was used for each run (`SR_BIT`). **Save per-frame times to a file on every board run** (T3/T7 print one line per frame on the UART, `main.c`: `frame N: total ... us`; the stats file only keeps mean/min/max, so the std cannot be computed from it): `run_board.tcl` does **not** store the UART text (it reads the numbers from DDR), so use `software/board/board_run.sh <name> <elf> <in> <out>`: it starts `uart_capture.py` first and writes
 `data/board/<date>/<name>.log` (every line timestamped), `<name>_xsdb.log`, `<name>_meta.txt` (git revision, ELF and bitstream md5, command). It is tested on the PC only (`software/board/test_uart_capture.py`, pty + fake xsdb), **not on the board**. Any `FAIL`/`result` other than 0: send the stats file and the last 30 lines of the console.
 
 ## 7. Known issues

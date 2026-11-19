@@ -7,6 +7,8 @@ Inputs (made by hardware/vivado/scripts/power_baseline.tcl and power_saif.tcl):
   results/power_estimate/{pipe,r0}_power_vectorless.txt                      baseline, default (vectorless) settings
   results/power_estimate/raw/{pipe,r0}_rtl_power.txt (+_core_match.txt)       RTL simulation SAIF
   results/power_estimate/raw/r0_impl_w{1..5}_power.txt, pipe_impl_w{1,2}_*    post-implementation functional netlist SAIF windows
+  results/power_estimate/{pipe3,pipe4}_power_vectorless.txt, raw/{pipe3,pipe4}_rtl_power.txt, raw/{pipe3,pipe4}_impl_w*_power.txt   (added 2026-11-19;
+      Set5 baby frame with PL padding, 142.857 MHz, 30k warm-up cycles then 75k-cycle windows; every window that closed is used)
 Windows are combined with time weights = number of simulated cycles (power is linear in the toggle rates; static power is constant).
 """
 import re
@@ -73,24 +75,38 @@ def main():
     res["r0 post-impl SAIF (5 windows, whole tile)"] = combine(r0w, r0c)
     pw = [parse(RAW / f"pipe_impl_w{k}_power.txt") for k in (1, 2)]
     res["pipe post-impl SAIF (2 windows, 150k cycles)"] = combine(pw, [75000, 75000])
+    win34 = {}
+    for t in ("pipe3", "pipe4"):
+        res[f"{t} vectorless"] = parse(R / f"{t}_power_vectorless.txt")
+        res[f"{t} RTL SAIF (300k cycles)"] = parse(RAW / f"{t}_rtl_power.txt")
+        ws = sorted(RAW.glob(f"{t}_impl_w*_power.txt"))
+        win34[t] = [parse(x) for x in ws]
+        res[f"{t} post-impl SAIF ({len(ws)} window{'s' if len(ws) > 1 else ''}, {75 * len(ws)}k cycles)"] = combine(win34[t], [75000] * len(ws))
     lines = ["# Vivado power estimates (NOT measured)", "", "Total on-chip power, W, and breakdown (W). PS7 = the Zynq processing system as Vivado models it (not our design).", "",
              "| Run | Total | Dynamic | Static | Clocks | Slice Logic | Signals | BRAM | DSP | I/O | PS7 | Confidence | Nets matched (design) | Nets matched (core instance) |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     csv = ["run,total,dynamic,static,clocks,logic,signals,bram,dsp,io,ps7,confidence,matched,core_matched"]
     for k, d in res.items():
         lines.append(f"| {k} | {d['total']:.3f} | {d['dynamic']:.3f} | {d['static']:.3f} | {d['Clocks']:.3f} | {d['Slice Logic']:.3f} | {d['Signals']:.3f} | {d['Block RAM']:.3f} | {d['DSPs']:.3f} | {d['I/O']:.4f} | {d['PS7']:.3f} | {d['conf']} | {d['matched']} | {d['core_matched']} |")
         csv.append(",".join(str(x) for x in (k, round(d["total"], 4), round(d["dynamic"], 4), round(d["static"], 4), d["Clocks"], d["Slice Logic"], d["Signals"], d["Block RAM"], d["DSPs"], d["I/O"], d["PS7"], d["conf"], d["matched"].replace(",", ";"), d["core_matched"])))
-    lines += ["", "Per window (post-implementation netlist SAIF), total W: R0 " + ", ".join(f"w{i + 1} {d['total']:.3f}" for i, d in enumerate(r0w)) + "; pipeline " + ", ".join(f"w{i + 1} {d['total']:.3f}" for i, d in enumerate(pw)), ""]
+    lines += ["", "Per window (post-implementation netlist SAIF), total W: R0 " + ", ".join(f"w{i + 1} {d['total']:.3f}" for i, d in enumerate(r0w)) + "; pipeline " + ", ".join(f"w{i + 1} {d['total']:.3f}" for i, d in enumerate(pw))
+              + "".join(f"; {t} " + ", ".join(f"w{i + 1} {d['total']:.3f}" for i, d in enumerate(v)) for t, v in win34.items()), ""]
     # energy per frame
-    cases = [("Pipeline (default build)", "pipe", 95.4, 67.19), ("Pipeline (non-cacheable DMA buffers)", "pipe", 70.5, 67.19), ("R0 (100 MHz)", "r0", 1312.5, 1250.4)]
+    # pipe3 / pipe4 (2026-11-18 board, 142.857 MHz): core time = board frame CYCLES 4,205,065 / 3,156,225 at 142.857 MHz
+    cases = [("Pipeline (default build)", "pipe", 95.4, 67.19), ("Pipeline (non-cacheable DMA buffers)", "pipe", 70.5, 67.19), ("R0 (100 MHz)", "r0", 1312.5, 1250.4),
+             ("pipe3 (non-cacheable, PL padding)", "pipe3", 29.44, 4205065 / 142857.0), ("pipe3 (cached)", "pipe3", 51.45, 4205065 / 142857.0),
+             ("pipe4 (non-cacheable, PL padding)", "pipe4", 22.10, 3156225 / 142857.0), ("pipe4 (cached)", "pipe4", 44.11, 3156225 / 142857.0)]
+    saif_key = {"pipe": "pipe post-impl SAIF (2 windows, 150k cycles)", "r0": "r0 post-impl SAIF (5 windows, whole tile)"}
+    for t in ("pipe3", "pipe4"):
+        saif_key[t] = next(k for k in res if k.startswith(f"{t} post-impl"))
     lines += ["## Energy per frame (Vivado estimate, not measured)", "",
-              "E = P x t with the frame times of 2026-10-28 (pipeline 95.4 ms and 70.5 ms, R0 1,312.5 ms). 'PL' = total on-chip minus PS7 (includes the device static power); 'PL dynamic' = dynamic minus PS7.",
+              "E = P x t with the board frame times of 2026-10-28 (pipeline 95.4 ms and 70.5 ms, R0 1,312.5 ms) and 2026-11-18 (pipe3 29.44 / 51.45 ms, pipe4 22.10 / 44.11 ms). 'PL' = total on-chip minus PS7 (includes the device static power); 'PL dynamic' = dynamic minus PS7.",
               "P_active = the power with the simulated activity (compute phase). 'Simple' assumes P_active for the whole frame; 'refined' uses P_active only while the core computes (core time / frame time) and P_idle = P_active minus the dynamic power of slice logic, signals, BRAM and DSP for the rest.", "",
               "| Case | Power source | Frame ms | P_total W | E_total mJ | P_PL W | E_PL mJ | P_PL dynamic W | E_PL dynamic mJ | refined E_total mJ | refined E_PL mJ |", "|---|---|---|---|---|---|---|---|---|---|---|"]
     for name, who, ms, core_ms in cases:
-        for label, key in ((f"{who} vectorless", f"{who} vectorless"), (f"{who} post-impl SAIF", "pipe post-impl SAIF (2 windows, 150k cycles)" if who == "pipe" else "r0 post-impl SAIF (5 windows, whole tile)")):
+        for label, key in ((f"{who} vectorless", f"{who} vectorless"), (f"{who} post-impl SAIF", saif_key[who])):
             d = res[key]; t = ms / 1000
             idle = d["total"] - (d["Slice Logic"] + d["Signals"] + d["Block RAM"] + d["DSPs"])
-            f = core_ms / ms
+            f = min(1.0, core_ms / ms)
             pf = f * d["total"] + (1 - f) * idle
             lines.append(f"| {name} | {label} | {ms} | {d['total']:.3f} | {1000 * d['total'] * t:.0f} | {d['total'] - d['PS7']:.3f} | {1000 * (d['total'] - d['PS7']) * t:.0f} | {d['dynamic'] - d['PS7']:.3f} | {1000 * (d['dynamic'] - d['PS7']) * t:.1f} | {1000 * pf * t:.0f} | {1000 * (pf - d['PS7']) * t:.0f} |")
     (R / "tables.md").write_text("\n".join(lines) + "\n")

@@ -7,7 +7,7 @@
 module tb_power;
     // design / clock are compile-time macros (xvlog -d PIPE_MODE=1 -d CLKNS=8.0): generics given to xelab would be appended to the scope name and break the SAIF paths
     localparam integer PIPE = `PIPE_MODE;   // 1: pipeline (FRAME_W / FRAME_H registers), 0: R0 tile core
-    localparam real    CLK_NS = `CLKNS;     // 8.0 = 125 MHz (pipeline), 10.0 = 100 MHz (R0)
+    localparam real    CLK_NS = `CLKNS;     // 8.0 = 125 MHz (pipeline), 10.0 = 100 MHz (R0), 7.0 = 142.857 MHz (pipe3/pipe4)
     localparam integer MAXCYC = 4000000;
     // vector folder (in32.hex, out32.hex, meta.txt): plusarg +VEC=<dir> (a string generic would put its value into the scope name and break the SAIF paths)
 
@@ -90,6 +90,9 @@ module tb_power;
         repeat (4) @(negedge aclk); aresetn = 1; repeat (4) @(negedge aclk);
         s_tdata = in_mem[0]; s_tlast = (nbi == 1); s_tvalid = 1;
         if (PIPE) begin axil_write(6'h08, fw); axil_write(6'h18, fh); end
+`ifdef PADEN
+        axil_write(6'h28, 32'd1);                                  // CONFIG.PAD_EN (pipe3/pipe4): raw W x H input, the PL pads it (xvlog -d PADEN; vectors from power_vectors.py pipe_raw)
+`endif
         axil_write(6'h00, 32'd1);                                  // CONTROL.start
         started = 1;
         while (ob < nbo && cyc < MAXCYC) @(posedge aclk);

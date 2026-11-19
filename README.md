@@ -6,7 +6,7 @@ with a NumPy integer model of the network.
 
 **Result:** the fastest design (branch [`pipe4`](../../tree/pipe4)) upscales a 960×540 frame in **22.10 ms = 45.2 fps** at 142.9 MHz with 213 DSP
 and 24,783 LUT, measured on the board, byte-exact on all 119 images of Set5, Set14 and BSD100. That is 59× the first design (R0, 0.76 fps).
-Board power has **not** been measured.
+Board power has **not** been measured; the Vivado on-chip estimate for v4 is 3.01 W (simulated activity), i.e. about 67 mJ per frame.
 
 ![Set5 butterfly, x2, board outputs](results/figures/butterfly_x2.png)
 
@@ -109,7 +109,7 @@ Building the bitstream, the ARM programs and running on the board (Vivado/Vitis 
 ## Limitations
 
 * 45.2 fps needs non-cacheable buffers; with the default cached buffers v4 runs at 22.7 fps (44.11 ms).
-* Power is a Vivado estimate only (3.06 W chip for v4, vectorless); nothing was measured with an instrument.
+* Power is a Vivado on-chip estimate only (v4: 3.01 W with switching activity from a simulation of the routed netlist, 3.06 W vectorless; [`results/power_estimate/SUMMARY.md`](results/power_estimate/SUMMARY.md)); board power was not measured.
 * v4 meets timing with only 0.038 ns of setup slack. All measurements come from one board, one temperature range (≤ 51 °C) and one timing image.
 * Frames are loaded over JTAG, not from a camera or video input.
 * Image quality is 0.4-0.9 dB (Set5) below the best published designs, including two networks of the same size (Kim et al. 2019, Sun et al. 2021); fine random texture is not recovered.

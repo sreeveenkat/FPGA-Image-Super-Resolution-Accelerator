@@ -30,7 +30,7 @@ Never write a predicted number in the report as if it were measured.
 13. [The deadlock bug and what it teaches](#13-the-deadlock-bug-and-what-it-teaches)
 14. [All six bitstreams at a glance](#14-all-six-bitstreams-at-a-glance)
 15. [The board session](#15-the-board-session)
-16. [Power measurement](#16-power-measurement)
+16. [Power](#16-power)
 17. [Publishing a paper](#17-publishing-a-paper)
 18. [Where everything is in the repository](#18-where-everything-is-in-the-repository)
 19. [What is done and what is left](#19-what-is-done-and-what-is-left)
@@ -457,30 +457,18 @@ VERSION, checksum (pass/fail), CYCLES, **PL compute time and end-to-end frame ti
 Done on 28 Oct: (1) VERSION-refusal controls (passed, section 14); (2) 125 MHz runs for r0_125, r3q_125 and the pipeline with each design's own init script, clock read back, die temperature 47.9–49.2 °C, all byte-exact (section 11). Also done on 28 Oct after owner approval: a driver change (VERSION check before the DMA is touched, T7 timer, optional timing split); all six designs were re-verified with the new production ELFs (byte-exact, T3 within ±2 ms of the old means; the tiled designs read 0.3–0.75 ms slower, all in the ARM tile copy; an A/B on R0 gave +0.35 / +0.51 ms there. Label: **unresolved, ≤0.5 ms (<0.04 % of the frame)**; the pre-registered rule was not met and the cause was not isolated). Still open:
 3. ~~Split the pipeline's ~22.4 ms overhead~~ **done 28 Oct**: it is cache maintenance (section 12).
 4. ~~Re-run T7 with its timer working~~ **done 28 Oct**: 13.433 s per frame, byte-exact.
-5. Power, once you have a multimeter.
+5. Power: not measured on the board; Vivado estimates only (section 16).
 
 ---
 
-## 16. Power measurement
+## 16. Power
 
-### 16.1 Why it matters
-The FPGA can't beat a GPU on speed, but it might on **energy per frame**:
+Board power was **not measured** and will not be. All power numbers are **Vivado on-chip estimates** (Zynq chip only, not the whole board):
+`results/power_estimate/SUMMARY.md`. Energy per frame is then estimate x measured frame time:
 ```
-energy per frame (J) = power while processing (W) × frame time (s)
+energy per frame (J) = estimated on-chip power (W) x measured frame time (s)
 ```
-GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the measured 95.4 ms at 125 MHz, the pipeline would be about 0.38–0.48 J **if** the whole board draws about 4–5 W (112.1 ms at 100 MHz: 0.45–0.56 J). That's a guess until measured; it would be roughly equal to or a little below the GPU's 0.55 J.
-
-### 16.2 How (needs a digital multimeter)
-- The ZedBoard is said to have a **10 mΩ resistor** in series with the 12 V input, with header **J21** across it. This comes from forum quotes of the user guide and is **not verified yet**; read the guide before relying on it.
-- Multimeter on **DC mV**, probes on the two J21 pins. Expect only about **2–5 mV**.
-- Current = mV ÷ 10 mΩ (e.g. 3.2 mV → 320 mA). Power = current × input voltage (~12 V) (e.g. 0.32 A × 12 V = 3.84 W).
-- Better: an **inline DC power meter** between the adapter and the board, with J21 as a cross-check.
-- Take 5+ readings over 30+ seconds per state; same meter range every time.
-- States: PL unprogrammed, ARM-only, and idle + processing for each bitstream; repeat R0 at the end.
-- Get the official ZedBoard Hardware User Guide and cite its page for J21.
-
-### 16.3 Status
-**Not measured yet.** Borrow a multimeter (college lab) and do a separate ~1 hour session.
+The GPU reference (~0.55 J per frame, nvidia-smi) is a different kind of number (GPU board power, software-reported) and is not compared one-to-one.
 
 ---
 
@@ -517,7 +505,7 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 - **Short paper (regional IEEE / FPL short, weaker chance):** everything byte-exact, clear speed and energy win over ARM, +1 dB measured.
 - **Strong FPL short paper:** all of that + the measured pipeline speed-up and the deadlock/verification finding.
 
-**Status after 27 Oct:** byte-exact ✔, speed-up over ARM ✔ (~120×), measured pipeline speed-up ✔ (11.7×), quality ✔, verification finding ✔. **Missing: measured power / energy.** Once power is measured: a solid FPL short-paper candidate. Acceptance is never guaranteed.
+**Status after 27 Oct:** byte-exact ✔, speed-up over ARM ✔ (~120×), measured pipeline speed-up ✔ (11.7×), quality ✔, verification finding ✔. Power / energy: Vivado estimates only (not measured on the board). Acceptance is never guaranteed.
 
 ---
 
@@ -566,8 +554,7 @@ GPU reference: ~0.55 J per frame. R0 (Vivado estimate) was about 2.5 J. With the
 - [x] **Paper v2 written (7 pages incl. references; kept locally until submission)**
 
 ### Left
-- [ ] Power measurement (needs a meter); optionally look at the cache handling (19.4 ms of the pipeline's frame time), which would be a new driver change
-- [ ] **Power measurement** (needs a multimeter)
+- [x] Power: Vivado estimates only (board power not measured, no board session planned)
 - [ ] Merge the winning design (pipeline, or R3q) into `main` after board results
 - [ ] Push the README update and the new branches to GitHub (README updated locally 10 Nov)
 - [ ] Final paper: AI disclosure, author block, check the [CHECK] references (Kim 2019, Chang, Sun, Kim 2018 need the originals; Manabe 2018 full text), submit (FPL 2027, to be confirmed)

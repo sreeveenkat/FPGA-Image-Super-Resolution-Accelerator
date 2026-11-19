@@ -2,7 +2,7 @@
 
 Prepared 2026-10-24. **Nothing in this runbook has been run on the board yet.** Pass values: `docs/paper/board_expected.md` (generated from each tree's own integer model).
 Pass rules: `docs/paper/board_checklist.md` section 5b (PROPOSED merge criteria; the owner confirms). Known issues: `board_checklist.md` section 7.
-Order: **0** prepare -> **1** R0/0602 with the hang test (T1, T2) -> **2** T7 -> **3** R2q -> **4** R3q -> **7** r0_125 (R0 at 125 MHz) -> **5** power (idle and processing for every bitstream).
+Order: **0** prepare -> **1** R0/0602 with the hang test (T1, T2) -> **2** T7 -> **3** R2q -> **4** R3q -> **7** r0_125 (R0 at 125 MHz).
 
 Conventions used below
 * `D=data/board/$(date +%F)` inside each tree: every log of the day goes there (`board_run.sh` creates it). Save **everything**: UART log, xsdb log, meta file, stats, outputs.
@@ -43,7 +43,7 @@ If a step fails: `xsdb software/board/dap_reset.tcl < /dev/null`, then retry onc
 |---|---|---|---|
 | 2.1 | `software/board/board_run.sh t7_r0 software/board/build/sr_app_t11.elf data/board/div2k_img0193_lr_960x540.raw $D/t7_r0.raw` then `compare_raw.py $D/t7_r0.raw data/board/div2k_img0193_expected_1920x1080.raw` | `result=0`, `BYTE-EXACT: yes`, fnv 0xcf947f22. Record from the stats: stat1 = time per frame (us), stat4 pad, stat5 ARM tile copy, stat6 ARM compute. **No expected time exists** (the same C code takes 0.91 s per frame on the PC at -O2, `test_swmodel.sh` 2026-10-24). | `$D/t7_r0.*` |
 
-If it prints `ERROR: no ready marker after 900 s`, T7 is slower than 900 s per frame: raise `set TIMEOUT_S` in `software/board/run_board.tcl` (and `XSDB_TIMEOUT`), run again, and note it. The 20-frame T7 (power) needs a larger `TIMEOUT_S` too.
+If it prints `ERROR: no ready marker after 900 s`, T7 is slower than 900 s per frame: raise `set TIMEOUT_S` in `software/board/run_board.tcl` (and `XSDB_TIMEOUT`), run again, and note it. The 20-frame T7 needs a larger `TIMEOUT_S` too.
 
 ## 3. R2q (tree R2q; bitstream `~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit` is the tree default; VERSION 0x53522201)
 Run steps 3.1-3.8 in `~/Desktop/venkat/sandbox_R2q`. `board_run.sh` exists only on main, so in a sandbox first run `export SR_TREE=$PWD; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh` (the run then uses the sandbox's ELFs, `run_board.tcl` and bitstream default, and saves under the sandbox's `data/board/<date>/`; PC-tested with a fake tree). Expected values: `board_expected.md` section R2q.
@@ -64,14 +64,11 @@ R2q goes first; if any item fails, R3q is not tried before the cause is understo
 Same commands as section 3 with `t..._r3q` names in `~/Desktop/venkat/sandbox_R3q`; expected: T1 `version=0x53523201`; T2 `0x45dd4e2d`; negative controls: the R3q output must differ from the R2q expected file and from the R0 expected file (`BYTE-EXACT: no` for both);
 wrong-bitstream control with the R2q bitstream (`SR_BIT=~/Desktop/venkat/R2q_artifacts/design_1_wrapper_R2q.bit`): `SR: VERSION 0x53522201, expected 0x53523201`; 119 images; T7 fnv 0x45dd4e2d; 20-frame timing as in 3.5. This is the first real-hardware check of the anchor's halo-aligned read (135 tiles).
 
-## 5. Power (after the functional steps of each design)
-Procedure: `board_checklist.md` section 4. **Primary: inline DC power meter between the 12 V adapter and the barrel jack. Cross-check: J21** (10 mOhm, 1 W sense resistor in series with the 12 V input, per forum quotes of the ZedBoard Hardware User's Guide; page citation to be added): I = V_J21 / 0.010 Ohm, P = I x V_in. Measure V_in in every state.
-For **each bitstream** (R0, R2q, R3q, r0_125, r3q_125, pipe): idle (T1 finished, ARM in its idle loop) and processing (`sr_app_t3_200f.elf` of that tree, read during the run); plus P0 (PL not programmed) and P3 (ARM only, `sr_app_t11_20f.elf`). Wait 30 s per state, then at least 5 readings over at least 30 s, both meters in the same window; report mean/min/max/count. Repeat R0 idle/processing at the end (drift).
-Start the long runs with `board_run.sh` (it prints the start time), e.g. `software/board/board_run.sh p2_r0 software/board/build/sr_app_t3_200f.elf data/board/div2k_img0193_lr_960x540.raw $D/p2_r0.raw` (R0 tree); in a sandbox `export SR_TREE=$PWD; BR=~/Desktop/venkat/sem_project_all/software/board/board_run.sh` and `$BR p2_r2q ...`.
-Board-level power: not comparable to Vivado's on-chip estimate; compare deltas only. Write down both meter models, accuracy, range, resolution, and every reading with its time in `$D/power_readings.txt`.
+## 5. Power
+Not measured on the board (no board power session will be done); power is a Vivado on-chip estimate only (`results/power_estimate/SUMMARY.md`).
 
 ## 6. What to bring back (all under `data/board/<date>/` of each tree)
-`*.log` (UART with time stamps), `*_xsdb.log`, `*_meta.txt` (git revision, bitstream and ELF md5), `*_stats.txt`, the `compare_raw.py` lines (also the negative controls), the hang-test texts of 1.1-1.3, the meter readings, and a list of every retry with its reason.
+`*.log` (UART with time stamps), `*_xsdb.log`, `*_meta.txt` (git revision, bitstream and ELF md5), `*_stats.txt`, the `compare_raw.py` lines (also the negative controls), the hang-test texts of 1.1-1.3, and a list of every retry with its reason.
 After the session update the local project log, `docs/STATUS.md` and the merge decision; commit only on request.
 
 ## 7. After R3q: r0_125, R0 at 125 MHz (tree `~/Desktop/venkat/sandbox_R0_125`, branch `r0_125`; VERSION 0x53524201)
@@ -84,7 +81,7 @@ $BR r125_t2 software/board/build/sr_app_t2.elf data/board/div2k_img0193_lr_960x5
 ~/Desktop/venkat/sem_project_all/.venv/bin/python software/host_tools/compare_raw.py $D/r125_t2.raw data/board/div2k_img0193_expected_1920x1080.raw; echo exit=$?
 $BR r125_t3 software/board/build/sr_app_t3_20f.elf data/board/div2k_img0193_lr_960x540.raw $D/r125_t3.raw < /dev/null
 ```
-Pass: VERSION 0x53524201; T1 20/20 and CYCLES 926,214-926,245; T2 `BYTE-EXACT: yes`, fnv **0xcf947f22** (same weights as R0); T3 20-frame mean in the plausible range 1,033-1,064 ms (predicted 1,061.8 ms; **a prediction**). If T1 or T2 fails, record it and stop; do not retry silently. Do not compare power with the other designs (the clock differs).
+Pass: VERSION 0x53524201; T1 20/20 and CYCLES 926,214-926,245; T2 `BYTE-EXACT: yes`, fnv **0xcf947f22** (same weights as R0); T3 20-frame mean in the plausible range 1,033-1,064 ms (predicted 1,061.8 ms; **a prediction**). If T1 or T2 fails, record it and stop; do not retry silently.
 
 ## 8. r3q_125, R3q at 125 MHz (tree `~/Desktop/venkat/sandbox_R3q_125`, branch `r3q_125`; VERSION 0x53524301)
 After section 7 (checklist section 5c). Same commands as section 7, from this tree, with the names `r3q125_*`; plus the 119 test images and the negative control:
@@ -114,8 +111,7 @@ software/board/run_testsets.sh < /dev/null                                      
 SR_BIT=~/Desktop/venkat/pipe_artifacts/design_1_wrapper_pipe.bit SR_TREE=~/Desktop/venkat/sandbox_R3q $BR pipe_neg ~/Desktop/venkat/sandbox_R3q/software/board/build/sr_app_t1.elf - - < /dev/null   # must FAIL with a VERSION message
 ```
 Pass: VERSION 0x53525301; T1 20/20, CYCLES 74,641-74,700; T2 fnv **0x45dd4e2d** and frame CYCLES 8,398,481-8,440,473; T5 PASS; 119/119; negative controls fail as expected;
-T3 20-frame mean in **73.1-102.3 ms** (prediction; R0 1,311.9 ms). Then power (section 5) with `sr_app_t3_200f.elf` of this tree (200 frames take only ~15-20 s here: read the
-meters during the run or start it twice).
+T3 20-frame mean in **73.1-102.3 ms** (prediction; R0 1,311.9 ms).
 
 ## 10. pipe2, pipeline v2 (tree `~/Desktop/venkat/sandbox_pipe2`, branch `pipe2`; VERSION 0x53526301) - added 2026-11-10, never run on a board
 After section 9 (checklist section 5e). Run at the real 125 MHz with the design's own ps7_init (the script reads FCLK0 back and refuses anything else):
@@ -129,7 +125,7 @@ SR_BIT=~/Desktop/venkat/pipe2_artifacts/design_1_wrapper_pipe2.bit SR_TREE=~/Des
 ```
 `run_125.py pipe2` and `run_nc.py --design pipe2` (option added 2026-11-10) both load the design's own XSA ps7_init, read FCLK0 back and refuse to run if it is not 125 MHz;
 both were written for and run with `pipe` on 2026-10-28, the `pipe2` entries are NOT yet run. The v2 variant ELFs (t1/t2/t5/t3_20f x fnv/both) are in `sandbox_pipe2/software/board/build/`.
-Pass: see checklist 5e (T1 CYCLES 37,620-37,679, T2 fnv 0x45dd4e2d, cached 59.8-63.8 ms, non-cacheable 35.0-39.0 ms, 119/119). Then power (section 5).
+Pass: see checklist 5e (T1 CYCLES 37,620-37,679, T2 fnv 0x45dd4e2d, cached 59.8-63.8 ms, non-cacheable 35.0-39.0 ms, 119/119).
 
 ## 11. pipe2p, pipeline v2 packed (tree `~/Desktop/venkat/sandbox_pipe2p`, branch `pipe2p`; VERSION 0x53527301) - added 2026-11-10, never run on a board
 After section 10 (checklist section 5f). Same route as pipe2, 125 MHz with the XSA's own ps7_init:
@@ -139,7 +135,7 @@ cd ~/Desktop/venkat/sem_project_all; BR=~/Desktop/venkat/sem_project_all/softwar
 .venv/bin/python software/board/run_nc.py --design pipe2p < /dev/null                              # cached vs non-cacheable, A/B/A/B
 SR_BIT=~/Desktop/venkat/pipe2p_artifacts/design_1_wrapper_pipe2p.bit SR_TREE=~/Desktop/venkat/sandbox_pipe2 $BR pipe2p_neg ~/Desktop/venkat/sandbox_pipe2/software/board/build/sr_app_t1.elf - - < /dev/null   # must FAIL (VERSION)
 ```
-Pass: checklist 5f. Then power (section 5): compare with pipe2 on the same board, same day.
+Pass: checklist 5f.
 
 ## 12. pipe3, pipeline v2 packed + PL padding at 142.857 MHz (tree `~/Desktop/venkat/sandbox_pipe3`, branch `pipe3`; VERSION 0x53528301) - added 2026-11-18, never run on a board
 After section 11 (checklist section 5g). Same route as pipe2p, but the clock is **142.857 MHz** (the XSA's own ps7_init; `run_125.py` and `run_nc.py` read the clock
@@ -152,7 +148,7 @@ SR_BIT=~/Desktop/venkat/pipe3_artifacts/design_1_wrapper_pipe3.bit SR_TREE=~/Des
 SR_BIT=~/Desktop/venkat/pipe2p_artifacts/design_1_wrapper_pipe2p.bit SR_TREE=~/Desktop/venkat/sandbox_pipe3 $BR pipe3_neg2 ~/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t1.elf - - < /dev/null  # must FAIL (VERSION)
 ```
 Pass: checklist 5g. `both` vs `armpad` (same bitstream) = the gain of the PL padding alone; pipe2p `both` at 125 MHz (36.95 ms) vs pipe3 `armpad` = the gain of the clock alone.
-Then power (section 5) with `sr_app_t3_200f.elf`, same day as pipe2p.
+
 
 ## 13. pipe4, 6 cycles per LR pixel (tree `~/Desktop/venkat/sandbox_pipe4`, branch `pipe4`; VERSION 0x53529301) - added and board-tested 2026-11-18
 Same route as section 12 (142.857 MHz, same XSA init):
@@ -163,5 +159,5 @@ cd ~/Desktop/venkat/sem_project_all; BR=~/Desktop/venkat/sem_project_all/softwar
 SR_BIT=~/Desktop/venkat/pipe4_artifacts/design_1_wrapper_pipe4.bit SR_TREE=~/Desktop/venkat/sandbox_pipe3 $BR pipe4_neg ~/Desktop/venkat/sandbox_pipe3/software/board/build/sr_app_t1.elf - - < /dev/null   # must FAIL (VERSION)
 SR_BIT=~/Desktop/venkat/pipe3_artifacts/design_1_wrapper_pipe3.bit SR_TREE=~/Desktop/venkat/sandbox_pipe4 $BR pipe4_neg2 ~/Desktop/venkat/sandbox_pipe4/software/board/build/sr_app_t1.elf - - < /dev/null  # must FAIL (VERSION)
 ```
-Pass: checklist 5h. Power: `sr_app_t3_200f.elf`.
+Pass: checklist 5h.
 

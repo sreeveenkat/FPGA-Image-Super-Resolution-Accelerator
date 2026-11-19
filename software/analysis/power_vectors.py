@@ -2,6 +2,7 @@
 """Stimulus for the SAIF power simulation (Vivado estimate, not measured).  Created 2026-10-28.
 
   python software/analysis/power_vectors.py pipe <tree-root-of-pipe> <lr.raw> <out_dir>   whole frame as the DMA streams it (replicate-padded), 32-bit beats
+  python software/analysis/power_vectors.py pipe_raw <tree-root> <lr.raw> <out_dir>        whole frame UNPADDED (pipe3/pipe4 with CONFIG.PAD_EN = 1: the PL pads), added 2026-11-19
   python software/analysis/power_vectors.py r0   <tree-root-of-main> <lr.raw> <out_dir> [ty tx]   one 64x64 tile (70x70 input with REAL neighbours) of the image
 Writes <out_dir>/in32.hex, out32.hex (one 32-bit little-endian beat per line, unused bytes of the last beat 0xA5) and meta.txt  "W H n_in_beats n_out_beats".
 The expected output comes from the integer model of that tree (the network of the bitstream), so the simulation can check itself.
@@ -27,8 +28,8 @@ def beats(data: bytes, fill: int = 0xA5):
     return [f"{int.from_bytes(data[i:i + 4], 'little'):08x}" for i in range(0, len(data), 4)]
 
 
-if kind == "pipe":
-    padded = ir.pad_replicate(img)
+if kind in ("pipe", "pipe_raw"):
+    padded = ir.pad_replicate(img) if kind == "pipe" else img
     hr = ir.upscale(net, img)
     ib, ob = beats(padded.tobytes()), beats(hr.tobytes())
     w, h = img.shape[1], img.shape[0]

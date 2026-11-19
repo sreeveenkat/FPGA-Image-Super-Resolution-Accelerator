@@ -60,5 +60,27 @@ These are lower bounds on the efficiency (see the next note). They are Vivado-es
 * All numbers are Vivado estimates from a zero-delay functional simulation (no glitching, no real DMA timing) of one image / one tile; the PS7 power does not depend on what the ARM does (Vivado's default PS7 settings); 25 C ambient/typical process assumptions of the tool apply.
 * Pipeline: 150,000 simulated cycles only, in the post-implementation run (requested: several hundred thousand); the RTL cross-check has 400,000 cycles but matches only 25 % of the nets.
 * R0: partial matching (see above); the testbench's last register read did not complete in the netlist runs.
-* Not measured: board power. When a meter is available the board-level procedure is in `docs/paper/board_checklist.md` section 4; the Vivado numbers must not be compared with it except as deltas.
+* Not measured: board power (no board power session will be done). These are on-chip estimates of the Zynq only; they must not be compared with measured board power of other work as if they were the same quantity.
 * Vivado hung intermittently in `open_checkpoint` ("Preparing netlist for logic optimization", futex wait); `power_saif_retry.sh` retries with a timeout; no result depends on a hung run.
+
+## 6. pipe3 and pipe4 (added 2026-11-19) -- ESTIMATE, NOT MEASURED
+Board-tested builds: pipe3 = `vitis/m6_sr_pipe3_143d` (bitstream md5 042aa316..., routed checkpoint md5 9260d3c0...), pipe4 = `vitis/m6_sr_pipe4_f` (608dbad6..., c93e52bc...), both at 142.857 MHz; work on copies in `~/Desktop/venkat/power_estimate_work/{pipe3,pipe4}/`.
+Stimulus: Set5 `baby` (256 x 256 LR) streamed RAW with CONFIG.PAD_EN = 1 (the PL pads, as in the board runs), `power_vectors.py pipe_raw`, `tb_power.v` with `-d PADEN -d CLKNS=7.0`.
+Check first: RTL simulation of the whole frame bit-exact (196,608 beats) for both, 543,486 (pipe3) and 408,278 (pipe4) cycles. SAIF from the post-implementation functional netlist (30,000 warm-up cycles, then 75,000-cycle windows); no FAIL line in any netlist run (outputs are compared beat by beat as they appear).
+Scripts: `hardware/verification/power/{prep_pipe34.sh, apply_saif.sh, saif_netlist_windows.tcl}`; tables regenerated with `software/analysis/power_report.py` (rows of the other designs unchanged).
+
+| | pipe3 | pipe4 |
+|---|---|---|
+| Vectorless, total on-chip | 2.685 W (PL incl. static 1.120 W) | 3.059 W (PL 1.494 W) |
+| RTL SAIF, 300k cycles | 2.661 W, 25 % of design nets matched | 2.863 W, 15 % matched |
+| **Post-implementation netlist SAIF** | **2.691 W** (3 windows, 225k cycles: 2.689 / 2.693 / 2.692); **73 %** design / 86 % core nets matched | **3.013 W** (1 window, 75k cycles; stopped after window 1, ~1.7 h per window); **55 %** design / 60 % core nets matched |
+| Confidence | Low (I/O nodes) | Low (I/O nodes) |
+| Energy per frame, non-cacheable build | 29.44 ms: **79 mJ** total, **33 mJ** PL | 22.10 ms: **67 mJ** total, **32 mJ** PL |
+| Energy per frame, cached build | 51.45 ms: 138 mJ total, 58 mJ PL | 44.11 ms: 133 mJ total, 64 mJ PL |
+| GOPS/W (2.654 GOP per frame, non-cacheable) | 90.2 GOPS: 33.5 total / 80.1 PL-only | 120.1 GOPS: 39.9 total / 82.9 PL-only |
+| fps per W (on-chip estimate) | 34.0 / 2.691 = 12.6 | 45.2 / 3.013 = 15.0 |
+
+* The core computes for almost the whole non-cacheable frame (frame CYCLES / clock = 29.44 and 22.09 ms), so the simple and refined energies agree there.
+* pipe4's matching (60 % of core nets) is lower than pipe3's (86 %); the unmatched nets keep Vivado's default/propagated activity. Not investigated (likely net renaming around the LUT multipliers). The vectorless and SAIF totals differ by 1.5 %.
+* Same Vivado warning as in every earlier run (Power 33-332, high-fanout reset nets asserted for long periods).
+* fps/W here is on-chip (Zynq only, PS7 modelled as a fixed 1.56 W); it must not be compared with measured board power of other work.

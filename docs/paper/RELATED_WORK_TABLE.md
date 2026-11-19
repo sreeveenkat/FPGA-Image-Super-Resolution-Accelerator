@@ -23,11 +23,11 @@ the routed pipeline reports and `software/analysis/cycle_model.py` Part 6 (v2 = 
 | **10** | **Ours, pipeline** | **XC7Z020 (ZedBoard)** | same network + anchor (R3q), whole-frame layer pipeline, INT8, RGB | **960x540 -> 1920x1080** | **10.49** (95.36 ms); 14.18 (70.52 ms, non-cacheable buffers) | 125 MHz | 170 (77 %) | 9,888 (19 %, sys) | 36.20 / 32.12 / 31.01 | 2.22 W chip (Vivado SAIF estimate, not measured) | board-measured |
 | 11 | Ours, pipeline v2 | XC7Z020 | same, 8 cycles/px, 118 LUT multipliers | same | **27.1** (36.95 ms, NC buffers); 16.2 cached | 125 MHz | 220 (100 %) | 20,651 (39 %) | same | 2.90 W chip (Vivado vectorless) | **board-measured 2026-11-10** |
 | 12 | Ours, pipeline v2 packed | XC7Z020 | same, two INT8 products per DSP48E1 | same | **27.1** (36.96 ms, NC buffers); 16.2 cached | 125 MHz | 190 (86 %) | 13,323 (25 %) | same | 2.51 W chip (Vivado vectorless) | **board-measured 2026-11-10** |
-| 13 | Ours, pipe3 | XC7Z020 | v2 packed + replicate padding in the PL | same | **34.0** (29.44 ms, NC buffers); 19.4 cached | 142.857 MHz | 190 (86 %) | 13,334 (25 %) | same | 2.69 W chip (Vivado vectorless) | **board-measured 2026-11-18** |
-| 14 | Ours, pipe4 | XC7Z020 | 6 cycles/px, packed, 136 LUT multipliers on L4 | same | **45.2** (22.10 ms, NC buffers); 22.7 cached | 142.857 MHz | 213 (97 %) | 24,783 (47 %) | same | 3.06 W chip (Vivado vectorless) | **board-measured 2026-11-18** |
+| 13 | Ours, pipe3 | XC7Z020 | v2 packed + replicate padding in the PL | same | **34.0** (29.44 ms, NC buffers); 19.4 cached | 142.857 MHz | 190 (86 %) | 13,334 (25 %) | same | 2.69 W chip (Vivado, SAIF post-impl.; 2.685 vectorless) | **board-measured 2026-11-18** |
+| 14 | Ours, pipe4 | XC7Z020 | 6 cycles/px, packed, 136 LUT multipliers on L4 | same | **45.2** (22.10 ms, NC buffers); 22.7 cached | 142.857 MHz | 213 (97 %) | 24,783 (47 %) | same | 3.01 W chip (Vivado, SAIF post-impl.; 3.06 vectorless) | **board-measured 2026-11-18** |
 
 n/s = not stated in what was read. Rows 1-4 are copied from Table 6 of [L24] and should be checked in the originals before the
-paper is submitted. [L24] row 6 measures board power with a power meter (its Fig. 13a); ours is not measured yet.
+paper is submitted. [L24] row 6 measures board power with a power meter (its Fig. 13a); ours is a Vivado on-chip estimate only (board power not measured).
 
 ASIC reference points (not FPGA, not in the main table): ACNPU [Y24], TSMC 40 nm, 1080p x2 at 31.7 fps, 0.1318 W, Set5 37.34 (read:
 arXiv HTML v1, full); Huang et al. ISCAS 2022 tilted layer fusion, 40 nm synthesis, 640x360 -> 1080p x3 at 60 fps, no PSNR table
@@ -81,9 +81,9 @@ Where we can make a defensible claim (each needs the exact wording):
 * **Same per-cycle DSP efficiency as the 2024 state of the art** ([L24], same definition), on a 7-series part at 125 MHz.
 * **Evidence**: end-to-end board timing including the ARM and DMA, byte-exact against a golden integer model on all 119 test
   images, mutation-tested RTL. None of the papers read here report a bit-exact check of the hardware output.
-* **Possible energy claim, NOT YET MEASURED**: [L24] reports 2.12 fps/W at 16.85 W board power. If the ZedBoard draws about 5 W
-  while running, the pipeline would reach ~2 fps/W (10.5 fps) or ~2.8 (14.2 fps), v2 ~5 and pipe4 ~9. This needs the board power
-  measurement; do not claim it before.
+* **No measured energy claim.** Our power is a Vivado on-chip estimate (board power not measured); [L24]'s 2.12 fps/W is measured board
+  power. The two must not be compared as if they were the same quantity. Kim TCSVT 2019, Chang and Sun also report Vivado/estimated chip power,
+  so an estimate-vs-estimate comparison with them is possible if each is labelled as an estimate.
 
 ## References (as printed in the papers read)
 

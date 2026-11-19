@@ -74,6 +74,3 @@ docs/REPORT/
 docs/REPORT.zip
 docs/presentation/
 results/figures/*.pdf
-docs/paper/power_procedure/*.aux
-docs/paper/power_procedure/*.out
-docs/paper/power_procedure/*.log
