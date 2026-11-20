@@ -32,7 +32,105 @@ Records: [`results/board/2026-11-18/SUMMARY.md`](results/board/2026-11-18/SUMMAR
 [`2026-11-10`](results/board/2026-11-10/SUMMARY.md) (v2), [`2026-10-28`](results/board/2026-10-28/SUMMARY.md) (pipeline, 125 MHz),
 [`docs/STATUS.md`](docs/STATUS.md) (everything, with VERSION values and checksums).
 
-## How it works
+## Architecture
+
+### System (Zynq PS + PL)
+
+The ARM (PS) only configures and moves data; all arithmetic runs in the programmable logic (PL). The block design is the same for every design
+([`hardware/vivado/bd/design_1_m6.tcl`](hardware/vivado/bd/design_1_m6.tcl)); only the accelerator RTL and the PL clock change.
+
+```mermaid
+flowchart LR
+  subgraph PS["Processing System (ARM Cortex-A9, 650 MHz, bare-metal C)"]
+    ARM["sr_app driver<br/>(software/board/sr_app)"]
+    DDR[("DDR 512 MB<br/>LR frame in / HR frame out")]
+  end
+  subgraph PL["Programmable Logic (XC7Z020)"]
+    DMA["AXI DMA<br/>MM2S + S2MM, simple mode"]
+    ACC["sr_accel_top<br/>AXI-Lite registers + CNN core"]
+  end
+  ARM -- "M_AXI_GP0, AXI4-Lite<br/>0x4040_0000" --> DMA
+  ARM -- "M_AXI_GP0, AXI4-Lite<br/>0x4000_0000" --> ACC
+  DDR <-- "S_AXI_HP0, 64 bit" --> DMA
+  DMA -- "MM2S AXI-Stream 32 bit<br/>LR pixels" --> ACC
+  ACC -- "S2MM AXI-Stream 32 bit<br/>HR pixels + TLAST" --> DMA
+```
+
+### One frame, step by step (v4)
+
+```mermaid
+sequenceDiagram
+  participant A as ARM
+  participant D as AXI DMA
+  participant C as Accelerator
+  A->>C: check VERSION (refuse a foreign bitstream)
+  A->>C: FRAME_W = 960, FRAME_H = 540, CONFIG.PAD_EN = 1
+  A->>D: arm S2MM (1920x1080x3 bytes), then MM2S (960x540x3 bytes)
+  A->>C: CONTROL.START
+  D->>C: LR frame, raster order RGB
+  Note over C: border padding, L1, L2, L3, L4 all run at once
+  C->>D: HR frame, raster order RGB, TLAST on the last beat
+  A->>C: poll STATUS until DONE, read CYCLES and ERROR_CODE
+```
+
+R0 does the same per **64×64 tile** instead of per frame: the ARM pads the frame by 3 pixels, cuts 135 tiles of 70×70 (tile + halo),
+sends each through the DMA and copies the 128×128 result tile into the HR frame.
+
+### Datapath: R0 (tiled) vs the layer pipeline
+
+```mermaid
+flowchart TB
+  subgraph R0["R0: one layer at a time on a 64x64 tile (main)"]
+    direction LR
+    i0["load 70x70<br/>tile"] --> r0[(ram0)] --> e1["L1 engine"] --> r1[(ram1)] --> e2["L2 engine"] --> r2[(ram2)] --> e3["L3 engine"] --> r3[(ram3)] --> e4["L4 engine"] --> r4[(ram4)] --> o0["pixel shuffle<br/>+ output"]
+  end
+  subgraph PIPE["Pipeline v1-v4: all layers at once on the whole frame (pipe..pipe4)"]
+    direction LR
+    i1["unpack<br/>(+ pad in v3/v4)"] --> s1["L1 stage<br/>line buffer + 3x3 window"] --> f1[["FIFO"]] --> s2["L2 stage"] --> f2[["FIFO"]] --> s3["L3 stage"] --> f3[["FIFO"]] --> s4["L4 stage"] --> ob["2 output row banks<br/>pixel shuffle + pack"]
+    i1 -. "anchor FIFO (input pixel)" .-> s4
+  end
+```
+
+In R0 only one of the four engines works at a time and every engine waits for the whole tile, so 17 % of the 68 DSPs are busy on average.
+In the pipeline each stage has a 2-row line buffer, a 3×3 window and its own multipliers; the multiplier count per stage is chosen so all four
+stages need the same number of cycles per pixel and no stage waits. Each stage ends in a requantizer `(acc·M + 2^(S-1)) >> S`, clamp to 0..255;
+L4 also adds the nearest-neighbour anchor pixel inside the requantizer's rounding constant.
+
+Cycles per input pixel and multipliers per stage:
+
+| Design | Cycles / pixel | L1 conv3×3 3→16 | L2 depthwise 3×3 | L3 conv1×1 16→16 | L4 conv3×3 16→12 | Frame cycles (960×540) |
+|---|---|---|---|---|---|---|
+| Pipeline | 16 | 27 lanes | 9 | 16 | 108 | 8,398,481 |
+| v2 / v2 packed / v3 | 8 | 2× lanes | 2× | 2× | 2× | 4,203,124 / 4,203,125 / 4,205,054 |
+| v4 | 6 | 3 channels per slot | 3 per slot | 3 per slot | output-serial, 288 lanes | 3,156,214 |
+
+v4 resources per stage (LUT / DSP): L1 2,436 / 60, L2 1,575 / 33, L3 1,521 / 38, L4 15,227 / 80. Design notes:
+[`docs/ARCHITECTURE_PIPELINE.md`](docs/ARCHITECTURE_PIPELINE.md) (pipeline) and `docs/ARCHITECTURE_PIPELINE_V2.md`, `_V2P`, `_V3`, `_V4` on their branches.
+
+### Registers (AXI4-Lite, base 0x4000_0000, pipeline designs)
+
+| Offset | Name | Meaning |
+|---|---|---|
+| 0x00 | CONTROL | bit0 START, bit1 soft reset |
+| 0x04 | STATUS | bit0 BUSY, bit1 DONE (sticky), bit2 ERROR (sticky) |
+| 0x08 / 0x18 | FRAME_W / FRAME_H | LR frame size (W ≤ 1018, H ≤ 4096) |
+| 0x0C | CYCLES | clock cycles from START to the last output beat |
+| 0x10 | ERROR_CODE | 1 early TLAST, 2 missing TLAST, 3 TKEEP ≠ F, 4 frame size out of range |
+| 0x14 | VERSION | one value per design, e.g. `0x53529301` = v4 |
+| 0x1C | MAX_W | 1018 |
+| 0x20 / 0x24 | DBG_IN_BEATS / DBG_OUT_BEATS | stream beats of the current / last frame |
+| 0x28 | CONFIG | bit0 PAD_EN (v3, v4): padding in the PL |
+
+R0 keeps TILE_SIZE at 0x08 and debug registers at 0x18-0x30: [`docs/REGISTER_MAP.md`](docs/REGISTER_MAP.md).
+
+### Where the frame time goes
+
+![Frame time breakdown](results/figures/frame_breakdown_v4.png)
+
+*Board, 960×540 → 1920×1080, 20-frame means ([`frame_breakdown_v4.csv`](results/figures/frame_breakdown_v4.csv)). With non-cacheable (NC)
+buffers and padding in the PL, the frame time is the accelerator time (cycles / clock).*
+
+### Details
 
 * **Network:** Conv3×3 (3→16) + ReLU → depthwise 3×3 + ReLU → Conv1×1 (16→16) + ReLU → Conv3×3 (16→12) → pixel shuffle.
   2,560 MACs per input pixel, 1.327 GMAC per frame. uint8 activations, int8 weights, requantizer `(acc·M + 2^(S-1)) >> S`.
