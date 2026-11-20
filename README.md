@@ -59,6 +59,24 @@ sends each through the DMA and copies the 128×128 result tile into the HR frame
 
 ### Datapath: R0 (tiled) vs the layer pipeline
 
+**v4 datapath** (`pipe4`, the fastest design). Each column is one `pipe_stage`; the FIFOs between them play the role of pipeline registers.
+Every stage needs 6 cycles per LR pixel (one slot counter, s = 0..5), so all four layers work at the same time and no stage waits.
+
+![v4 accelerator datapath](results/figures/arch_v4_datapath.png)
+
+* **Input:** 32-bit AXI-Stream beats are unpacked to 24-bit RGB pixels; the PL pads the border (replicate, 3 px) with a 2-row buffer, so the ARM sends the raw frame.
+* **Inside a stage:** a 2-row line buffer (block RAM) and a 3×3 window shift register give the 9 neighbours of a pixel; a snapshot frees the window
+  for the next pixel while the current one computes. In each slot the weight ROM supplies the weights for 3 output channels (2 in L4), the multiplier
+  lanes form all products at once, adder trees sum them, and each requantizer applies bias and `(acc·M + 2^(S-1)) >> S`, clamp 0..255.
+* **DSP packing:** two weights that share one activation go into one DSP48E1 (`pipe_mul2`); the borrow bits are added back as one extra adder-tree term.
+  L4 runs out of DSPs, so 68 of its 144 packed pairs are built from LUT multipliers.
+* **Anchor:** the input pixel (x+3, y+3) is kept in `u_anc` and added inside L4's requantizer, so the network only learns the residual.
+* **Flow control (dashed):** a stage starts a pixel only when the next FIFO has reserved room (`ok`); once started, a pixel never stalls.
+* **Output:** L4's 12 channels per pixel go to two row banks; the pixel shuffle (k = 4c + 2dy + dx) turns them into HR rows 2y and 2y+1,
+  packed into 32-bit beats with TLAST on the last one.
+
+Diagram source: [`make_accel_datapath.py`](software/analysis/make_accel_datapath.py).
+
 RTL hierarchy (`instance : module`, bus widths in bits; drawn by [`make_arch_figs.py`](software/analysis/make_arch_figs.py)).
 
 **R0** (`main`): four `conv_engine`s run one after another on a 64×64 tile, with a block RAM between each pair.
