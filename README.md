@@ -36,10 +36,14 @@ Records: [`results/board/2026-11-18/SUMMARY.md`](results/board/2026-11-18/SUMMAR
 
 ### System (Zynq PS + PL)
 
-The ARM (PS) only configures and moves data; all arithmetic runs in the programmable logic (PL). The block design is the same for every design
-([`hardware/vivado/bd/design_1_m6.tcl`](hardware/vivado/bd/design_1_m6.tcl)); only the accelerator RTL and the PL clock change.
+The ARM (PS) only configures and moves data; all arithmetic runs in the programmable logic (PL). Vivado block design of the R0 project:
 
-![System architecture: ARM, DDR, AXI DMA and the accelerator](results/figures/arch_system.png)
+![Vivado block design](docs/images/vivado_block_design.png)
+
+`sr_accel_top_0` is the accelerator (AXI4-Lite `s_axi` at 0x4000_0000, AXI-Stream `s_axis` / `m_axis`). `axi_dma_0` (control at 0x4040_0000) moves
+frames between DDR and the accelerator through `S_AXI_HP0` (64 bit). `adder_ip_0` and the two GPIOs are left over from the M0 bring-up.
+All designs use this block design ([`design_1_m6.tcl`](hardware/vivado/bd/design_1_m6.tcl)); the pipelines change only the
+accelerator RTL and FCLK0, and v3/v4 also widen the DMA memory side to 64 bit.
 
 ### One frame, step by step (v4)
 
@@ -55,9 +59,15 @@ sends each through the DMA and copies the 128×128 result tile into the HR frame
 
 ### Datapath: R0 (tiled) vs the layer pipeline
 
-*Diagrams drawn by [`make_arch_figs.py`](software/analysis/make_arch_figs.py).*
+RTL hierarchy (`instance : module`, bus widths in bits; drawn by [`make_arch_figs.py`](software/analysis/make_arch_figs.py)).
 
-![Datapath: R0 tiled engines vs the layer pipeline](results/figures/arch_datapath.png)
+**R0** (`main`): four `conv_engine`s run one after another on a 64×64 tile, with a block RAM between each pair.
+
+![R0 RTL block diagram](results/figures/rtl_r0.png)
+
+**v4** (`pipe4`): four `pipe_stage`s connected by FIFOs, all running on the same frame at once.
+
+![v4 RTL block diagram](results/figures/rtl_pipe4.png)
 
 In R0 only one of the four engines works at a time and every engine waits for the whole tile, so 17 % of the 68 DSPs are busy on average.
 In the pipeline each stage has a 2-row line buffer, a 3×3 window and its own multipliers; the multiplier count per stage is chosen so all four
