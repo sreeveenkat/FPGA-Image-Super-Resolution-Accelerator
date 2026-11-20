@@ -39,57 +39,25 @@ Records: [`results/board/2026-11-18/SUMMARY.md`](results/board/2026-11-18/SUMMAR
 The ARM (PS) only configures and moves data; all arithmetic runs in the programmable logic (PL). The block design is the same for every design
 ([`hardware/vivado/bd/design_1_m6.tcl`](hardware/vivado/bd/design_1_m6.tcl)); only the accelerator RTL and the PL clock change.
 
-```mermaid
-flowchart LR
-  subgraph PS["Processing System (ARM Cortex-A9, 650 MHz, bare-metal C)"]
-    ARM["sr_app driver<br/>(software/board/sr_app)"]
-    DDR[("DDR 512 MB<br/>LR frame in / HR frame out")]
-  end
-  subgraph PL["Programmable Logic (XC7Z020)"]
-    DMA["AXI DMA<br/>MM2S + S2MM, simple mode"]
-    ACC["sr_accel_top<br/>AXI-Lite registers + CNN core"]
-  end
-  ARM -- "M_AXI_GP0, AXI4-Lite<br/>0x4040_0000" --> DMA
-  ARM -- "M_AXI_GP0, AXI4-Lite<br/>0x4000_0000" --> ACC
-  DDR <-- "S_AXI_HP0, 64 bit" --> DMA
-  DMA -- "MM2S AXI-Stream 32 bit<br/>LR pixels" --> ACC
-  ACC -- "S2MM AXI-Stream 32 bit<br/>HR pixels + TLAST" --> DMA
-```
+![System architecture: ARM, DDR, AXI DMA and the accelerator](results/figures/arch_system.png)
 
 ### One frame, step by step (v4)
 
-```mermaid
-sequenceDiagram
-  participant A as ARM
-  participant D as AXI DMA
-  participant C as Accelerator
-  A->>C: check VERSION (refuse a foreign bitstream)
-  A->>C: FRAME_W = 960, FRAME_H = 540, CONFIG.PAD_EN = 1
-  A->>D: arm S2MM (1920x1080x3 bytes), then MM2S (960x540x3 bytes)
-  A->>C: CONTROL.START
-  D->>C: LR frame, raster order RGB
-  Note over C: border padding, L1, L2, L3, L4 all run at once
-  C->>D: HR frame, raster order RGB, TLAST on the last beat
-  A->>C: poll STATUS until DONE, read CYCLES and ERROR_CODE
-```
+1. The ARM checks the accelerator's VERSION register and refuses to run on a bitstream of another design.
+2. It writes FRAME_W = 960, FRAME_H = 540 and CONFIG.PAD_EN = 1 (border padding done in the PL).
+3. It arms the DMA receive channel (S2MM, 1920×1080×3 bytes), then the send channel (MM2S, 960×540×3 bytes).
+4. It writes CONTROL.START. The DMA streams the LR frame in raster order; padding, L1, L2, L3 and L4 all run at the same time.
+5. The accelerator streams the HR frame back in raster order, with TLAST on the last beat; the DMA writes it to DDR.
+6. The ARM polls STATUS until DONE and reads CYCLES and ERROR_CODE.
 
 R0 does the same per **64×64 tile** instead of per frame: the ARM pads the frame by 3 pixels, cuts 135 tiles of 70×70 (tile + halo),
 sends each through the DMA and copies the 128×128 result tile into the HR frame.
 
 ### Datapath: R0 (tiled) vs the layer pipeline
 
-```mermaid
-flowchart TB
-  subgraph R0["R0: one layer at a time on a 64x64 tile (main)"]
-    direction LR
-    i0["load 70x70<br/>tile"] --> r0[(ram0)] --> e1["L1 engine"] --> r1[(ram1)] --> e2["L2 engine"] --> r2[(ram2)] --> e3["L3 engine"] --> r3[(ram3)] --> e4["L4 engine"] --> r4[(ram4)] --> o0["pixel shuffle<br/>+ output"]
-  end
-  subgraph PIPE["Pipeline v1-v4: all layers at once on the whole frame (pipe..pipe4)"]
-    direction LR
-    i1["unpack<br/>(+ pad in v3/v4)"] --> s1["L1 stage<br/>line buffer + 3x3 window"] --> f1[["FIFO"]] --> s2["L2 stage"] --> f2[["FIFO"]] --> s3["L3 stage"] --> f3[["FIFO"]] --> s4["L4 stage"] --> ob["2 output row banks<br/>pixel shuffle + pack"]
-    i1 -. "anchor FIFO (input pixel)" .-> s4
-  end
-```
+*Diagrams drawn by [`make_arch_figs.py`](software/analysis/make_arch_figs.py).*
+
+![Datapath: R0 tiled engines vs the layer pipeline](results/figures/arch_datapath.png)
 
 In R0 only one of the four engines works at a time and every engine waits for the whole tile, so 17 % of the 68 DSPs are busy on average.
 In the pipeline each stage has a 2-row line buffer, a 3×3 window and its own multipliers; the multiplier count per stage is chosen so all four
